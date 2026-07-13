@@ -178,3 +178,6 @@ Pause for owner confirmation after each phase. Every phase ends runnable (`make 
 - Server logs: `docker compose -f infra/docker-compose.yml logs -f medplum-server`.
 - FHIR validation: `$validate` operation catches hallucinated fields/codes.
 - Common gotchas: slow first boot; missing CSS imports; `VITE_` prefix; Mantine major mismatch; bots not enabled on project; bot subscription silently not retrying; `_total=none` default (no counts unless asked).
+- ⚠️ **Transaction bundles are not all-or-nothing on validation errors** (observed on 5.1.26 with conditional creates): an invalid entry gets a per-entry 400 while valid entries commit — and intra-bundle references to the failed entry are left dangling. Always check every entry's `response.status` (seed.py dies on any non-200/201) and re-verify references after a partial failure.
+- FHIR `time` values need seconds (`09:00:00`, never `09:00`) — e.g. `timing.repeat.timeOfDay`.
+- Auth code exchange requires PKCE (`codeChallenge`/S256 at login, `code_verifier` at `oauth2/token`) — "Missing verification context" means you forgot it.
