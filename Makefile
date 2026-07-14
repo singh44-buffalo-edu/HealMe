@@ -3,7 +3,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml
 COMPOSE_ALL := docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml
 PY := ai-service/.venv/bin/python
 
-.PHONY: up down logs dev seed smoke bootstrap install test bots prod-up prod-down prod-logs
+.PHONY: up down logs dev seed smoke bootstrap install test lint format check bots prod-up prod-down prod-logs
 
 up:
 	$(COMPOSE) up -d
@@ -60,4 +60,20 @@ install:
 test:
 	cd ai-service && .venv/bin/pytest -q
 	cd backend-bots && npm test
+	cd frontend && npm test
 	cd frontend && npx tsc --noEmit
+
+lint:
+	ai-service/.venv/bin/ruff check ai-service/app ai-service/tests scripts
+	ai-service/.venv/bin/ruff format --check ai-service/app ai-service/tests scripts
+	cd frontend && npx oxlint
+	cd backend-bots && npm run typecheck
+
+format:
+	ai-service/.venv/bin/ruff format ai-service/app ai-service/tests scripts
+
+# Everything that must be green before a commit: lint + all tests + builds
+check: lint test
+	cd frontend && npm run build
+	cd backend-bots && npm run build
+	@echo "check: all green"

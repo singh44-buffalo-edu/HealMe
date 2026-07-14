@@ -60,20 +60,30 @@ def main() -> None:
         assert cid and secret, "no client credentials in .env (run make bootstrap)"
         resp = httpx.post(
             base + "oauth2/token",
-            data={"grant_type": "client_credentials", "client_id": cid, "client_secret": secret},
+            data={
+                "grant_type": "client_credentials",
+                "client_id": cid,
+                "client_secret": secret,
+            },
             timeout=10,
         )
         assert resp.status_code == 200, f"status {resp.status_code}: {resp.text[:200]}"
         token["value"] = resp.json()["access_token"]
 
     def auth_headers() -> dict:
-        return {"Authorization": f"Bearer {token['value']}", "Content-Type": "application/fhir+json"}
+        return {
+            "Authorization": f"Bearer {token['value']}",
+            "Content-Type": "application/fhir+json",
+        }
 
     def read_patient():
         ident = env("HMD_PATIENT_IDENTIFIER", "healmedaily-user")
         resp = httpx.get(
             base + "fhir/R4/Patient",
-            params={"identifier": f"https://healmedaily.local/fhir/identifier/patient|{ident}", "_count": 1},
+            params={
+                "identifier": f"https://healmedaily.local/fhir/identifier/patient|{ident}",
+                "_count": 1,
+            },
             headers=auth_headers(),
             timeout=10,
         )
@@ -87,7 +97,10 @@ def main() -> None:
         ident = env("HMD_PATIENT_IDENTIFIER", "healmedaily-user")
         patient = httpx.get(
             base + "fhir/R4/Patient",
-            params={"identifier": f"https://healmedaily.local/fhir/identifier/patient|{ident}", "_count": 1},
+            params={
+                "identifier": f"https://healmedaily.local/fhir/identifier/patient|{ident}",
+                "_count": 1,
+            },
             headers=auth_headers(),
             timeout=10,
         ).json()["entry"][0]["resource"]
@@ -99,7 +112,10 @@ def main() -> None:
                 "subject": {"reference": f"Patient/{patient['id']}"},
                 "code": {
                     "coding": [
-                        {"system": "https://healmedaily.local/fhir/CodeSystem/observation", "code": "smoke-test"}
+                        {
+                            "system": "https://healmedaily.local/fhir/CodeSystem/observation",
+                            "code": "smoke-test",
+                        }
                     ],
                     "text": "Smoke test",
                 },
@@ -108,15 +124,27 @@ def main() -> None:
             headers=auth_headers(),
             timeout=10,
         )
-        assert resp.status_code == 201, f"create status {resp.status_code}: {resp.text[:200]}"
+        assert resp.status_code == 201, (
+            f"create status {resp.status_code}: {resp.text[:200]}"
+        )
         obs_id = resp.json()["id"]
         try:
-            resp = httpx.get(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
+            resp = httpx.get(
+                base + f"fhir/R4/Observation/{obs_id}",
+                headers=auth_headers(),
+                timeout=10,
+            )
             assert resp.status_code == 200, f"read-back status {resp.status_code}"
-            assert resp.json()["valueString"] == f"smoke {now}", "read-back value mismatch"
+            assert resp.json()["valueString"] == f"smoke {now}", (
+                "read-back value mismatch"
+            )
         finally:
             # never leave smoke artifacts in the record, even on failure
-            resp = httpx.delete(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
+            resp = httpx.delete(
+                base + f"fhir/R4/Observation/{obs_id}",
+                headers=auth_headers(),
+                timeout=10,
+            )
             assert resp.status_code in (200, 204), f"delete status {resp.status_code}"
         return f"Observation/{obs_id} created+verified+deleted"
 
@@ -132,7 +160,9 @@ def main() -> None:
         # index.html alone can 200 while the module graph is broken — ask Vite
         # to actually transform the entry module.
         resp = httpx.get(frontend + "src/main.tsx", timeout=30)
-        assert resp.status_code == 200, f"main.tsx transform failed: status {resp.status_code} {resp.text[:200]}"
+        assert resp.status_code == 200, (
+            f"main.tsx transform failed: status {resp.status_code} {resp.text[:200]}"
+        )
 
     def check_ingest_queue():
         resp = httpx.get(ai_base + "ingest/tasks", timeout=15)
@@ -144,11 +174,17 @@ def main() -> None:
         health = httpx.get(ai_base + "health", timeout=5).json()
         configured = health.get("ai", {}).get("configured")
         latest = httpx.get(ai_base + "health-review/latest", timeout=15)
-        assert latest.status_code in (200, 404), f"latest: {latest.status_code} {latest.text[:200]}"
+        assert latest.status_code in (200, 404), (
+            f"latest: {latest.status_code} {latest.text[:200]}"
+        )
         if not configured:
             # Without a provider the endpoint must refuse politely, not crash.
-            resp = httpx.post(ai_base + "health-review", json={"window_days": 30}, timeout=15)
-            assert resp.status_code == 503, f"expected 503 without provider, got {resp.status_code}"
+            resp = httpx.post(
+                ai_base + "health-review", json={"window_days": 30}, timeout=15
+            )
+            assert resp.status_code == 503, (
+                f"expected 503 without provider, got {resp.status_code}"
+            )
             return "no provider configured — graceful 503 verified"
         return f"provider configured ({health['ai'].get('provider')}); latest={latest.status_code}"
 
@@ -159,7 +195,9 @@ def main() -> None:
         marker = str(uuid.uuid4())
         patient = httpx.get(
             base + "fhir/R4/Patient",
-            params={"identifier": f"https://healmedaily.local/fhir/identifier/patient|{env('HMD_PATIENT_IDENTIFIER', 'healmedaily-user')}"},
+            params={
+                "identifier": f"https://healmedaily.local/fhir/identifier/patient|{env('HMD_PATIENT_IDENTIFIER', 'healmedaily-user')}"
+            },
             headers=auth_headers(),
             timeout=10,
         ).json()["entry"][0]["resource"]
@@ -172,7 +210,10 @@ def main() -> None:
                 "subject": {"reference": f"Patient/{patient['id']}"},
                 "authored": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "item": [{"linkId": "mood", "answer": [{"valueInteger": 7}]}],
-                "identifier": {"system": "https://healmedaily.local/fhir/identifier/questionnaire-response", "value": f"smoke-{marker}"},
+                "identifier": {
+                    "system": "https://healmedaily.local/fhir/identifier/questionnaire-response",
+                    "value": f"smoke-{marker}",
+                },
             },
             headers=auth_headers(),
             timeout=10,
@@ -198,8 +239,16 @@ def main() -> None:
         finally:
             # keep smoke runs from polluting the record
             if obs_id:
-                httpx.delete(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
-            httpx.delete(base + f"fhir/R4/QuestionnaireResponse/{qr_id}", headers=auth_headers(), timeout=10)
+                httpx.delete(
+                    base + f"fhir/R4/Observation/{obs_id}",
+                    headers=auth_headers(),
+                    timeout=10,
+                )
+            httpx.delete(
+                base + f"fhir/R4/QuestionnaireResponse/{qr_id}",
+                headers=auth_headers(),
+                timeout=10,
+            )
 
     step("medplum /healthcheck", check_server)
     step("ai-service /health", check_ai_health)
@@ -209,7 +258,10 @@ def main() -> None:
     step("ai-service -> Medplum round-trip", check_ai_medplum_roundtrip)
     step("frontend dev server", check_frontend)
     step("ingestion review queue endpoint", check_ingest_queue)
-    step("health-review endpoint (graceful without provider)", check_health_review_endpoint)
+    step(
+        "health-review endpoint (graceful without provider)",
+        check_health_review_endpoint,
+    )
     step("bot: QuestionnaireResponse -> Observation", check_bot_roundtrip)
 
     if FAILED:

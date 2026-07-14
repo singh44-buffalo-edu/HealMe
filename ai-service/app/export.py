@@ -67,9 +67,7 @@ def export_fhir_bundle(medplum: MedplumFhirClient) -> dict[str, Any]:
 def export_observations_csv(medplum: MedplumFhirClient) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(
-        ["id", "effective", "code_system", "code", "display", "value", "unit", "status", "category"]
-    )
+    writer.writerow(["id", "effective", "code_system", "code", "display", "value", "unit", "status", "category"])
     for obs in _all_resources(medplum, "Observation"):
         coding = (obs.get("code", {}).get("coding") or [{}])[0]
         vq = obs.get("valueQuantity", {})

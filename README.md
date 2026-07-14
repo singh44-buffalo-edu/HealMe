@@ -82,6 +82,30 @@ make prod-down   # stop everything
 are host-run one-time steps (`make bootstrap && make seed && make bots`) and work against
 either mode.
 
+## Development
+
+```bash
+make check      # lint + all tests + builds — run before committing
+make test       # pytest (ai-service) + vitest (bots, frontend) + tsc
+make lint       # ruff + oxlint + bot typecheck
+make smoke      # 10-step end-to-end test against the running stack
+```
+
+Repo map:
+
+```
+frontend/       React app — src/fhir.ts is the tested dose/adherence core; src/pages/* one per route
+ai-service/     FastAPI — providers.py (AI adapters), health_review.py, ingest.py, export.py, medplum.py
+backend-bots/   Medplum bots (vitest + MockClient); deployed via scripts/deploy_bots.py
+scripts/        bootstrap.py (one-time identity), seed.py (idempotent data), smoke_test.py, deploy_bots.py
+infra/          docker-compose.yml (Medplum stack, pinned) + docker-compose.app.yml (app containers)
+CLAUDE.md       living engineering rules + verified Medplum gotchas — read before changing anything
+FHIR-MAPPING.md canonical domain→resource mapping — read before touching any resource shape
+```
+
+CI (`.github/workflows/ci.yml`) runs lint + unit tests + builds per component.
+The owner's ingestion-module requirements spec (v0.1) is the roadmap north star — see CLAUDE.md §5.
+
 ## Configuration
 
 Copy `.env.example` → `.env` (done automatically by `make bootstrap`). AI features are optional:

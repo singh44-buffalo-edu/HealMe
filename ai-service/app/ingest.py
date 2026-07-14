@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -212,7 +213,12 @@ def ingest_document(
 def list_review_tasks(medplum: MedplumFhirClient) -> list[dict[str, Any]]:
     tasks = medplum.search_resources(
         "Task",
-        {"status": "requested", "code": f"{fc.CS_INGEST}|review-ingestion-proposal", "_sort": "-_lastUpdated", "_count": 100},
+        {
+            "status": "requested",
+            "code": f"{fc.CS_INGEST}|review-ingestion-proposal",
+            "_sort": "-_lastUpdated",
+            "_count": 100,
+        },
     )
     out = []
     for task in tasks:
@@ -245,9 +251,7 @@ def list_review_tasks(medplum: MedplumFhirClient) -> list[dict[str, Any]]:
     return out
 
 
-def approve_task(
-    medplum: MedplumFhirClient, task_id: str, corrected_resource: dict[str, Any] | None
-) -> dict[str, Any]:
+def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: dict[str, Any] | None) -> dict[str, Any]:
     task = medplum.get(f"Task/{task_id}")
     if task.get("status") != "requested":
         raise ValueError(f"task is {task.get('status')}, expected 'requested'")

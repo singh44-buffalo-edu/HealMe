@@ -69,9 +69,7 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
         elif res["resourceType"] == "MedicationRequest":
             med_requests.append(res)
 
-    admins = medplum.search_resources(
-        "MedicationAdministration", {"effective-time": f"ge{since}", "_count": 1000}
-    )
+    admins = medplum.search_resources("MedicationAdministration", {"effective-time": f"ge{since}", "_count": 1000})
     by_request: dict[str, list[dict]] = defaultdict(list)
     for adm in admins:
         ref = adm.get("request", {}).get("reference", "")
@@ -81,8 +79,7 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
     for req in med_requests:
         med_id = req.get("medicationReference", {}).get("reference", "").split("/")[-1]
         life_critical = any(
-            ext.get("url") == fc.EXT_LIFE_CRITICAL and ext.get("valueBoolean")
-            for ext in req.get("extension", [])
+            ext.get("url") == fc.EXT_LIFE_CRITICAL and ext.get("valueBoolean") for ext in req.get("extension", [])
         )
         logs = by_request.get(req["id"], [])
         taken = sum(1 for a in logs if a.get("status") == "completed")
@@ -156,9 +153,7 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
         "energy_1_to_10": summarize_series(series.get("energy", [])),
         "symptoms": symptoms[:50],
         "recent_lab_values": series.get("labs", [])[-20:],
-        "questions_for_prescriber": [
-            {"date": d, "question": q} for d, q in series.get("rx_questions", [])[-20:]
-        ],
+        "questions_for_prescriber": [{"date": d, "question": q} for d, q in series.get("rx_questions", [])[-20:]],
         "conditions": conditions,
         "lab_report_count_all_time": reports_total,
     }
@@ -233,7 +228,12 @@ def build_data_summary(context: dict[str, Any]) -> str:
 
 
 def _store_review(
-    medplum: MedplumFhirClient, markdown: str, context: dict[str, Any], window_days: int, patient_id: str, description: str
+    medplum: MedplumFhirClient,
+    markdown: str,
+    context: dict[str, Any],
+    window_days: int,
+    patient_id: str,
+    description: str,
 ) -> dict[str, Any]:
     pdf_bytes = markdown_to_pdf(markdown, title="HealMeDaily Health Review")
     md_binary = medplum.create_binary(markdown.encode(), "text/markdown")
@@ -274,7 +274,9 @@ def run_data_summary(medplum: MedplumFhirClient, window_days: int, patient_id: s
         f"> Window: last {window_days} days · generated {context['generated_at']} · data-only (no AI)\n\n"
         + build_data_summary(context)
     )
-    return _store_review(medplum, markdown, context, window_days, patient_id, f"Data summary (no AI) — last {window_days} days")
+    return _store_review(
+        medplum, markdown, context, window_days, patient_id, f"Data summary (no AI) — last {window_days} days"
+    )
 
 
 def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: str) -> dict[str, Any]:
@@ -284,8 +286,7 @@ def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: 
     user_prompt = (
         f"Data window: last {window_days} days (since {context['window_start']}). "
         f"Generated {context['generated_at']}.\n\n"
-        "Aggregated personal health record data (JSON):\n\n"
-        + json.dumps(context, indent=2, default=str)
+        "Aggregated personal health record data (JSON):\n\n" + json.dumps(context, indent=2, default=str)
     )
     markdown = provider.generate(SYSTEM_PROMPT, user_prompt)
 
@@ -309,7 +310,11 @@ def latest_review(medplum: MedplumFhirClient) -> dict[str, Any] | None:
         return None
     doc = docs[0]
     md_url = next(
-        (c["attachment"]["url"] for c in doc.get("content", []) if c["attachment"].get("contentType") == "text/markdown"),
+        (
+            c["attachment"]["url"]
+            for c in doc.get("content", [])
+            if c["attachment"].get("contentType") == "text/markdown"
+        ),
         None,
     )
     markdown = medplum.read_attachment(md_url).decode() if md_url else ""
@@ -324,7 +329,11 @@ def latest_review(medplum: MedplumFhirClient) -> dict[str, Any] | None:
 def review_pdf(medplum: MedplumFhirClient, doc_id: str) -> bytes:
     doc = medplum.get(f"DocumentReference/{doc_id}")
     pdf_url = next(
-        (c["attachment"]["url"] for c in doc.get("content", []) if c["attachment"].get("contentType") == "application/pdf"),
+        (
+            c["attachment"]["url"]
+            for c in doc.get("content", [])
+            if c["attachment"].get("contentType") == "application/pdf"
+        ),
         None,
     )
     if not pdf_url:

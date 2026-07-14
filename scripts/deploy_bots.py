@@ -56,15 +56,22 @@ def main() -> None:
     token = password_login(base, email, password)
     if not token:
         die("admin login failed — check HMD_ADMIN_EMAIL/HMD_ADMIN_PASSWORD in .env")
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/fhir+json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/fhir+json",
+    }
 
     # 1. Ensure the project has bots enabled. Project.features is a
     # super-admin-protected field: a normal project admin's PUT silently
     # strips it, so this step uses the instance super admin (seeded by the
     # server on first boot; change its password during hardening).
-    project = httpx.get(base + f"fhir/R4/Project/{project_id}", headers=headers, timeout=15)
+    project = httpx.get(
+        base + f"fhir/R4/Project/{project_id}", headers=headers, timeout=15
+    )
     if project.status_code >= 400:
-        die(f"cannot read Project/{project_id}: {project.status_code} {project.text[:200]}")
+        die(
+            f"cannot read Project/{project_id}: {project.status_code} {project.text[:200]}"
+        )
     proj = project.json()
     if "bots" not in proj.get("features", []):
         sa_email = env("HMD_SUPERADMIN_EMAIL", "admin@example.com")
@@ -72,12 +79,22 @@ def main() -> None:
         sa_token = password_login(base, sa_email, sa_password)
         if not sa_token:
             die("super admin login failed — set HMD_SUPERADMIN_EMAIL/PASSWORD in .env")
-        sa_headers = {"Authorization": f"Bearer {sa_token}", "Content-Type": "application/fhir+json"}
+        sa_headers = {
+            "Authorization": f"Bearer {sa_token}",
+            "Content-Type": "application/fhir+json",
+        }
         proj["features"] = proj.get("features", []) + ["bots"]
-        resp = httpx.put(base + f"fhir/R4/Project/{project_id}", json=proj, headers=sa_headers, timeout=15)
+        resp = httpx.put(
+            base + f"fhir/R4/Project/{project_id}",
+            json=proj,
+            headers=sa_headers,
+            timeout=15,
+        )
         if resp.status_code >= 400:
             die(f"enabling bots feature failed: {resp.status_code} {resp.text[:300]}")
-        check = httpx.get(base + f"fhir/R4/Project/{project_id}", headers=headers, timeout=15).json()
+        check = httpx.get(
+            base + f"fhir/R4/Project/{project_id}", headers=headers, timeout=15
+        ).json()
         if "bots" not in check.get("features", []):
             die("bots feature did not persist — investigate super admin permissions")
         log("enabled 'bots' feature on project (as super admin)")
@@ -90,7 +107,12 @@ def main() -> None:
         code = dist.read_text()
 
         # 2. Ensure the Bot resource exists
-        found = httpx.get(base + "fhir/R4/Bot", params={"name": name, "_count": 1}, headers=headers, timeout=15)
+        found = httpx.get(
+            base + "fhir/R4/Bot",
+            params={"name": name, "_count": 1},
+            headers=headers,
+            timeout=15,
+        )
         entries = found.json().get("entry", []) if found.status_code == 200 else []
         if entries:
             bot_id = entries[0]["resource"]["id"]
@@ -143,7 +165,11 @@ def main() -> None:
                     "status": "active",
                     "reason": sub_def["reason"],
                     "criteria": sub_def["criteria"],
-                    "channel": {"type": "rest-hook", "endpoint": endpoint, "payload": "application/fhir+json"},
+                    "channel": {
+                        "type": "rest-hook",
+                        "endpoint": endpoint,
+                        "payload": "application/fhir+json",
+                    },
                     "extension": [
                         {
                             "url": "https://medplum.com/fhir/StructureDefinition/subscription-supported-interaction",

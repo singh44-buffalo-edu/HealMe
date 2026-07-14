@@ -274,10 +274,10 @@ export interface DaySummary {
 export function summarizeDays(
   meds: MedInfo[],
   admins: MedicationAdministration[],
-  days: number
+  days: number,
+  today: Date = new Date()
 ): DaySummary[] {
   const out: DaySummary[] = [];
-  const today = new Date();
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);

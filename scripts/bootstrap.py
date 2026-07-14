@@ -79,7 +79,11 @@ def make_pkce() -> tuple[str, str]:
 def exchange_code(base: str, code: str, verifier: str) -> str:
     resp = httpx.post(
         base + "oauth2/token",
-        data={"grant_type": "authorization_code", "code": code, "code_verifier": verifier},
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "code_verifier": verifier,
+        },
         timeout=10,
     )
     if resp.status_code != 200:
@@ -120,7 +124,9 @@ def password_login(base: str, email: str, password: str) -> str | None:
     return None
 
 
-def register_first_user(base: str, email: str, password: str, given: str, family: str) -> str:
+def register_first_user(
+    base: str, email: str, password: str, given: str, family: str
+) -> str:
     verifier, challenge = make_pkce()
     resp = httpx.post(
         base + "auth/newuser",
@@ -175,7 +181,9 @@ def find_project_id(base: str, token: str) -> str:
 
 
 def ensure_client_app(base: str, token: str, project_id: str) -> tuple[str, str]:
-    bundle = fhir_get(base, token, "ClientApplication", {"name": CLIENT_NAME, "_count": 5})
+    bundle = fhir_get(
+        base, token, "ClientApplication", {"name": CLIENT_NAME, "_count": 5}
+    )
     for entry in bundle.get("entry", []):
         res = entry["resource"]
         if res.get("name") == CLIENT_NAME and res.get("secret"):
@@ -183,7 +191,10 @@ def ensure_client_app(base: str, token: str, project_id: str) -> tuple[str, str]
             return res["id"], res["secret"]
     resp = httpx.post(
         base + f"admin/projects/{project_id}/client",
-        json={"name": CLIENT_NAME, "description": "Python AI/ingestion service (client credentials)"},
+        json={
+            "name": CLIENT_NAME,
+            "description": "Python AI/ingestion service (client credentials)",
+        },
         headers={"Authorization": f"Bearer {token}"},
         timeout=15,
     )
@@ -197,11 +208,17 @@ def ensure_client_app(base: str, token: str, project_id: str) -> tuple[str, str]
 def verify_client_credentials(base: str, client_id: str, client_secret: str) -> None:
     resp = httpx.post(
         base + "oauth2/token",
-        data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        },
         timeout=10,
     )
     if resp.status_code != 200:
-        die(f"client-credentials verification failed: {resp.status_code} {resp.text[:300]}")
+        die(
+            f"client-credentials verification failed: {resp.status_code} {resp.text[:300]}"
+        )
     token = resp.json()["access_token"]
     fhir_get(base, token, "Patient", {"_count": 1})
     log("client-credentials auth verified with a FHIR read")
@@ -230,7 +247,9 @@ def main() -> None:
         log(f"logged in as existing user {email}")
     else:
         log(f"registering first user {email} + project '{PROJECT_NAME}'")
-        token = register_first_user(base, email, password, given="HealMeDaily", family="Owner")
+        token = register_first_user(
+            base, email, password, given="HealMeDaily", family="Owner"
+        )
     save("HMD_ADMIN_EMAIL", email)
     save("HMD_ADMIN_PASSWORD", password)
 

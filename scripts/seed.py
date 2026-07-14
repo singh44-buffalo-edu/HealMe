@@ -63,7 +63,11 @@ def get_token(base: str) -> str:
         die("no client credentials in .env — run `make bootstrap` first")
     resp = httpx.post(
         base + "oauth2/token",
-        data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        },
         timeout=10,
     )
     if resp.status_code != 200:
@@ -143,49 +147,90 @@ def main() -> None:
                     "linkId": "rested",
                     "text": "Waking up, how rested did you feel? (1 = exhausted, 5 = fully rested)",
                     "type": "integer",
-                    "code": [{"system": CS_OBS, "code": "rested", "display": "Rested on waking (1-5)"}],
+                    "code": [
+                        {
+                            "system": CS_OBS,
+                            "code": "rested",
+                            "display": "Rested on waking (1-5)",
+                        }
+                    ],
                 },
                 {
                     "linkId": "sleep-hours",
                     "text": "Hours slept last night",
                     "type": "decimal",
-                    "code": [{"system": CS_OBS, "code": "sleep-duration", "display": "Sleep duration (h)"}],
+                    "code": [
+                        {
+                            "system": CS_OBS,
+                            "code": "sleep-duration",
+                            "display": "Sleep duration (h)",
+                        }
+                    ],
                 },
                 {
                     "linkId": "mood",
                     "text": "Mood (1 = worst, 10 = best)",
                     "type": "integer",
-                    "code": [{"system": CS_OBS, "code": "mood", "display": "Mood (1-10)"}],
+                    "code": [
+                        {"system": CS_OBS, "code": "mood", "display": "Mood (1-10)"}
+                    ],
                 },
                 {
                     "linkId": "energy",
                     "text": "Energy (1 = worst, 10 = best)",
                     "type": "integer",
-                    "code": [{"system": CS_OBS, "code": "energy", "display": "Energy (1-10)"}],
+                    "code": [
+                        {"system": CS_OBS, "code": "energy", "display": "Energy (1-10)"}
+                    ],
                 },
                 {
                     "linkId": "stress",
                     "text": "Peak stress today (0 = none, 10 = worst)",
                     "type": "integer",
-                    "code": [{"system": CS_OBS, "code": "stress", "display": "Peak stress (0-10)"}],
+                    "code": [
+                        {
+                            "system": CS_OBS,
+                            "code": "stress",
+                            "display": "Peak stress (0-10)",
+                        }
+                    ],
                 },
-                {"linkId": "symptoms", "text": "Any new symptom today — anything at all?", "type": "string"},
-                {"linkId": "notes", "text": "Anything notable today?", "type": "string"},
+                {
+                    "linkId": "symptoms",
+                    "text": "Any new symptom today — anything at all?",
+                    "type": "string",
+                },
+                {
+                    "linkId": "notes",
+                    "text": "Anything notable today?",
+                    "type": "string",
+                },
             ],
         },
-        "request": {"method": "POST", "url": "Questionnaire", "ifNoneExist": f"url={q_url}&version={q_version}"},
+        "request": {
+            "method": "POST",
+            "url": "Questionnaire",
+            "ifNoneExist": f"url={q_url}&version={q_version}",
+        },
     }
     entries.append(questionnaire)
 
     # --- Sample medications + requests --------------------------------------
     def medication(slug: str, text: str) -> dict:
         return entry(
-            {"resourceType": "Medication", "code": {"text": text}, "status": "active", "meta": {"tag": [SEED_TAG]}},
+            {
+                "resourceType": "Medication",
+                "code": {"text": text},
+                "status": "active",
+                "meta": {"tag": [SEED_TAG]},
+            },
             "medication",
             slug,
         )
 
-    def med_request(slug: str, med: dict, sig: str, times: list[str], life_critical: bool = False) -> dict:
+    def med_request(
+        slug: str, med: dict, sig: str, times: list[str], life_critical: bool = False
+    ) -> dict:
         resource = {
             "resourceType": "MedicationRequest",
             "status": "active",
@@ -196,7 +241,12 @@ def main() -> None:
                 {
                     "text": sig,
                     "timing": {
-                        "repeat": {"frequency": len(times), "period": 1, "periodUnit": "d", "timeOfDay": times}
+                        "repeat": {
+                            "frequency": len(times),
+                            "period": 1,
+                            "periodUnit": "d",
+                            "timeOfDay": times,
+                        }
                     },
                 }
             ],
@@ -209,12 +259,25 @@ def main() -> None:
     med_a = medication("sample-med-a", "Sample Medication A 10 mg tablet")
     med_b = medication("sample-med-b", "Sample Medication B 500 mg tablet")
     # FHIR `time` requires seconds: HH:MM:SS
-    req_a = med_request("sample-med-a-daily", med_a, "1 tablet daily at 09:00", ["09:00:00"], life_critical=True)
-    req_b = med_request("sample-med-b-bid", med_b, "1 tablet twice daily (09:00, 21:00)", ["09:00:00", "21:00:00"])
+    req_a = med_request(
+        "sample-med-a-daily",
+        med_a,
+        "1 tablet daily at 09:00",
+        ["09:00:00"],
+        life_critical=True,
+    )
+    req_b = med_request(
+        "sample-med-b-bid",
+        med_b,
+        "1 tablet twice daily (09:00, 21:00)",
+        ["09:00:00", "21:00:00"],
+    )
     entries += [med_a, med_b, req_a, req_b]
 
     # --- Cartridges ----------------------------------------------------------
-    def cartridge(slug: str, name: str, med: dict, capacity: int, remaining: int, threshold: int) -> dict:
+    def cartridge(
+        slug: str, name: str, med: dict, capacity: int, remaining: int, threshold: int
+    ) -> dict:
         def prop(code: str, value: int) -> dict:
             return {
                 "type": {"coding": [{"system": CS_DEVICE, "code": code}]},
@@ -226,7 +289,9 @@ def main() -> None:
                 "resourceType": "Device",
                 "status": "active",
                 "deviceName": [{"name": name, "type": "user-friendly-name"}],
-                "type": {"coding": [{"system": CS_DEVICE, "code": "medication-cartridge"}]},
+                "type": {
+                    "coding": [{"system": CS_DEVICE, "code": "medication-cartridge"}]
+                },
                 "extension": [{"url": EXT_DEVICE_MED, "valueReference": ref(med)}],
                 "property": [
                     prop("capacity", capacity),
@@ -239,12 +304,24 @@ def main() -> None:
             slug,
         )
 
-    cart_1 = cartridge("cartridge-1", "Cartridge 1", med_a, capacity=30, remaining=12, threshold=5)
-    cart_2 = cartridge("cartridge-2", "Cartridge 2", med_b, capacity=30, remaining=3, threshold=5)
+    cart_1 = cartridge(
+        "cartridge-1", "Cartridge 1", med_a, capacity=30, remaining=12, threshold=5
+    )
+    cart_2 = cartridge(
+        "cartridge-2", "Cartridge 2", med_b, capacity=30, remaining=3, threshold=5
+    )
     entries += [cart_1, cart_2]
 
     # --- 14 days of sample administrations ----------------------------------
-    def administration(req: dict, med: dict, device: dict | None, slug_base: str, d: date, hhmm: str, reason: str | None) -> dict:
+    def administration(
+        req: dict,
+        med: dict,
+        device: dict | None,
+        slug_base: str,
+        d: date,
+        hhmm: str,
+        reason: str | None,
+    ) -> dict:
         admin: dict = {
             "resourceType": "MedicationAdministration",
             "subject": subject,
@@ -263,7 +340,9 @@ def main() -> None:
                         {
                             "system": CS_ADHERENCE,
                             "code": reason,
-                            "display": "Skipped by user" if reason == "user-skipped" else "Marked missed by user",
+                            "display": "Skipped by user"
+                            if reason == "user-skipped"
+                            else "Marked missed by user",
                         }
                     ],
                     "text": "Sample data",
@@ -271,7 +350,9 @@ def main() -> None:
             ]
         else:
             admin["status"] = "completed"
-        return entry(admin, "medication-administration", f"{slug_base}-{d.isoformat()}T{hhmm}")
+        return entry(
+            admin, "medication-administration", f"{slug_base}-{d.isoformat()}T{hhmm}"
+        )
 
     med_a_skipped = {3, 9}
     med_a_missed = {6}
@@ -279,22 +360,55 @@ def main() -> None:
     for days_ago in range(1, 15):
         d = today - timedelta(days=days_ago)
         reason_a = (
-            "user-skipped" if days_ago in med_a_skipped else "user-marked-missed" if days_ago in med_a_missed else None
+            "user-skipped"
+            if days_ago in med_a_skipped
+            else "user-marked-missed"
+            if days_ago in med_a_missed
+            else None
         )
-        entries.append(administration(req_a, med_a, cart_1, "sample-med-a-daily", d, "09:00", reason_a))
-        entries.append(administration(req_b, med_b, cart_2, "sample-med-b-bid", d, "09:00", None))
+        entries.append(
+            administration(
+                req_a, med_a, cart_1, "sample-med-a-daily", d, "09:00", reason_a
+            )
+        )
+        entries.append(
+            administration(req_b, med_b, cart_2, "sample-med-b-bid", d, "09:00", None)
+        )
         reason_b_pm = "user-marked-missed" if days_ago in med_b_missed_evening else None
-        entries.append(administration(req_b, med_b, cart_2, "sample-med-b-bid", d, "21:00", reason_b_pm))
+        entries.append(
+            administration(
+                req_b, med_b, cart_2, "sample-med-b-bid", d, "21:00", reason_b_pm
+            )
+        )
 
     # --- Sample observations -------------------------------------------------
     def observation(slug: str, resource: dict) -> dict:
-        resource.update({"resourceType": "Observation", "subject": subject, "meta": {"tag": [SEED_TAG]}})
+        resource.update(
+            {
+                "resourceType": "Observation",
+                "subject": subject,
+                "meta": {"tag": [SEED_TAG]},
+            }
+        )
         return entry(resource, "quick-observation", slug)
 
     for days_ago, kg in [
-        (88, 71.8), (81, 71.5), (74, 71.6), (67, 71.2), (60, 71.3), (53, 70.9),
-        (46, 71.0), (39, 70.7), (32, 70.8), (25, 70.5), (18, 70.3),
-        (13, 70.6), (10, 70.2), (7, 70.4), (4, 69.9), (1, 70.1),
+        (88, 71.8),
+        (81, 71.5),
+        (74, 71.6),
+        (67, 71.2),
+        (60, 71.3),
+        (53, 70.9),
+        (46, 71.0),
+        (39, 70.7),
+        (32, 70.8),
+        (25, 70.5),
+        (18, 70.3),
+        (13, 70.6),
+        (10, 70.2),
+        (7, 70.4),
+        (4, 69.9),
+        (1, 70.1),
     ]:
         d = today - timedelta(days=days_ago)
         entries.append(
@@ -312,15 +426,35 @@ def main() -> None:
                             ]
                         }
                     ],
-                    "code": {"coding": [{"system": LOINC, "code": "29463-7", "display": "Body weight"}]},
+                    "code": {
+                        "coding": [
+                            {
+                                "system": LOINC,
+                                "code": "29463-7",
+                                "display": "Body weight",
+                            }
+                        ]
+                    },
                     "effectiveDateTime": local_dt(d, "08:30", tz),
-                    "valueQuantity": {"value": kg, "unit": "kg", "system": UCUM, "code": "kg"},
+                    "valueQuantity": {
+                        "value": kg,
+                        "unit": "kg",
+                        "system": UCUM,
+                        "code": "kg",
+                    },
                 },
             )
         )
 
     survey_cat = [
-        {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "survey"}]}
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                    "code": "survey",
+                }
+            ]
+        }
     ]
     for days_ago in range(1, 31):
         d = today - timedelta(days=days_ago)
@@ -333,7 +467,11 @@ def main() -> None:
                 {
                     "status": "final",
                     "category": survey_cat,
-                    "code": {"coding": [{"system": CS_OBS, "code": "mood", "display": "Mood (1-10)"}]},
+                    "code": {
+                        "coding": [
+                            {"system": CS_OBS, "code": "mood", "display": "Mood (1-10)"}
+                        ]
+                    },
                     "effectiveDateTime": local_dt(d, "21:30", tz),
                     "valueInteger": mood,
                 },
@@ -345,7 +483,15 @@ def main() -> None:
                 {
                     "status": "final",
                     "category": survey_cat,
-                    "code": {"coding": [{"system": CS_OBS, "code": "energy", "display": "Energy (1-10)"}]},
+                    "code": {
+                        "coding": [
+                            {
+                                "system": CS_OBS,
+                                "code": "energy",
+                                "display": "Energy (1-10)",
+                            }
+                        ]
+                    },
                     "effectiveDateTime": local_dt(d, "21:30", tz),
                     "valueInteger": energy,
                 },
@@ -359,9 +505,22 @@ def main() -> None:
                 {
                     "status": "final",
                     "category": survey_cat,
-                    "code": {"coding": [{"system": CS_OBS, "code": "sleep-duration", "display": "Sleep duration"}]},
+                    "code": {
+                        "coding": [
+                            {
+                                "system": CS_OBS,
+                                "code": "sleep-duration",
+                                "display": "Sleep duration",
+                            }
+                        ]
+                    },
                     "effectivePeriod": {"start": sleep_start, "end": sleep_end},
-                    "valueQuantity": {"value": sleep_h, "unit": "h", "system": UCUM, "code": "h"},
+                    "valueQuantity": {
+                        "value": sleep_h,
+                        "unit": "h",
+                        "system": UCUM,
+                        "code": "h",
+                    },
                 },
             )
         )
@@ -380,7 +539,12 @@ def main() -> None:
                 {
                     "status": "final",
                     "category": survey_cat,
-                    "code": {"coding": [{"system": CS_OBS, "code": "symptom", "display": "Symptom"}], "text": "Symptom"},
+                    "code": {
+                        "coding": [
+                            {"system": CS_OBS, "code": "symptom", "display": "Symptom"}
+                        ],
+                        "text": "Symptom",
+                    },
                     "effectiveDateTime": local_dt(d, "20:00", tz),
                     "valueString": text,
                 },
@@ -389,10 +553,19 @@ def main() -> None:
 
     # --- Sample lab report (verified LOINC only; else text-only) --------------
     lab_cat = [
-        {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory"}]}
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                    "code": "laboratory",
+                }
+            ]
+        }
     ]
 
-    def lab(slug: str, d: date, code: dict, value: float, unit: str, low: float, high: float) -> dict:
+    def lab(
+        slug: str, d: date, code: dict, value: float, unit: str, low: float, high: float
+    ) -> dict:
         return observation(
             slug,
             {
@@ -402,7 +575,10 @@ def main() -> None:
                 "effectiveDateTime": local_dt(d, "10:00", tz),
                 "valueQuantity": {"value": value, "unit": unit, "system": UCUM},
                 "referenceRange": [
-                    {"low": {"value": low, "unit": unit}, "high": {"value": high, "unit": unit}}
+                    {
+                        "low": {"value": low, "unit": unit},
+                        "high": {"value": high, "unit": unit},
+                    }
                 ],
             },
         )
@@ -415,22 +591,45 @@ def main() -> None:
             lab(
                 f"seed-lab-hgb-{d.isoformat()}",
                 d,
-                {"coding": [{"system": LOINC, "code": "718-7", "display": "Hemoglobin [Mass/volume] in Blood"}],
-                 "text": "Hemoglobin"},
-                hgb, "g/dL", 13.0, 17.0,
+                {
+                    "coding": [
+                        {
+                            "system": LOINC,
+                            "code": "718-7",
+                            "display": "Hemoglobin [Mass/volume] in Blood",
+                        }
+                    ],
+                    "text": "Hemoglobin",
+                },
+                hgb,
+                "g/dL",
+                13.0,
+                17.0,
             ),
             lab(
                 f"seed-lab-a1c-{d.isoformat()}",
                 d,
-                {"coding": [{"system": LOINC, "code": "4548-4", "display": "Hemoglobin A1c"}],
-                 "text": "HbA1c"},
-                a1c, "%", 4.0, 5.6,
+                {
+                    "coding": [
+                        {"system": LOINC, "code": "4548-4", "display": "Hemoglobin A1c"}
+                    ],
+                    "text": "HbA1c",
+                },
+                a1c,
+                "%",
+                4.0,
+                5.6,
             ),
             lab(
                 f"seed-lab-vitd-{d.isoformat()}",
                 d,
-                {"text": "Vitamin D (25-OH)"},  # no confident LOINC — text-only per mapping rules
-                vitd, "ng/mL", 30.0, 100.0,
+                {
+                    "text": "Vitamin D (25-OH)"
+                },  # no confident LOINC — text-only per mapping rules
+                vitd,
+                "ng/mL",
+                30.0,
+                100.0,
             ),
         ]
         entries.extend(day_labs)
@@ -444,7 +643,8 @@ def main() -> None:
                     "status": "final",
                     "code": {"text": "Routine blood panel"},
                     "subject": subject,
-                    "effectiveDateTime": f"{d_iso}T10:00:00" + local_dt(date.fromisoformat(d_iso), "10:00", tz)[-6:],
+                    "effectiveDateTime": f"{d_iso}T10:00:00"
+                    + local_dt(date.fromisoformat(d_iso), "10:00", tz)[-6:],
                     "result": [ref(e) for e in day_labs],
                     "meta": {"tag": [SEED_TAG]},
                 },
@@ -458,16 +658,23 @@ def main() -> None:
     resp = httpx.post(
         base + "fhir/R4",
         json=bundle,
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/fhir+json"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/fhir+json",
+        },
         timeout=60,
     )
     if resp.status_code >= 400:
         die(f"transaction failed: {resp.status_code} {resp.text[:2000]}")
     result = resp.json()
-    statuses = [e.get("response", {}).get("status", "?") for e in result.get("entry", [])]
+    statuses = [
+        e.get("response", {}).get("status", "?") for e in result.get("entry", [])
+    ]
     created = sum(1 for s in statuses if s.startswith("201"))
     existing = sum(1 for s in statuses if s.startswith("200"))
-    log(f"transaction ok: {created} created, {existing} already existed, {len(statuses)} total")
+    log(
+        f"transaction ok: {created} created, {existing} already existed, {len(statuses)} total"
+    )
     bad = [
         (i, e)
         for i, e in enumerate(result.get("entry", []))
@@ -481,7 +688,10 @@ def main() -> None:
 
     # Conditional create skips existing resources, so upgrades to seed
     # resources (like the life-critical flag) must be ensured explicitly.
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/fhir+json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/fhir+json",
+    }
 
     # Retire superseded questionnaire versions so `status=active` search
     # resolves uniquely to the current one (frontend + bot rely on this).
@@ -495,13 +705,23 @@ def main() -> None:
         res = e["resource"]
         if res.get("version") != q_version and res.get("status") == "active":
             res["status"] = "retired"
-            put = httpx.put(base + f"fhir/R4/Questionnaire/{res['id']}", json=res, headers=headers, timeout=15)
+            put = httpx.put(
+                base + f"fhir/R4/Questionnaire/{res['id']}",
+                json=res,
+                headers=headers,
+                timeout=15,
+            )
             if put.status_code >= 400:
-                die(f"retiring questionnaire v{res.get('version')} failed: {put.status_code}")
+                die(
+                    f"retiring questionnaire v{res.get('version')} failed: {put.status_code}"
+                )
             log(f"retired daily-check-in v{res.get('version')}")
     find_req = httpx.get(
         base + "fhir/R4/MedicationRequest",
-        params={"identifier": f"{IDENT}/medication-request|sample-med-a-daily", "_count": 1},
+        params={
+            "identifier": f"{IDENT}/medication-request|sample-med-a-daily",
+            "_count": 1,
+        },
         headers=headers,
         timeout=15,
     ).json()
@@ -510,15 +730,25 @@ def main() -> None:
         exts = req.get("extension", [])
         if not any(e.get("url") == EXT_LIFE_CRITICAL for e in exts):
             req["extension"] = exts + [{"url": EXT_LIFE_CRITICAL, "valueBoolean": True}]
-            put = httpx.put(base + f"fhir/R4/MedicationRequest/{req['id']}", json=req, headers=headers, timeout=15)
+            put = httpx.put(
+                base + f"fhir/R4/MedicationRequest/{req['id']}",
+                json=req,
+                headers=headers,
+                timeout=15,
+            )
             if put.status_code >= 400:
-                die(f"life-critical flag update failed: {put.status_code} {put.text[:300]}")
+                die(
+                    f"life-critical flag update failed: {put.status_code} {put.text[:300]}"
+                )
             log("ensured life-critical flag on sample-med-a-daily")
 
     # Persist the Patient id for the service/frontend
     find = httpx.get(
         base + "fhir/R4/Patient",
-        params={"identifier": f"{IDENT}/patient|{env('HMD_PATIENT_IDENTIFIER', 'healmedaily-user')}", "_count": 1},
+        params={
+            "identifier": f"{IDENT}/patient|{env('HMD_PATIENT_IDENTIFIER', 'healmedaily-user')}",
+            "_count": 1,
+        },
         headers={"Authorization": f"Bearer {token}"},
         timeout=15,
     ).json()

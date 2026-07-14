@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -86,8 +87,6 @@ def create_data_summary(body: HealthReviewRequest) -> dict:
 
 @app.get("/export/fhir")
 def export_fhir() -> Response:
-    import json
-
     bundle = _wrap(export.export_fhir_bundle, medplum)
     return Response(
         content=json.dumps(bundle, indent=1),

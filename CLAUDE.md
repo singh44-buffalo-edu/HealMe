@@ -139,7 +139,7 @@ app **:3000** · server **:8103** · Vite **:5173** · FastAPI **:8000** · Post
 - **AI guardrails (non-negotiable)**: summaries organize, never diagnose/prescribe; concerning patterns framed "to discuss with your clinician"; disclaimer on every summary + PDF ("Not medical advice — a discussion aid; review with a qualified clinician"); never send data to an unconfigured provider; cloud-provider data flow disclosed in UI; local path (Ollama + Tesseract) offered; sustained serious distress in mental-health content → gently surface professional/crisis resources, no alarmism.
 - **Ingestion**: nothing auto-commits. Proposed resources ride a `Task` review queue; approval commits resource + `Provenance` atomically. Source `DocumentReference`/`Binary` immutable.
 - **Neutral weight framing**: no diet targets/goal weight/calorie logic by default; goals opt-in only.
-- **Git**: commit at end of each phase; conventional-ish messages; never commit secrets or `data/`.
+- **Git**: commit at end of each phase; conventional-ish messages; never commit secrets or `data/`. **`make check` must be green before any commit** (ruff + oxlint + pytest + vitest ×2 + tsc + builds); `make smoke` before ending a phase.
 - **Ask the owner before**: changing the FHIR data model post-MVP, adding heavy deps, anything touching medical-safety behavior (auto-commit of extractions, adherence/dose logic changes).
 
 ## 7. Phase plan & status

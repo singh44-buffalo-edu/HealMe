@@ -1,32 +1,14 @@
-# React + TypeScript + Vite
+# HealMeDaily frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Vite + React + `@medplum/react` (Mantine 8). See the repo root [README](../README.md) and
+[CLAUDE.md](../CLAUDE.md) for architecture, conventions, and run commands.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm run dev     # http://localhost:5173 (expects Medplum stack via `make up`)
+npm test        # vitest — unit tests for the dose/adherence core (src/fhir.test.ts)
+npm run lint    # oxlint
+npm run build   # tsc + production bundle (served by nginx in `make prod-up`)
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Layout: `src/fhir.ts` (FHIR helpers + adherence math — keep pure and tested),
+`src/api.ts` (AI-service client), `src/pages/*` (one route each), `src/components/*`.
