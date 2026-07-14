@@ -60,6 +60,21 @@ make logs             # tail medplum-server logs
 - **Documents** — upload PDFs/photos; AI proposes FHIR resources into a review queue; nothing
   joins the record until you approve (committed with Provenance).
 - **AI Health Review** — grounded summary of a 30/90-day window with PDF export for clinic visits.
+- **More dashboards** — Trends (30d/90d/1y windows), Labs (per-analyte trends vs reference ranges),
+  Symptoms-vs-medication timeline, and a check-in explorer.
+
+## Containerized deployment
+
+```bash
+make prod-up     # builds + runs everything in Docker: Medplum stack,
+                 # frontend (nginx) at http://localhost:8080, AI service at :8000
+make prod-logs   # tail the app containers
+make prod-down   # stop everything
+```
+
+`make dev` and `make prod-up` both claim port 8000 — run one at a time. Bootstrap/seed/bots
+are host-run one-time steps (`make bootstrap && make seed && make bots`) and work against
+either mode.
 
 ## Configuration
 

@@ -128,7 +128,10 @@ export function ReviewPage() {
               <div
                 // AI output rendered as markdown; sanitized before injection
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(marked.parse(review.markdown, { async: false }) as string),
+                  __html: DOMPurify.sanitize(marked.parse(review.markdown ?? '', { async: false }) as string, {
+                    // AI output must not load remote resources (tracking/exfil channel)
+                    FORBID_TAGS: ['img', 'svg', 'iframe', 'object', 'embed'],
+                  }),
                 }}
               />
             </TypographyStylesProvider>

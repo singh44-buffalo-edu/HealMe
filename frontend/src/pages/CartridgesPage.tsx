@@ -187,7 +187,13 @@ function CartridgeCard({
           },
         ],
       };
-      await medplum.executeBatch(bundle);
+      const result = await medplum.executeBatch(bundle);
+      // Medplum can commit valid entries while individual entries fail —
+      // inspect every entry status instead of trusting the 200 (CLAUDE.md).
+      const bad = (result.entry ?? []).filter((e) => !e.response?.status?.startsWith('2'));
+      if (bad.length > 0) {
+        throw new Error(`refill partially failed: ${bad.map((e) => e.response?.status).join(', ')}`);
+      }
       notifications.show({ color: 'teal', message: `${name} refilled to ${cap} doses` });
       onChanged();
     } catch (err) {

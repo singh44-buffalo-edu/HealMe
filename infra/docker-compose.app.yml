@@ -1,0 +1,28 @@
+# Application containers on top of the Medplum stack.
+# Run combined:  docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build
+# (or `make prod-up`). Requires a bootstrapped repo-root .env (make bootstrap).
+# Note: the AI container claims :8000 — stop `make dev`'s uvicorn first.
+
+services:
+  healmedaily-ai:
+    build: ../ai-service
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      # Inside the compose network the server is reachable by service name,
+      # not localhost. Everything else comes from .env.
+      MEDPLUM_BASE_URL: 'http://medplum-server:8103/'
+      AI_ALLOWED_ORIGINS: 'http://localhost:5173,http://localhost:8080'
+    ports:
+      - '8000:8000'
+    depends_on:
+      medplum-server:
+        condition: service_healthy
+
+  healmedaily-web:
+    build: ../frontend
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      - healmedaily-ai

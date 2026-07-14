@@ -52,6 +52,10 @@ export interface MedInfo {
   lifeCritical: boolean;
   times: string[]; // HH:MM:SS
   cartridge?: CartridgeInfo;
+  /** First day this request is in effect (authoredOn, else record creation).
+   * Bounds historical slot generation so a med added today does not
+   * retroactively rewrite past days' adherence. */
+  startDate: string;
 }
 
 export function getPatient(medplum: MedplumClient): Promise<Patient | undefined> {
@@ -117,6 +121,7 @@ export async function loadMeds(medplum: MedplumClient): Promise<MedInfo[]> {
       cartridge: cartridges.find(
         (c) => c.enabled && c.medicationRef === request.medicationReference?.reference
       ),
+      startDate: (request.authoredOn ?? request.meta?.lastUpdated ?? '').slice(0, 10),
     };
   });
 }
@@ -147,6 +152,9 @@ export function localDateString(d: Date): string {
 export function slotsForDate(meds: MedInfo[], date: string): DoseSlot[] {
   const slots: DoseSlot[] = [];
   for (const med of meds) {
+    if (med.startDate && date < med.startDate) {
+      continue; // med did not exist yet — no historical slots
+    }
     for (const time of med.times) {
       slots.push({
         med,
@@ -222,18 +230,30 @@ export async function logDose(
   const wasTaken = existing?.status === 'completed';
   const result = existing
     ? await medplum.updateResource({ ...base, id: existing.id, meta: existing.meta })
-    : await medplum.createResource(base);
+    : // Conditional create: concurrent calls (double-tap, second tab) resolve
+      // to one resource instead of duplicates.
+      await medplum.createResourceIfNoneExist(base, `identifier=${ADMIN_IDENT_SYSTEM}|${slot.identValue}`);
 
-  // Display-only inventory: decrement on a new "taken" (never below zero).
-  if (action === 'taken' && !wasTaken && slot.med.cartridge?.remaining !== undefined) {
+  // Display-only inventory (never gates taking a med): decrement on a new
+  // "taken", restore when a taken dose is corrected to skipped/missed.
+  const delta = action === 'taken' && !wasTaken ? -1 : action !== 'taken' && wasTaken ? +1 : 0;
+  if (delta !== 0 && slot.med.cartridge?.remaining !== undefined) {
     const cart = slot.med.cartridge;
     const device = await medplum.readResource('Device', cart.device.id as string);
     const prop = device.property?.find((p) =>
       p.type?.coding?.some((c) => c.code === 'remaining-count')
     );
-    if (prop?.valueQuantity?.[0]?.value !== undefined && prop.valueQuantity[0].value > 0) {
-      prop.valueQuantity[0].value -= 1;
-      await medplum.updateResource(device);
+    const capacity =
+      device.property
+        ?.find((p) => p.type?.coding?.some((c) => c.code === 'capacity'))
+        ?.valueQuantity?.[0]?.value ?? Number.MAX_SAFE_INTEGER;
+    const current = prop?.valueQuantity?.[0]?.value;
+    if (prop?.valueQuantity?.[0] && current !== undefined) {
+      const next = Math.min(Math.max(current + delta, 0), capacity);
+      if (next !== current) {
+        prop.valueQuantity[0].value = next;
+        await medplum.updateResource(device);
+      }
     }
   }
   return result;
@@ -290,33 +310,60 @@ export interface AdherenceStats {
   perMed: { med: MedInfo; taken: number; notDone: number; pct: number | null }[];
 }
 
+/**
+ * Adherence stats computed from the SAME slot model as the day summaries, so
+ * the percentage, per-med bars, calendar and streak always describe the same
+ * window (slot-identifier matched — duplicates and out-of-window admins are
+ * never double counted). `streakDays` (defaults to `daySummaries`) may be a
+ * longer window so the streak is not capped by the stats window.
+ */
 export function adherenceStats(
   meds: MedInfo[],
   admins: MedicationAdministration[],
-  daySummaries: DaySummary[]
+  daySummaries: DaySummary[],
+  streakDays?: DaySummary[]
 ): AdherenceStats {
-  const counts = (filter: (a: MedicationAdministration) => boolean) => {
-    const relevant = admins.filter(filter);
-    const taken = relevant.filter((a) => a.status === 'completed').length;
-    const notDone = relevant.filter((a) => a.status === 'not-done').length;
+  const pctOf = (taken: number, notDone: number) => {
     const logged = taken + notDone;
-    return { taken, notDone, pct: logged ? Math.round((100 * taken) / logged) : null };
+    return logged ? Math.round((100 * taken) / logged) : null;
   };
-  const overall = counts(() => true);
 
-  const perMed = meds.map((med) => ({
-    med,
-    ...counts((a) => a.request?.reference === `MedicationRequest/${med.request.id}`),
-  }));
+  const perMedCounts = new Map<string, { taken: number; notDone: number }>();
+  let taken = 0;
+  let notDone = 0;
+  for (const day of daySummaries) {
+    for (const med of meds) {
+      const counts = perMedCounts.get(med.request.id as string) ?? { taken: 0, notDone: 0 };
+      for (const slot of slotsForDate([med], day.date)) {
+        const admin = adminForSlot(admins, slot);
+        if (admin?.status === 'completed') {
+          counts.taken++;
+          taken++;
+        } else if (admin?.status === 'not-done') {
+          counts.notDone++;
+          notDone++;
+        }
+      }
+      perMedCounts.set(med.request.id as string, counts);
+    }
+  }
+
+  const perMed = meds.map((med) => {
+    const counts = perMedCounts.get(med.request.id as string) ?? { taken: 0, notDone: 0 };
+    return { med, ...counts, pct: pctOf(counts.taken, counts.notDone) };
+  });
 
   let streak = 0;
-  const chronological = [...daySummaries].reverse(); // today first
+  const chronological = [...(streakDays ?? daySummaries)].reverse(); // today first
   for (let i = 0; i < chronological.length; i++) {
     const day = chronological[i];
-    if (i === 0 && day.status !== 'all-taken') continue; // today may be mid-day
+    if (i === 0 && day.status !== 'all-taken') {
+      if (day.notDone > 0) break; // an explicit skip/miss today ends the streak now
+      continue; // today merely not finished yet — judge from yesterday
+    }
     if (day.status === 'all-taken') streak++;
     else if (day.status !== 'no-doses') break;
   }
 
-  return { ...overall, streak, perMed };
+  return { taken, notDone, pct: pctOf(taken, notDone), streak, perMed };
 }

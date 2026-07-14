@@ -1,6 +1,7 @@
 /** Client for the local Python AI service (:8000). */
 
-const AI_BASE: string = import.meta.env.VITE_AI_SERVICE_URL ?? 'http://localhost:8000/';
+const RAW_BASE: string = import.meta.env.VITE_AI_SERVICE_URL ?? 'http://localhost:8000/';
+const AI_BASE = RAW_BASE.endsWith('/') ? RAW_BASE : `${RAW_BASE}/`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -81,7 +82,7 @@ export interface ReviewTask {
 export const listReviewTasks = () => request<ReviewTask[]>('ingest/tasks');
 
 export const approveTask = (taskId: string, resource: Record<string, unknown> | null) =>
-  request<{ committed: string }>(`ingest/tasks/${taskId}/approve`, json({ resource }));
+  request<{ committed: string }>(`ingest/tasks/${encodeURIComponent(taskId)}/approve`, json({ resource }));
 
 export const rejectTask = (taskId: string) =>
-  request<{ status: string }>(`ingest/tasks/${taskId}/reject`, { method: 'POST' });
+  request<{ status: string }>(`ingest/tasks/${encodeURIComponent(taskId)}/reject`, { method: 'POST' });

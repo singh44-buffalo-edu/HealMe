@@ -42,6 +42,14 @@ export function AdherencePage() {
   const [patientId, setPatientId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [now, setNow] = useState(() => new Date());
+
+  // The overdue/critical logic depends on wall-clock time — keep it live so
+  // an idle tab still raises the critical-medication alert.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -84,20 +92,13 @@ export function AdherencePage() {
   }
 
   const days = summarizeDays(meds, admins, HEATMAP_DAYS);
-  const stats = adherenceStats(
-    meds,
-    admins.filter((a) => {
-      const when = a.effectiveDateTime ?? '';
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - STATS_DAYS);
-      return when >= cutoff.toISOString().slice(0, 10);
-    }),
-    days.slice(-STATS_DAYS)
-  );
+  // Stats over the last 30 summarized days; streak over the full heatmap window.
+  const stats = adherenceStats(meds, admins, days.slice(-STATS_DAYS), days);
 
-  const now = new Date();
   const today = localDateString(now);
-  const yesterday = localDateString(new Date(now.getTime() - 24 * 3600 * 1000));
+  const yesterdayDate = new Date(now);
+  yesterdayDate.setDate(now.getDate() - 1); // local calendar math — DST safe
+  const yesterday = localDateString(yesterdayDate);
 
   const criticalProblems: string[] = [];
   for (const slot of slotsForDate(meds, today)) {
@@ -111,9 +112,14 @@ export function AdherencePage() {
     }
   }
 
-  const lowStock = meds
-    .map((m) => m.cartridge)
-    .filter((c): c is NonNullable<typeof c> => Boolean(c?.low));
+  const lowStock = [
+    ...new Map(
+      meds
+        .map((m) => m.cartridge)
+        .filter((c): c is NonNullable<typeof c> => Boolean(c?.low))
+        .map((c) => [c.device.id, c])
+    ).values(),
+  ];
 
   return (
     <Stack>
@@ -233,7 +239,10 @@ function DayPanel(props: {
   const act = async (slot: DoseSlot, action: DoseAction) => {
     setBusy(slot.identValue);
     try {
-      await logDose(medplum, props.patientId, slot, action);
+      // Backdated slots record the scheduled time, not the moment of the tap —
+      // marking yesterday's dose taken must not stamp today's clock time.
+      const isToday = slot.date === localDateString(props.now);
+      await logDose(medplum, props.patientId, slot, action, isToday ? undefined : slot.scheduled);
       notifications.show({
         color: action === 'taken' ? 'teal' : 'yellow',
         message: `${slot.med.name} ${slot.time.slice(0, 5)} marked ${action}`,

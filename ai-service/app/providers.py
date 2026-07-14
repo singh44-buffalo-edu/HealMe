@@ -69,6 +69,9 @@ class AnthropicProvider:
 
         if response.stop_reason == "refusal":
             raise ProviderError("The model declined this request (safety refusal)")
+        if response.stop_reason == "max_tokens":
+            # Never store a silently truncated summary as an official record.
+            raise ProviderError("Model output was truncated (max_tokens) — try a smaller window")
         text = "\n".join(block.text for block in response.content if block.type == "text")
         if not text.strip():
             raise ProviderError(f"Empty model response (stop_reason={response.stop_reason})")

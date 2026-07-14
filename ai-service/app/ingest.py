@@ -76,27 +76,33 @@ PROPOSAL_SCHEMA = {
 
 
 def extract_text(data: bytes, content_type: str) -> tuple[str, str]:
-    """Returns (text, method). OCR fallback for scanned PDFs and images."""
-    if content_type == "application/pdf":
-        from pypdf import PdfReader
+    """Returns (text, method). OCR fallback for scanned PDFs and images.
+    Never raises: extraction failure returns ("", "failed") — the document is
+    already stored, and the AI layer can still see it via the vision fallback."""
+    try:
+        if content_type == "application/pdf":
+            from pypdf import PdfReader
 
-        reader = PdfReader(io.BytesIO(data))
-        pages = [page.extract_text() or "" for page in reader.pages]
-        text = "\n\n".join(pages).strip()
-        if len(text) >= 200 * max(len(pages), 1) * 0.2 and len(text) > 100:
-            return text, "pdf-text"
-        # Scanned PDF → rasterize + OCR
+            reader = PdfReader(io.BytesIO(data))
+            pages = [page.extract_text() or "" for page in reader.pages]
+            text = "\n\n".join(pages).strip()
+            # A real text layer averages far more than 100 chars per page —
+            # below that treat it as scanned and OCR.
+            if pages and len(text) / len(pages) >= 100:
+                return text, "pdf-text"
+            import pytesseract
+            from pdf2image import convert_from_bytes
+
+            images = convert_from_bytes(data, dpi=200)
+            ocr = "\n\n".join(pytesseract.image_to_string(img) for img in images)
+            return ocr.strip(), "ocr"
+        # Photo
         import pytesseract
-        from pdf2image import convert_from_bytes
+        from PIL import Image
 
-        images = convert_from_bytes(data, dpi=200)
-        ocr = "\n\n".join(pytesseract.image_to_string(img) for img in images)
-        return ocr.strip(), "ocr"
-    # Photo
-    import pytesseract
-    from PIL import Image
-
-    return pytesseract.image_to_string(Image.open(io.BytesIO(data))).strip(), "ocr"
+        return pytesseract.image_to_string(Image.open(io.BytesIO(data))).strip(), "ocr"
+    except Exception:  # noqa: BLE001 — missing OCR deps / corrupt file must not fail the upload
+        return "", "failed"
 
 
 def _document_content_blocks(data: bytes, content_type: str, text: str) -> str | list[dict[str, Any]]:
@@ -266,6 +272,18 @@ def approve_task(
     )
     source_doc = task.get("focus", {}).get("reference")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    resource_urn = f"urn:uuid:{uuid.uuid4()}"
+
+    # Stable business identifier makes the commit retry-safe: Medplum can
+    # partially commit a transaction whose later entries fail (see CLAUDE.md),
+    # so a retry must find the already-created resource instead of duplicating.
+    commit_ident = {"system": f"{fc.IDENT}/ingestion", "value": f"task-{task_id}"}
+    resource.setdefault("identifier", [])
+    if not any(
+        i.get("system") == commit_ident["system"] and i.get("value") == commit_ident["value"]
+        for i in resource["identifier"]
+    ):
+        resource["identifier"].append(commit_ident)
 
     task_done = {
         **task,
@@ -274,13 +292,13 @@ def approve_task(
         "output": [
             {
                 "type": {"coding": [{"system": fc.CS_INGEST, "code": "final-resource"}]},
-                "valueReference": {"reference": "urn:uuid:committed-resource"},
+                "valueReference": {"reference": resource_urn},
             }
         ],
     }
     provenance = {
         "resourceType": "Provenance",
-        "target": [{"reference": "urn:uuid:committed-resource"}],
+        "target": [{"reference": resource_urn}],
         "recorded": now,
         "agent": [
             {
@@ -288,16 +306,21 @@ def approve_task(
                 "who": {"display": "HealMeDaily AI ingestion service"},
             }
         ],
-        "entity": [{"role": "source", "what": {"reference": source_doc}}] if source_doc else [],
     }
+    if source_doc:
+        provenance["entity"] = [{"role": "source", "what": {"reference": source_doc}}]
     bundle = {
         "resourceType": "Bundle",
         "type": "transaction",
         "entry": [
             {
-                "fullUrl": "urn:uuid:committed-resource",
+                "fullUrl": resource_urn,
                 "resource": resource,
-                "request": {"method": "POST", "url": resource["resourceType"]},
+                "request": {
+                    "method": "POST",
+                    "url": resource["resourceType"],
+                    "ifNoneExist": f"identifier={commit_ident['system']}|{commit_ident['value']}",
+                },
             },
             {"resource": provenance, "request": {"method": "POST", "url": "Provenance"}},
             {"resource": task_done, "request": {"method": "PUT", "url": f"Task/{task_id}"}},

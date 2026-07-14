@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -103,13 +104,16 @@ async def upload_document(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > 25 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="file larger than 25 MB")
-    return _wrap(
+    patient_id = _patient_id()
+    # OCR + model call take tens of seconds — keep them off the event loop.
+    return await run_in_threadpool(
+        _wrap,
         ingest.ingest_document,
         medplum,
         data,
         file.content_type or "application/octet-stream",
         file.filename or "upload",
-        _patient_id(),
+        patient_id,
     )
 
 

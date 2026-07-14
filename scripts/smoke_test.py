@@ -84,11 +84,19 @@ def main() -> None:
 
     def write_read_delete_observation():
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        ident = env("HMD_PATIENT_IDENTIFIER", "healmedaily-user")
+        patient = httpx.get(
+            base + "fhir/R4/Patient",
+            params={"identifier": f"https://healmedaily.local/fhir/identifier/patient|{ident}", "_count": 1},
+            headers=auth_headers(),
+            timeout=10,
+        ).json()["entry"][0]["resource"]
         resp = httpx.post(
             base + "fhir/R4/Observation",
             json={
                 "resourceType": "Observation",
                 "status": "final",
+                "subject": {"reference": f"Patient/{patient['id']}"},
                 "code": {
                     "coding": [
                         {"system": "https://healmedaily.local/fhir/CodeSystem/observation", "code": "smoke-test"}
@@ -102,11 +110,14 @@ def main() -> None:
         )
         assert resp.status_code == 201, f"create status {resp.status_code}: {resp.text[:200]}"
         obs_id = resp.json()["id"]
-        resp = httpx.get(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
-        assert resp.status_code == 200, f"read-back status {resp.status_code}"
-        assert resp.json()["valueString"] == f"smoke {now}", "read-back value mismatch"
-        resp = httpx.delete(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
-        assert resp.status_code in (200, 204), f"delete status {resp.status_code}"
+        try:
+            resp = httpx.get(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
+            assert resp.status_code == 200, f"read-back status {resp.status_code}"
+            assert resp.json()["valueString"] == f"smoke {now}", "read-back value mismatch"
+        finally:
+            # never leave smoke artifacts in the record, even on failure
+            resp = httpx.delete(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
+            assert resp.status_code in (200, 204), f"delete status {resp.status_code}"
         return f"Observation/{obs_id} created+verified+deleted"
 
     def check_ai_medplum_roundtrip():
