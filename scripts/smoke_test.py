@@ -123,6 +123,73 @@ def main() -> None:
         resp = httpx.get(frontend + "src/main.tsx", timeout=30)
         assert resp.status_code == 200, f"main.tsx transform failed: status {resp.status_code} {resp.text[:200]}"
 
+    def check_ingest_queue():
+        resp = httpx.get(ai_base + "ingest/tasks", timeout=15)
+        assert resp.status_code == 200, f"status {resp.status_code}: {resp.text[:200]}"
+        assert isinstance(resp.json(), list), "expected a list of review tasks"
+        return f"{len(resp.json())} task(s) awaiting review"
+
+    def check_health_review_endpoint():
+        health = httpx.get(ai_base + "health", timeout=5).json()
+        configured = health.get("ai", {}).get("configured")
+        latest = httpx.get(ai_base + "health-review/latest", timeout=15)
+        assert latest.status_code in (200, 404), f"latest: {latest.status_code} {latest.text[:200]}"
+        if not configured:
+            # Without a provider the endpoint must refuse politely, not crash.
+            resp = httpx.post(ai_base + "health-review", json={"window_days": 30}, timeout=15)
+            assert resp.status_code == 503, f"expected 503 without provider, got {resp.status_code}"
+            return "no provider configured — graceful 503 verified"
+        return f"provider configured ({health['ai'].get('provider')}); latest={latest.status_code}"
+
+    def check_bot_roundtrip():
+        import time
+        import uuid
+
+        marker = str(uuid.uuid4())
+        patient = httpx.get(
+            base + "fhir/R4/Patient",
+            params={"identifier": f"https://healmedaily.local/fhir/identifier/patient|{env('HMD_PATIENT_IDENTIFIER', 'healmedaily-user')}"},
+            headers=auth_headers(),
+            timeout=10,
+        ).json()["entry"][0]["resource"]
+        qr = httpx.post(
+            base + "fhir/R4/QuestionnaireResponse",
+            json={
+                "resourceType": "QuestionnaireResponse",
+                "status": "completed",
+                "questionnaire": "https://healmedaily.local/fhir/Questionnaire/daily-check-in",
+                "subject": {"reference": f"Patient/{patient['id']}"},
+                "authored": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "item": [{"linkId": "mood", "answer": [{"valueInteger": 7}]}],
+                "identifier": {"system": "https://healmedaily.local/fhir/identifier/questionnaire-response", "value": f"smoke-{marker}"},
+            },
+            headers=auth_headers(),
+            timeout=10,
+        )
+        assert qr.status_code == 201, f"QR create: {qr.status_code} {qr.text[:200]}"
+        qr_id = qr.json()["id"]
+        obs_ident = f"https://healmedaily.local/fhir/identifier/questionnaire-observation|{qr_id}-mood"
+        obs_id = None
+        try:
+            for _ in range(20):
+                time.sleep(1.5)
+                found = httpx.get(
+                    base + "fhir/R4/Observation",
+                    params={"identifier": obs_ident, "_count": 1},
+                    headers=auth_headers(),
+                    timeout=10,
+                ).json()
+                if found.get("entry"):
+                    obs_id = found["entry"][0]["resource"]["id"]
+                    break
+            assert obs_id, "bot did not create the derived Observation within 30s"
+            return f"QR {qr_id} -> Observation {obs_id}"
+        finally:
+            # keep smoke runs from polluting the record
+            if obs_id:
+                httpx.delete(base + f"fhir/R4/Observation/{obs_id}", headers=auth_headers(), timeout=10)
+            httpx.delete(base + f"fhir/R4/QuestionnaireResponse/{qr_id}", headers=auth_headers(), timeout=10)
+
     step("medplum /healthcheck", check_server)
     step("ai-service /health", check_ai_health)
     step("oauth2 client-credentials token", get_token)
@@ -130,6 +197,9 @@ def main() -> None:
     step("FHIR write+read+delete: Observation", write_read_delete_observation)
     step("ai-service -> Medplum round-trip", check_ai_medplum_roundtrip)
     step("frontend dev server", check_frontend)
+    step("ingestion review queue endpoint", check_ingest_queue)
+    step("health-review endpoint (graceful without provider)", check_health_review_endpoint)
+    step("bot: QuestionnaireResponse -> Observation", check_bot_roundtrip)
 
     if FAILED:
         print("[smoke] RESULT: FAIL")

@@ -277,7 +277,11 @@ def main() -> None:
         resource.update({"resourceType": "Observation", "subject": subject, "meta": {"tag": [SEED_TAG]}})
         return entry(resource, "quick-observation", slug)
 
-    for days_ago, kg in [(13, 70.6), (10, 70.2), (7, 70.4), (4, 69.9), (1, 70.1)]:
+    for days_ago, kg in [
+        (88, 71.8), (81, 71.5), (74, 71.6), (67, 71.2), (60, 71.3), (53, 70.9),
+        (46, 71.0), (39, 70.7), (32, 70.8), (25, 70.5), (18, 70.3),
+        (13, 70.6), (10, 70.2), (7, 70.4), (4, 69.9), (1, 70.1),
+    ]:
         d = today - timedelta(days=days_ago)
         entries.append(
             observation(
@@ -304,11 +308,11 @@ def main() -> None:
     survey_cat = [
         {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "survey"}]}
     ]
-    for days_ago in range(1, 8):
+    for days_ago in range(1, 31):
         d = today - timedelta(days=days_ago)
-        mood = 6 + (days_ago % 3)
-        energy = 5 + ((days_ago + 1) % 4)
-        sleep_h = 6.5 + (days_ago % 3) * 0.5
+        mood = 6 + (days_ago % 3) - (1 if days_ago % 11 == 0 else 0)
+        energy = 5 + ((days_ago + 1) % 4) - (1 if days_ago % 13 == 0 else 0)
+        sleep_h = 6.5 + (days_ago % 3) * 0.5 - (0.5 if days_ago % 7 == 0 else 0)
         entries.append(
             observation(
                 f"seed-mood-{d.isoformat()}",
@@ -345,6 +349,93 @@ def main() -> None:
                     "effectivePeriod": {"start": sleep_start, "end": sleep_end},
                     "valueQuantity": {"value": sleep_h, "unit": "h", "system": UCUM, "code": "h"},
                 },
+            )
+        )
+
+    # --- Sample symptoms ------------------------------------------------------
+    for days_ago, text in [
+        (21, "Mild headache in the evening"),
+        (12, "Slight nausea after morning dose"),
+        (6, "Mild headache in the evening"),
+        (2, "Felt dizzy briefly after standing up"),
+    ]:
+        d = today - timedelta(days=days_ago)
+        entries.append(
+            observation(
+                f"seed-symptom-{d.isoformat()}",
+                {
+                    "status": "final",
+                    "category": survey_cat,
+                    "code": {"coding": [{"system": CS_OBS, "code": "symptom", "display": "Symptom"}], "text": "Symptom"},
+                    "effectiveDateTime": local_dt(d, "20:00", tz),
+                    "valueString": text,
+                },
+            )
+        )
+
+    # --- Sample lab report (verified LOINC only; else text-only) --------------
+    lab_cat = [
+        {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory"}]}
+    ]
+
+    def lab(slug: str, d: date, code: dict, value: float, unit: str, low: float, high: float) -> dict:
+        return observation(
+            slug,
+            {
+                "status": "final",
+                "category": lab_cat,
+                "code": code,
+                "effectiveDateTime": local_dt(d, "10:00", tz),
+                "valueQuantity": {"value": value, "unit": unit, "system": UCUM},
+                "referenceRange": [
+                    {"low": {"value": low, "unit": unit}, "high": {"value": high, "unit": unit}}
+                ],
+            },
+        )
+
+    lab_days = [(75, 14.1, 5.4, 38.0), (8, 13.6, 5.6, 42.0)]
+    lab_entries_by_date: dict[str, list[dict]] = {}
+    for days_ago, hgb, a1c, vitd in lab_days:
+        d = today - timedelta(days=days_ago)
+        day_labs = [
+            lab(
+                f"seed-lab-hgb-{d.isoformat()}",
+                d,
+                {"coding": [{"system": LOINC, "code": "718-7", "display": "Hemoglobin [Mass/volume] in Blood"}],
+                 "text": "Hemoglobin"},
+                hgb, "g/dL", 13.0, 17.0,
+            ),
+            lab(
+                f"seed-lab-a1c-{d.isoformat()}",
+                d,
+                {"coding": [{"system": LOINC, "code": "4548-4", "display": "Hemoglobin A1c"}],
+                 "text": "HbA1c"},
+                a1c, "%", 4.0, 5.6,
+            ),
+            lab(
+                f"seed-lab-vitd-{d.isoformat()}",
+                d,
+                {"text": "Vitamin D (25-OH)"},  # no confident LOINC — text-only per mapping rules
+                vitd, "ng/mL", 30.0, 100.0,
+            ),
+        ]
+        entries.extend(day_labs)
+        lab_entries_by_date[d.isoformat()] = day_labs
+
+    for d_iso, day_labs in lab_entries_by_date.items():
+        entries.append(
+            entry(
+                {
+                    "resourceType": "DiagnosticReport",
+                    "status": "final",
+                    "code": {"text": "Routine blood panel"},
+                    "subject": subject,
+                    "effectiveDateTime": f"{d_iso}T10:00:00" + local_dt(date.fromisoformat(d_iso), "10:00", tz)[-6:],
+                    "result": [ref(e) for e in day_labs],
+                    "meta": {"tag": [SEED_TAG]},
+                },
+                "document",
+                f"seed-labreport-{d_iso}",
             )
         )
 

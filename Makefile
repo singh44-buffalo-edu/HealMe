@@ -22,6 +22,11 @@ bootstrap:
 seed:
 	$(PY) scripts/seed.py
 
+# Build + deploy bots and wire their Subscriptions (idempotent)
+bots:
+	cd backend-bots && npm install && npm run build
+	$(PY) scripts/deploy_bots.py
+
 dev:
 	@trap 'kill 0' INT TERM; \
 	(cd frontend && npm run dev) & \
@@ -33,7 +38,10 @@ smoke:
 
 install:
 	cd frontend && npm install
+	cd backend-bots && npm install
 	cd ai-service && python3.12 -m venv .venv && .venv/bin/pip install -q -r requirements.txt
 
 test:
 	cd ai-service && .venv/bin/pytest -q
+	cd backend-bots && npm test
+	cd frontend && npx tsc --noEmit

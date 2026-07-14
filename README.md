@@ -25,12 +25,13 @@ Node 20+ and git assumed. (Docker Desktop works too — anything that provides `
 ## First run
 
 ```bash
-make install     # frontend npm install + ai-service venv
+make install     # frontend + bots npm install, ai-service venv
 make up          # start Medplum stack; first boot takes minutes
 make bootstrap   # one-time: first user + project + service credentials -> .env
 make seed        # Patient, check-in Questionnaire, sample meds/cartridges/data
+make bots        # build + deploy the check-in bot and its Subscription
 make dev         # frontend :5173 + ai-service :8000
-make smoke       # end-to-end smoke test (run while dev is up)
+make smoke       # 10-step end-to-end smoke test (run while dev is up)
 ```
 
 Sign in at http://localhost:5173 (and the Medplum admin app at http://localhost:3000) with
@@ -46,9 +47,24 @@ make test             # unit tests
 make logs             # tail medplum-server logs
 ```
 
+## What the app does (MVP)
+
+- **Adherence dashboard** — one-tap taken/skip/missed per scheduled dose, overdue + critical-med
+  alerts, 13-week calendar heatmap, adherence % + streak, per-medication bars, low-stock warnings.
+- **Health overview** — weight/mood/energy/sleep charts, recent symptoms, labs with reference
+  ranges, latest check-in, at-a-glance summary line.
+- **Daily check-in** — FHIR Questionnaire; a Medplum Bot fans numeric answers out to Observations.
+- **Quick add** — weight, sleep, mood & energy, symptoms; backdating supported.
+- **Cartridges** — medication↔cartridge mapping with capacity/stock/threshold and refill logging
+  (the future pill dispenser consumes this mapping unchanged).
+- **Documents** — upload PDFs/photos; AI proposes FHIR resources into a review queue; nothing
+  joins the record until you approve (committed with Provenance).
+- **AI Health Review** — grounded summary of a 30/90-day window with PDF export for clinic visits.
+
 ## Configuration
 
 Copy `.env.example` → `.env` (done automatically by `make bootstrap`). AI features are optional:
-leave `AI_PROVIDER` empty and the app runs with AI disabled. Cloud providers receive your health
-data (including document contents during ingestion) — a local path (Ollama + Tesseract) is
-supported. Data never leaves your machine otherwise.
+leave `AI_PROVIDER` empty and the app runs with AI disabled. To enable: set
+`AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=...`, then restart `make dev`. Cloud providers
+receive your health data (including document contents during ingestion) — a local path
+(Ollama + Tesseract) is planned. Data never leaves your machine otherwise.

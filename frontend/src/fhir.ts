@@ -11,6 +11,7 @@ import type {
   MedicationAdministration,
   MedicationRequest,
   Patient,
+  Resource,
 } from '@medplum/fhirtypes';
 
 export const BASE = 'https://healmedaily.local/fhir';
@@ -95,7 +96,8 @@ export async function loadMeds(medplum: MedplumClient): Promise<MedInfo[]> {
   const medications = new Map<string, Medication>();
   const requests: MedicationRequest[] = [];
   for (const entry of bundle.entry ?? []) {
-    const res = entry.resource;
+    // _include mixes Medication resources into a Bundle typed as MedicationRequest
+    const res = entry.resource as Resource | undefined;
     if (res?.resourceType === 'Medication') medications.set(res.id as string, res);
     if (res?.resourceType === 'MedicationRequest') requests.push(res);
   }
