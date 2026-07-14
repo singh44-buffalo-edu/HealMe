@@ -316,8 +316,46 @@ def main() -> None:
         "health-review endpoint (graceful without provider)",
         check_health_review_endpoint,
     )
+
+    def check_csv_import():
+        import uuid as uuid_mod
+
+        marker = uuid_mod.uuid4().hex[:8]
+        csv_text = (
+            "id,effective,code_system,code,display,value,unit,status,category\n"
+            f"x,2026-01-01T08:00:00Z,https://healmedaily.local/fhir/CodeSystem/observation,"
+            f"smoke-import-{marker},Smoke import,42,,final,survey\n"
+        )
+        files = {"file": ("smoke.csv", csv_text, "text/csv")}
+        first = httpx.post(ai_base + "import/csv", files=files, timeout=30)
+        assert first.status_code == 200, (
+            f"import: {first.status_code} {first.text[:200]}"
+        )
+        assert first.json()["imported"] == 1, f"expected 1 imported: {first.json()}"
+        second = httpx.post(ai_base + "import/csv", files=files, timeout=30)
+        assert second.json()["already_existed"] == 1, (
+            f"re-import should dedup: {second.json()}"
+        )
+        found = httpx.get(
+            base + "fhir/R4/Observation",
+            params={"code": f"smoke-import-{marker}", "_count": 5},
+            headers=auth_headers(),
+            timeout=10,
+        ).json()
+        entries = found.get("entry", [])
+        assert len(entries) == 1, (
+            f"expected exactly 1 imported observation, got {len(entries)}"
+        )
+        httpx.delete(
+            base + f"fhir/R4/Observation/{entries[0]['resource']['id']}",
+            headers=auth_headers(),
+            timeout=10,
+        )
+        return "1 imported, re-import deduped"
+
     step("bot: QuestionnaireResponse -> Observation", check_bot_roundtrip)
     step("bot: symptom -> follow-up Task", check_followup_bot)
+    step("import: CSV round-trip with dedup", check_csv_import)
 
     if FAILED:
         print("[smoke] RESULT: FAIL")

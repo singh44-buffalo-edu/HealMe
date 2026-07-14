@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     ai_allowed_origins: str = "http://localhost:5173"
     ingest_watch_dir: str = "./data/inbox"
+    ingest_scan_seconds: int = 60
 
     hmd_time_zone: str = "America/Los_Angeles"
     hmd_weight_unit: str = "kg"

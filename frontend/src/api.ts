@@ -75,6 +75,28 @@ export const uploadDocument = (file: File) => {
   return request<UploadResult>('ingest/upload', { method: 'POST', body: form });
 };
 
+export interface ImportResult {
+  imported: number;
+  already_existed: number;
+  prepared: number;
+  skipped: Record<string, number>;
+}
+
+const IMPORT_KIND_BY_EXT: Record<string, string> = { json: 'fhir', csv: 'csv', xml: 'apple' };
+
+export const importStructured = (file: File) => {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const kind = IMPORT_KIND_BY_EXT[ext];
+  if (!kind) {
+    return Promise.reject(
+      new Error('Unsupported file — .json (FHIR bundle), .csv (observations export) or .xml (Apple Health)')
+    );
+  }
+  const form = new FormData();
+  form.append('file', file);
+  return request<ImportResult>(`import/${kind}`, { method: 'POST', body: form });
+};
+
 export interface ReviewTask {
   task_id: string;
   description: string;

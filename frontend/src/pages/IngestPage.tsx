@@ -17,7 +17,15 @@ import { normalizeErrorString } from '@medplum/core';
 import { useMedplum } from '@medplum/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReviewTask } from '../api';
-import { approveTask, exportCsvUrl, exportFhirUrl, listReviewTasks, rejectTask, uploadDocument } from '../api';
+import {
+  approveTask,
+  exportCsvUrl,
+  exportFhirUrl,
+  importStructured,
+  listReviewTasks,
+  rejectTask,
+  uploadDocument,
+} from '../api';
 
 export function IngestPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -107,6 +115,9 @@ export function IngestPage() {
         <TaskCard key={task.task_id} task={task} onChanged={reload} />
       ))}
 
+      <Title order={3}>Import records</Title>
+      <ImportCard />
+
       <Title order={3}>Export your record</Title>
       <Card withBorder>
         <Stack gap="xs">
@@ -125,6 +136,64 @@ export function IngestPage() {
         </Stack>
       </Card>
     </Stack>
+  );
+}
+
+function ImportCard() {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const doImport = async () => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const result = await importStructured(file);
+      const skippedTotal = Object.values(result.skipped ?? {}).reduce((a, b) => a + b, 0);
+      notifications.show({
+        color: 'teal',
+        title: 'Import finished',
+        message: `${result.imported} imported, ${result.already_existed} already present${
+          skippedTotal ? `, ${skippedTotal} skipped (unsupported/incomplete)` : ''
+        }`,
+        autoClose: 10000,
+      });
+      setFile(null);
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Import failed', message: normalizeErrorString(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card withBorder>
+      <Stack gap="xs">
+        <Text size="sm">
+          Bring history from elsewhere — a <b>FHIR R4 bundle</b> (.json) from a hospital portal, an{' '}
+          <b>observations CSV</b> (this app's export format), or an <b>Apple Health</b> export.xml. Imports
+          are deterministic: re-importing the same file never duplicates, everything is tagged{' '}
+          <code>imported</code> with provenance.
+        </Text>
+        <Text size="xs" c="dimmed">
+          Prefer hands-off? Drop files into <code>data/inbox/</code> — they are imported automatically
+          (PDFs/photos go through the review queue).
+        </Text>
+        <Group align="flex-end">
+          <FileInput
+            label="File"
+            placeholder="Choose .json / .csv / .xml"
+            accept=".json,.csv,.xml,application/json,text/csv,text/xml"
+            value={file}
+            onChange={setFile}
+            w={320}
+            clearable
+          />
+          <Button onClick={doImport} loading={busy} disabled={!file}>
+            Import
+          </Button>
+        </Group>
+      </Stack>
+    </Card>
   );
 }
 

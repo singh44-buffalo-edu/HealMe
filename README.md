@@ -68,6 +68,10 @@ make logs             # tail medplum-server logs
   keys, alongside the AI review.
 - **Own your data** — one-click export of the complete record as a FHIR R4 bundle or
   observations CSV.
+- **Importers** — FHIR R4 bundles from hospital portals, observations CSV (round-trips this
+  app's export), and Apple Health export.xml (weight/HR/SpO2 + daily step and sleep
+  aggregates). Deterministic and dedup-safe: re-importing never duplicates. Drop files into
+  `data/inbox/` for automatic import (PDFs/photos route through the review queue).
 
 ## Containerized deployment
 

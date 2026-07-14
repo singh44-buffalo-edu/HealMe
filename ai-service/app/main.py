@@ -1,4 +1,6 @@
+import asyncio
 import json
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -7,12 +9,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import export, health_review, ingest
+from . import export, health_review, importers, ingest, watcher
 from .config import settings
 from .medplum import MedplumError, medplum
 from .providers import ProviderError, ProviderNotConfigured, provider_status
 
-app = FastAPI(title="HealMeDaily AI service", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    watch_task = asyncio.create_task(watcher.watch_loop())
+    yield
+    watch_task.cancel()
+
+
+app = FastAPI(title="HealMeDaily AI service", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -149,6 +159,32 @@ async def upload_document(file: UploadFile = File(...)) -> dict:
 @app.get("/ingest/tasks")
 def review_tasks() -> list[dict]:
     return _wrap(ingest.list_review_tasks, medplum)
+
+
+@app.post("/ingest/scan-now")
+async def scan_now() -> dict:
+    """Run one watched-folder scan immediately (also runs every
+    INGEST_SCAN_SECONDS in the background)."""
+    results = await run_in_threadpool(watcher.scan_once)
+    return {"inbox": str(watcher.inbox_dir()), "results": results}
+
+
+IMPORT_KINDS = {"fhir", "csv", "apple"}
+
+
+@app.post("/import/{kind}")
+async def import_structured(kind: str, file: UploadFile = File(...)) -> dict:
+    """Deterministic structured imports: FHIR R4 bundle (json), observations
+    CSV (this app's export format), or Apple Health export.xml."""
+    if kind not in IMPORT_KINDS:
+        raise HTTPException(status_code=404, detail=f"unknown import kind — one of {sorted(IMPORT_KINDS)}")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(data) > 200 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="file larger than 200 MB")
+    patient_id = _patient_id()
+    return await run_in_threadpool(_wrap, importers.run_import, medplum, kind, data, patient_id)
 
 
 class ApproveRequest(BaseModel):

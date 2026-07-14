@@ -13,6 +13,10 @@ services:
       # not localhost. Everything else comes from .env.
       MEDPLUM_BASE_URL: 'http://medplum-server:8103/'
       AI_ALLOWED_ORIGINS: 'http://localhost:5173,http://localhost:8080'
+      INGEST_WATCH_DIR: '/data/inbox'
+    volumes:
+      # Watched folder: files dropped in repo data/inbox are auto-imported
+      - '../data/inbox:/data/inbox'
     ports:
       - '8000:8000'
     depends_on:

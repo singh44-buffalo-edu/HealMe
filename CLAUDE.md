@@ -149,7 +149,7 @@ app **:3000** · server **:8103** · Vite **:5173** · FastAPI **:8000** · Post
 | 1 | Design proposal + CLAUDE.md + FHIR-MAPPING.md | ✅ awaiting sign-off |
 | 2 | Walking skeleton: 3 tiers up + seeded + smoke green | — |
 | 3 | MVP: logging UI, cartridge config, 2 dashboards (Adherence, Health Overview), QR→Obs Bot, AI Health Review + PDF, basic ingestion w/ review queue | ✅ |
-| 4 | Ingestion depth: OCR robustness, FHIR/C-CDA/HL7/CSV/Apple-Health importers, code mapping, dedup/reconcile, watched folder + scheduled | — |
+| 4 | Ingestion depth: FHIR-bundle/CSV/Apple-Health importers (deterministic, dedup by content-hash identifier, `imported` tag + Provenance, direct commit — review queue is for AI extractions only), watched folder `data/inbox` (60s scan + `/ingest/scan-now`, processed/failed archive). Remaining: C-CDA + HL7v2 importers, richer AI structuring + code mapping (needs ANTHROPIC_API_KEY) | mostly ✅ |
 | 5 | More dashboards: trends, symptom-vs-med timeline, labs, explorer (✅ pulled forward); correlations | partial ✅ |
 | 6 | Question engine: cadence-tagged questionnaire bank (D/W/M), due engine + multi-check-in UI, symptom→follow-up-Task bot, home due-panel. Remaining: more bank domains (spec §12), adaptive cadence, PHQ/GAD screenings | mostly ✅ |
 | 7 | More AI: all 4 providers, ask-your-data chat, NL /ingest, PDF polish | — |
