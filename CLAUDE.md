@@ -151,7 +151,7 @@ app **:3000** · server **:8103** · Vite **:5173** · FastAPI **:8000** · Post
 | 3 | MVP: logging UI, cartridge config, 2 dashboards (Adherence, Health Overview), QR→Obs Bot, AI Health Review + PDF, basic ingestion w/ review queue | ✅ |
 | 4 | Ingestion depth: OCR robustness, FHIR/C-CDA/HL7/CSV/Apple-Health importers, code mapping, dedup/reconcile, watched folder + scheduled | — |
 | 5 | More dashboards: trends, symptom-vs-med timeline, labs, explorer (✅ pulled forward); correlations | partial ✅ |
-| 6 | Question engine: Questionnaire bank, cadences, event triggers (Subscriptions/Bots) | — |
+| 6 | Question engine: cadence-tagged questionnaire bank (D/W/M), due engine + multi-check-in UI, symptom→follow-up-Task bot, home due-panel. Remaining: more bank domains (spec §12), adaptive cadence, PHQ/GAD screenings | mostly ✅ |
 | 7 | More AI: all 4 providers, ask-your-data chat, NL /ingest, PDF polish | — |
 | 8 | Hardware: Pi dashboard; dispenser as Device (voice check-ins, confirmation-first dispensing) | — |
 | 9 | Hardening: AccessPolicy, encryption/backups, reminders, registerEnabled=false, pin/upgrade discipline (containerize ✅ pulled forward: `make prod-up` → frontend :8080 via nginx, ai-service :8000, compose overlay infra/docker-compose.app.yml) | partial ✅ |

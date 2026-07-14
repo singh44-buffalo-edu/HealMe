@@ -12,6 +12,8 @@ import {
   adherenceStats,
   adminForSlot,
   localDateString,
+  mondayOf,
+  periodIdentValue,
   slotIdentValue,
   slotsForDate,
   summarizeDays,
@@ -114,6 +116,21 @@ describe('summarizeDays', () => {
     const newMed = med('r2', 'med-new', ['09:00:00'], day(0));
     const days = summarizeDays([newMed], [], 3, TODAY);
     expect(days.map((d) => d.status)).toEqual(['no-doses', 'no-doses', 'unlogged']);
+  });
+});
+
+describe('cadence periods', () => {
+  it('mondayOf returns the Monday of the containing week', () => {
+    expect(mondayOf(new Date('2026-07-13T12:00:00'))).toBe('2026-07-13'); // a Monday
+    expect(mondayOf(new Date('2026-07-15T12:00:00'))).toBe('2026-07-13'); // Wednesday
+    expect(mondayOf(new Date('2026-07-19T12:00:00'))).toBe('2026-07-13'); // Sunday -> previous Monday
+  });
+
+  it('builds distinct, stable period identifiers per cadence', () => {
+    const d = new Date('2026-07-15T12:00:00');
+    expect(periodIdentValue('daily-check-in', 'D', d)).toBe('daily-check-in-2026-07-15');
+    expect(periodIdentValue('weekly-reflection', 'W', d)).toBe('weekly-reflection-week-2026-07-13');
+    expect(periodIdentValue('weekly-reflection', 'M', d)).toBe('weekly-reflection-month-2026-07');
   });
 });
 

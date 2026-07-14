@@ -250,6 +250,60 @@ def main() -> None:
                 timeout=10,
             )
 
+    def check_followup_bot():
+        import time
+        import uuid as uuid_mod
+
+        obs = httpx.post(
+            base + "fhir/R4/Observation",
+            json={
+                "resourceType": "Observation",
+                "status": "final",
+                "code": {
+                    "coding": [
+                        {
+                            "system": "https://healmedaily.local/fhir/CodeSystem/observation",
+                            "code": "symptom",
+                        }
+                    ],
+                    "text": "Symptom",
+                },
+                "subject": {"reference": f"Patient/{env('MEDPLUM_PATIENT_ID')}"},
+                "effectiveDateTime": datetime.now(timezone.utc).isoformat(
+                    timespec="seconds"
+                ),
+                "valueString": f"smoke symptom {uuid_mod.uuid4()}",
+            },
+            headers=auth_headers(),
+            timeout=10,
+        ).json()
+        ident = f"https://healmedaily.local/fhir/identifier/task|symptom-follow-up-{obs['id']}"
+        task_id = None
+        try:
+            for _ in range(20):
+                time.sleep(1.5)
+                found = httpx.get(
+                    base + "fhir/R4/Task",
+                    params={"identifier": ident},
+                    headers=auth_headers(),
+                    timeout=10,
+                ).json()
+                if found.get("entry"):
+                    task_id = found["entry"][0]["resource"]["id"]
+                    break
+            assert task_id, "follow-up Task did not appear within 30s"
+            return f"Observation {obs['id']} -> Task {task_id}"
+        finally:
+            if task_id:
+                httpx.delete(
+                    base + f"fhir/R4/Task/{task_id}", headers=auth_headers(), timeout=10
+                )
+            httpx.delete(
+                base + f"fhir/R4/Observation/{obs['id']}",
+                headers=auth_headers(),
+                timeout=10,
+            )
+
     step("medplum /healthcheck", check_server)
     step("ai-service /health", check_ai_health)
     step("oauth2 client-credentials token", get_token)
@@ -263,6 +317,7 @@ def main() -> None:
         check_health_review_endpoint,
     )
     step("bot: QuestionnaireResponse -> Observation", check_bot_roundtrip)
+    step("bot: symptom -> follow-up Task", check_followup_bot)
 
     if FAILED:
         print("[smoke] RESULT: FAIL")

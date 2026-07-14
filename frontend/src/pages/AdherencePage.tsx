@@ -14,17 +14,22 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
-import type { MedicationAdministration } from '@medplum/fhirtypes';
+import type { MedicationAdministration, Task } from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react';
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { Heatmap } from '../components/Heatmap';
-import type { DoseAction, DoseSlot, MedInfo } from '../fhir';
+import type { CheckinDef, DoseAction, DoseSlot, MedInfo } from '../fhir';
 import {
+  CADENCE_LABEL,
   OVERDUE_GRACE_MINUTES,
   adherenceStats,
   adminForSlot,
+  completeFollowUp,
   getPatient,
   loadAdmins,
+  loadCheckins,
+  loadFollowUps,
   loadMeds,
   localDateString,
   logDose,
@@ -39,6 +44,8 @@ export function AdherencePage() {
   const medplum = useMedplum();
   const [meds, setMeds] = useState<MedInfo[]>([]);
   const [admins, setAdmins] = useState<MedicationAdministration[]>([]);
+  const [checkins, setCheckins] = useState<CheckinDef[]>([]);
+  const [followUps, setFollowUps] = useState<Task[]>([]);
   const [patientId, setPatientId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -53,14 +60,18 @@ export function AdherencePage() {
 
   const reload = useCallback(async () => {
     try {
-      const [patient, medList, adminList] = await Promise.all([
+      const [patient, medList, adminList, checkinList, followUpList] = await Promise.all([
         getPatient(medplum),
         loadMeds(medplum),
         loadAdmins(medplum, HEATMAP_DAYS),
+        loadCheckins(medplum),
+        loadFollowUps(medplum),
       ]);
       setPatientId(patient?.id);
       setMeds(medList);
       setAdmins(adminList);
+      setCheckins(checkinList);
+      setFollowUps(followUpList);
       setError(undefined);
     } catch (err) {
       setError(normalizeErrorString(err));
@@ -145,6 +156,8 @@ export function AdherencePage() {
         </Alert>
       )}
 
+      <TodayDuePanel checkins={checkins} followUps={followUps} onChanged={reload} />
+
       <SimpleGrid cols={{ base: 1, sm: 3 }}>
         <StatCard
           label={`Adherence (${STATS_DAYS}d, of logged doses)`}
@@ -207,6 +220,78 @@ export function AdherencePage() {
         <Heatmap days={days} />
       </Card>
     </Stack>
+  );
+}
+
+function TodayDuePanel({
+  checkins,
+  followUps,
+  onChanged,
+}: {
+  checkins: CheckinDef[];
+  followUps: Task[];
+  onChanged: () => void;
+}) {
+  const medplum = useMedplum();
+  const due = checkins.filter((d) => !d.existing);
+  if (due.length === 0 && followUps.length === 0) {
+    return null;
+  }
+
+  const resolve = async (task: Task) => {
+    try {
+      await completeFollowUp(medplum, task);
+      notifications.show({ color: 'teal', message: 'Follow-up resolved' });
+      onChanged();
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Could not resolve', message: normalizeErrorString(err) });
+    }
+  };
+
+  return (
+    <Card withBorder>
+      <Title order={4} mb="sm">
+        Due now
+      </Title>
+      <Stack gap="xs">
+        {due.map((def) => (
+          <Group key={def.questionnaire.url} justify="space-between">
+            <Group gap="xs">
+              <Text size="sm">{def.questionnaire.title}</Text>
+              <Badge size="xs" variant="light">
+                {CADENCE_LABEL[def.cadence]}
+              </Badge>
+            </Group>
+            <Button size="compact-sm" component={Link} to="/checkin">
+              Check in
+            </Button>
+          </Group>
+        ))}
+        {followUps.map((task) => (
+          <Group key={task.id} justify="space-between">
+            <Group gap="xs">
+              <Badge size="xs" color="grape" variant="light">
+                follow-up
+              </Badge>
+              <Text size="sm">{task.description}</Text>
+              {task.executionPeriod?.end && (
+                <Text size="xs" c="dimmed">
+                  due {task.executionPeriod.end.slice(0, 10)}
+                </Text>
+              )}
+            </Group>
+            <Group gap={6}>
+              <Button size="compact-sm" variant="light" component={Link} to="/log">
+                Log update
+              </Button>
+              <Button size="compact-sm" variant="subtle" color="teal" onClick={() => resolve(task)}>
+                Resolved
+              </Button>
+            </Group>
+          </Group>
+        ))}
+      </Stack>
+    </Card>
   );
 }
 

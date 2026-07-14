@@ -60,6 +60,10 @@ Proposed local systems:
 | Vitals (BP/HR/temp/SpO2/glucose) | `Observation` category `vital-signs` | Verified LOINC: BP panel `85354-9` (components `8480-6`/`8462-4`), HR `8867-4`, temperature `8310-5`, SpO2 `59408-5`, glucose `2339-0`. Plausible-range validation at entry; no clinical thresholds until set with a clinician. |
 | Question for prescriber | `Observation` local code `rx-question` | `valueString`; surfaced in AI review and data-only summary under "Questions for the prescriber". |
 | Check-in extras (rested 1–5, stress 0–10) | `Observation` via Bot | Local codes `rested`, `stress`; questionnaire v1.1.0 items; superseded questionnaire versions are `retired` so `status=active` resolves uniquely. |
+| Questionnaire cadence | `Questionnaire` extension | `…/StructureDefinition/questionnaire-cadence` valueCode `D`\|`W`\|`M`. Period identifiers on responses: `{q-key}-{YYYY-MM-DD}` (D), `{q-key}-week-{monday}` (W), `{q-key}-month-{YYYY-MM}` (M) — resubmits in a period update, never duplicate. |
+| Weekly reflection answers | `QuestionnaireResponse` → Bot → `Observation` | Local codes `social-contact`, `loneliness`, `purpose-alignment`, `activity-mvpa`, `activity-strength`, `recovery-days`. |
+| Symptom follow-up | `Task` via Bot | CodeSystem `…/CodeSystem/task` code `symptom-follow-up`; `focus` → symptom Observation, `executionPeriod.end` = onset + 1 day; identifier `task\|symptom-follow-up-{obsId}` (idempotent). Display-only workflow — resolution is always the user's action. |
+| Medication start anchor | `MedicationRequest.authoredOn` | Bounds historical dose-slot generation in the UI; set when a med is created (seed backfills samples 90d back). Fallback is record creation converted to the LOCAL date. |
 
 ## 3. Medication and adherence
 

@@ -31,7 +31,17 @@ BOTS = [
             "criteria": "QuestionnaireResponse",
             "supported_interaction": "create",
         },
-    }
+    },
+    {
+        "name": "symptom-follow-up",
+        "description": "Creates a next-day follow-up Task when a symptom is logged",
+        "dist": REPO / "backend-bots/dist/symptom-follow-up.js",
+        "subscription": {
+            "reason": "Schedule a follow-up when a symptom Observation is created",
+            "criteria": "Observation?code=https://healmedaily.local/fhir/CodeSystem/observation|symptom",
+            "supported_interaction": "create",
+        },
+    },
 ]
 
 

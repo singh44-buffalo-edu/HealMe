@@ -1,70 +1,75 @@
-import { Alert, Button, Card, Loader, Stack, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
-import type { Questionnaire, QuestionnaireResponse } from '@medplum/fhirtypes';
+import type { QuestionnaireResponse } from '@medplum/fhirtypes';
 import { QuestionnaireForm, useMedplum } from '@medplum/react';
 import { useCallback, useEffect, useState } from 'react';
-import { IDENT, Q_URL, getPatient, localDateString } from '../fhir';
-
-const QR_IDENT_SYSTEM = `${IDENT}/questionnaire-response`;
+import type { CheckinDef } from '../fhir';
+import { CADENCE_LABEL, QR_IDENT_SYSTEM, getPatient, loadCheckins } from '../fhir';
 
 export function CheckinPage() {
   const medplum = useMedplum();
-  const [questionnaire, setQuestionnaire] = useState<Questionnaire>();
-  const [existing, setExisting] = useState<QuestionnaireResponse>();
+  const [checkins, setCheckins] = useState<CheckinDef[]>();
+  const [selectedUrl, setSelectedUrl] = useState<string>();
   const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-
-  const today = localDateString(new Date());
-  const identValue = `daily-${today}`;
 
   const reload = useCallback(async () => {
     try {
-      const [q, existingResponse] = await Promise.all([
-        medplum.searchOne('Questionnaire', { url: Q_URL, status: 'active' }),
-        medplum.searchOne('QuestionnaireResponse', {
-          identifier: `${QR_IDENT_SYSTEM}|${identValue}`,
-        }),
-      ]);
-      setQuestionnaire(q);
-      setExisting(existingResponse);
+      const defs = await loadCheckins(medplum);
+      setCheckins(defs);
       setError(undefined);
+      // Auto-select the first due check-in
+      setSelectedUrl((current) => current ?? defs.find((d) => !d.existing)?.questionnaire.url ?? defs[0]?.questionnaire.url);
     } catch (err) {
       setError(normalizeErrorString(err));
-    } finally {
-      setLoading(false);
     }
-  }, [medplum, identValue]);
+  }, [medplum]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
-  const handleSubmit = async (response: QuestionnaireResponse) => {
+  if (error) {
+    return (
+      <Alert color="red" title="Could not load check-ins">
+        {error}
+      </Alert>
+    );
+  }
+  if (!checkins) return <Loader />;
+  if (checkins.length === 0) {
+    return (
+      <Alert color="yellow" title="No check-in questionnaires found">
+        Run <code>make seed</code> to create them.
+      </Alert>
+    );
+  }
+
+  const selected = checkins.find((d) => d.questionnaire.url === selectedUrl) ?? checkins[0];
+  const dueCount = checkins.filter((d) => !d.existing).length;
+
+  const handleSubmit = async (def: CheckinDef, response: QuestionnaireResponse) => {
     try {
       const patient = await getPatient(medplum);
-      if (!patient) {
-        throw new Error('No patient record — run make seed');
-      }
+      if (!patient) throw new Error('No patient record — run make seed');
       const resource: QuestionnaireResponse = {
         ...response,
         status: 'completed',
-        questionnaire: Q_URL,
+        questionnaire: def.questionnaire.url,
         subject: { reference: `Patient/${patient.id}` },
         authored: new Date().toISOString(),
-        identifier: { system: QR_IDENT_SYSTEM, value: identValue },
+        identifier: { system: QR_IDENT_SYSTEM, value: def.periodIdent },
       };
-      if (existing) {
-        await medplum.updateResource({ ...resource, id: existing.id });
+      if (def.existing) {
+        await medplum.updateResource({ ...resource, id: def.existing.id });
         notifications.show({
           color: 'teal',
-          message:
-            "Today's check-in updated. (Charted values keep the first submission until the question engine phase.)",
+          message: `${def.questionnaire.title} updated. (Charted values keep the first submission until re-derivation lands.)`,
         });
       } else {
         await medplum.createResource(resource);
-        notifications.show({ color: 'teal', message: 'Check-in saved — thank you!' });
+        notifications.show({ color: 'teal', message: `${def.questionnaire.title} saved — thank you!` });
       }
       setEditing(false);
       await reload();
@@ -73,32 +78,51 @@ export function CheckinPage() {
     }
   };
 
-  if (loading) return <Loader />;
-  if (error) {
-    return (
-      <Alert color="red" title="Could not load the check-in">
-        {error}
-      </Alert>
-    );
-  }
-  if (!questionnaire) {
-    return (
-      <Alert color="yellow" title="No check-in questionnaire found">
-        Run <code>make seed</code> to create the daily check-in.
-      </Alert>
-    );
-  }
-
   return (
-    <Stack maw={640}>
-      <Title order={2}>Daily check-in</Title>
-      {existing && !editing ? (
+    <Stack maw={720}>
+      <Group justify="space-between">
+        <Title order={2}>Check-ins</Title>
+        <Badge color={dueCount ? 'orange' : 'teal'} size="lg">
+          {dueCount ? `${dueCount} due` : 'all done'}
+        </Badge>
+      </Group>
+
+      <Group>
+        {checkins.map((def) => (
+          <Card
+            key={def.questionnaire.url}
+            withBorder
+            padding="xs"
+            style={{
+              cursor: 'pointer',
+              borderColor:
+                def.questionnaire.url === selected.questionnaire.url ? 'var(--mantine-color-teal-6)' : undefined,
+            }}
+            onClick={() => {
+              setSelectedUrl(def.questionnaire.url);
+              setEditing(false);
+            }}
+          >
+            <Group gap="xs">
+              <Text fw={600} size="sm">
+                {def.questionnaire.title}
+              </Text>
+              <Badge size="xs" variant="light">
+                {CADENCE_LABEL[def.cadence]}
+              </Badge>
+              {def.existing ? <Badge size="xs" color="teal">done</Badge> : <Badge size="xs" color="orange">due</Badge>}
+            </Group>
+          </Card>
+        ))}
+      </Group>
+
+      {selected.existing && !editing ? (
         <Card withBorder>
           <Stack>
-            <Alert color="teal" title="Done for today">
-              You checked in at {(existing.authored ?? '').replace('T', ' ').slice(0, 16)}.
+            <Alert color="teal" title={`${selected.questionnaire.title} — done for this ${CADENCE_LABEL[selected.cadence].toLowerCase()} period`}>
+              Submitted {(selected.existing.authored ?? '').replace('T', ' ').slice(0, 16)}.
             </Alert>
-            {existing.item?.map((item) => {
+            {selected.existing.item?.map((item) => {
               const a = item.answer?.[0];
               const value = a?.valueInteger ?? a?.valueDecimal ?? a?.valueString;
               return value !== undefined && value !== '' ? (
@@ -111,13 +135,17 @@ export function CheckinPage() {
               ) : null;
             })}
             <Button variant="light" onClick={() => setEditing(true)}>
-              Edit today's answers
+              Edit answers
             </Button>
           </Stack>
         </Card>
       ) : (
         <Card withBorder>
-          <QuestionnaireForm questionnaire={questionnaire} onSubmit={handleSubmit} />
+          <QuestionnaireForm
+            key={selected.questionnaire.url}
+            questionnaire={selected.questionnaire}
+            onSubmit={(response) => handleSubmit(selected, response)}
+          />
         </Card>
       )}
     </Stack>

@@ -37,6 +37,7 @@ CS_ADHERENCE = BASE_URL + "/CodeSystem/adherence-reason"
 CS_DEVICE = BASE_URL + "/CodeSystem/device"
 EXT_DEVICE_MED = BASE_URL + "/StructureDefinition/device-assigned-medication"
 EXT_LIFE_CRITICAL = BASE_URL + "/StructureDefinition/medicationrequest-life-critical"
+EXT_CADENCE = BASE_URL + "/StructureDefinition/questionnaire-cadence"  # valueCode D|W|M
 TAGS = BASE_URL + "/tags"
 SEED_TAG = {"system": TAGS, "code": "seed-sample", "display": "Seed sample data"}
 
@@ -142,6 +143,7 @@ def main() -> None:
             "name": "DailyCheckIn",
             "title": "Daily check-in",
             "status": "active",
+            "extension": [{"url": EXT_CADENCE, "valueCode": "D"}],
             "item": [
                 {
                     "linkId": "rested",
@@ -215,6 +217,98 @@ def main() -> None:
     }
     entries.append(questionnaire)
 
+    # --- Weekly reflection questionnaire (spec §12: social/purpose/activity/recovery)
+    weekly_url = f"{BASE_URL}/Questionnaire/weekly-reflection"
+    weekly_version = "1.0.0"
+
+    def q_item(
+        link_id: str,
+        text: str,
+        item_type: str,
+        code: str | None = None,
+        display: str | None = None,
+    ) -> dict:
+        item: dict = {"linkId": link_id, "text": text, "type": item_type}
+        if code:
+            item["code"] = [
+                {"system": CS_OBS, "code": code, "display": display or text}
+            ]
+        return item
+
+    entries.append(
+        {
+            "fullUrl": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, weekly_url + weekly_version)}",
+            "resource": {
+                "resourceType": "Questionnaire",
+                "url": weekly_url,
+                "version": weekly_version,
+                "name": "WeeklyReflection",
+                "title": "Weekly reflection",
+                "status": "active",
+                "extension": [{"url": EXT_CADENCE, "valueCode": "W"}],
+                "item": [
+                    q_item(
+                        "social-contact",
+                        "Meaningful contact with people you care about this week? (1 = none, 5 = lots)",
+                        "integer",
+                        "social-contact",
+                        "Social contact (1-5)",
+                    ),
+                    q_item(
+                        "loneliness",
+                        "Any loneliness this week? (0 = none, 10 = a lot)",
+                        "integer",
+                        "loneliness",
+                        "Loneliness (0-10)",
+                    ),
+                    q_item(
+                        "purpose-alignment",
+                        "Did your days feel aligned with what matters to you? (1 = not at all, 5 = fully)",
+                        "integer",
+                        "purpose-alignment",
+                        "Purpose alignment (1-5)",
+                    ),
+                    q_item(
+                        "activity-mvpa",
+                        "Minutes of moderate-to-vigorous activity this week?",
+                        "integer",
+                        "activity-mvpa",
+                        "MVPA (min/week)",
+                    ),
+                    q_item(
+                        "activity-strength",
+                        "Strength sessions this week?",
+                        "integer",
+                        "activity-strength",
+                        "Strength sessions (/week)",
+                    ),
+                    q_item(
+                        "recovery-days",
+                        "Recovery days this week (no hard strain)?",
+                        "integer",
+                        "recovery-days",
+                        "Recovery days (/week)",
+                    ),
+                    q_item(
+                        "recurring-symptom",
+                        "Any recurring ache or symptom you keep ignoring?",
+                        "string",
+                    ),
+                    q_item(
+                        "rx-question",
+                        "Anything to raise with your prescriber?",
+                        "string",
+                    ),
+                ],
+            },
+            "request": {
+                "method": "POST",
+                "url": "Questionnaire",
+                "ifNoneExist": f"url={weekly_url}&version={weekly_version}",
+            },
+        }
+    )
+
     # --- Sample medications + requests --------------------------------------
     def medication(slug: str, text: str) -> dict:
         return entry(
@@ -235,6 +329,7 @@ def main() -> None:
             "resourceType": "MedicationRequest",
             "status": "active",
             "intent": "order",
+            "authoredOn": (today - timedelta(days=90)).isoformat(),
             "subject": subject,
             "medicationReference": ref(med),
             "dosageInstruction": [
@@ -716,6 +811,21 @@ def main() -> None:
                     f"retiring questionnaire v{res.get('version')} failed: {put.status_code}"
                 )
             log(f"retired daily-check-in v{res.get('version')}")
+        elif res.get("version") == q_version and not any(
+            x.get("url") == EXT_CADENCE for x in res.get("extension", [])
+        ):
+            res["extension"] = res.get("extension", []) + [
+                {"url": EXT_CADENCE, "valueCode": "D"}
+            ]
+            put = httpx.put(
+                base + f"fhir/R4/Questionnaire/{res['id']}",
+                json=res,
+                headers=headers,
+                timeout=15,
+            )
+            if put.status_code >= 400:
+                die(f"cadence ext update failed: {put.status_code}")
+            log("ensured cadence=D on daily check-in")
     find_req = httpx.get(
         base + "fhir/R4/MedicationRequest",
         params={
@@ -741,6 +851,28 @@ def main() -> None:
                     f"life-critical flag update failed: {put.status_code} {put.text[:300]}"
                 )
             log("ensured life-critical flag on sample-med-a-daily")
+
+    # Existing sample MedicationRequests predate the authoredOn anchor —
+    # ensure it so the frontend can bound historical dose slots correctly.
+    reqs = httpx.get(
+        base + "fhir/R4/MedicationRequest",
+        params={"status": "active", "_count": 100},
+        headers=headers,
+        timeout=15,
+    ).json()
+    for e in reqs.get("entry", []):
+        res = e["resource"]
+        if not res.get("authoredOn"):
+            res["authoredOn"] = (today - timedelta(days=90)).isoformat()
+            put = httpx.put(
+                base + f"fhir/R4/MedicationRequest/{res['id']}",
+                json=res,
+                headers=headers,
+                timeout=15,
+            )
+            if put.status_code >= 400:
+                die(f"authoredOn backfill failed: {put.status_code}")
+            log(f"backfilled authoredOn on MedicationRequest/{res['id']}")
 
     # Persist the Patient id for the service/frontend
     find = httpx.get(

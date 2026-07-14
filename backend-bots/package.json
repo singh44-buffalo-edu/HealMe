@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "esbuild src/questionnaire-response-to-observations.ts --bundle --platform=node --target=node20 --format=cjs --external:@medplum/core --footer:js=\"exports.handler = module.exports.handler;\" --outfile=dist/questionnaire-response-to-observations.js",
+    "build": "esbuild src/questionnaire-response-to-observations.ts src/symptom-follow-up.ts --bundle --platform=node --target=node20 --format=cjs --external:@medplum/core --footer:js=\"exports.handler = module.exports.handler;\" --outdir=dist",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

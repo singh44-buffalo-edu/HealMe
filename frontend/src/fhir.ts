@@ -11,7 +11,10 @@ import type {
   MedicationAdministration,
   MedicationRequest,
   Patient,
+  Questionnaire,
+  QuestionnaireResponse,
   Resource,
+  Task,
 } from '@medplum/fhirtypes';
 
 export const BASE = 'https://healmedaily.local/fhir';
@@ -23,6 +26,9 @@ export const EXT_LIFE_CRITICAL = `${BASE}/StructureDefinition/medicationrequest-
 export const EXT_DEVICE_MED = `${BASE}/StructureDefinition/device-assigned-medication`;
 export const EXT_SUPPLY_TARGET = `${BASE}/StructureDefinition/supplydelivery-target-cartridge`;
 export const Q_URL = `${BASE}/Questionnaire/daily-check-in`;
+export const EXT_CADENCE = `${BASE}/StructureDefinition/questionnaire-cadence`;
+export const CS_TASK = `${BASE}/CodeSystem/task`;
+export const QR_IDENT_SYSTEM = `${IDENT}/questionnaire-response`;
 export const OBS_CATEGORY = 'http://terminology.hl7.org/CodeSystem/observation-category';
 export const LOINC = 'http://loinc.org';
 export const UCUM = 'http://unitsofmeasure.org';
@@ -121,7 +127,14 @@ export async function loadMeds(medplum: MedplumClient): Promise<MedInfo[]> {
       cartridge: cartridges.find(
         (c) => c.enabled && c.medicationRef === request.medicationReference?.reference
       ),
-      startDate: (request.authoredOn ?? request.meta?.lastUpdated ?? '').slice(0, 10),
+      // authoredOn is the clinical start anchor; fall back to record creation
+      // converted to the LOCAL calendar date (a raw UTC slice can land on
+      // "tomorrow" and suppress today's doses).
+      startDate: request.authoredOn
+        ? request.authoredOn.slice(0, 10)
+        : request.meta?.lastUpdated
+          ? localDateString(new Date(request.meta.lastUpdated))
+          : '',
     };
   });
 }
@@ -257,6 +270,70 @@ export async function logDose(
     }
   }
   return result;
+}
+
+// --- Check-in cadence engine (spec §11-lite: D / W / M periods) ---------------
+
+export type Cadence = 'D' | 'W' | 'M';
+
+export const CADENCE_LABEL: Record<Cadence, string> = { D: 'Daily', W: 'Weekly', M: 'Monthly' };
+
+/** Local Monday of the week containing d — the weekly period key. */
+export function mondayOf(d: Date): string {
+  const x = new Date(d);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return localDateString(x);
+}
+
+/** Stable per-period identifier value: retries and resubmits within the same
+ * period update the same QuestionnaireResponse instead of duplicating. */
+export function periodIdentValue(questionnaireKey: string, cadence: Cadence, today: Date): string {
+  if (cadence === 'D') return `${questionnaireKey}-${localDateString(today)}`;
+  if (cadence === 'W') return `${questionnaireKey}-week-${mondayOf(today)}`;
+  return `${questionnaireKey}-month-${localDateString(today).slice(0, 7)}`;
+}
+
+export interface CheckinDef {
+  questionnaire: Questionnaire;
+  cadence: Cadence;
+  periodIdent: string;
+  existing?: QuestionnaireResponse;
+}
+
+/** Every active questionnaire carrying a cadence tag, with its current-period
+ * response (if any) — the "what is due now" list. */
+export async function loadCheckins(medplum: MedplumClient, today: Date = new Date()): Promise<CheckinDef[]> {
+  const questionnaires = await medplum.searchResources('Questionnaire', { status: 'active', _count: '50' });
+  const defs: CheckinDef[] = [];
+  for (const questionnaire of questionnaires) {
+    const cadence = questionnaire.extension?.find((e) => e.url === EXT_CADENCE)?.valueCode as
+      | Cadence
+      | undefined;
+    if (!cadence || !questionnaire.url) continue;
+    const key = questionnaire.url.split('/').pop() as string;
+    const periodIdent = periodIdentValue(key, cadence, today);
+    const existing = await medplum.searchOne('QuestionnaireResponse', {
+      identifier: `${QR_IDENT_SYSTEM}|${periodIdent}`,
+    });
+    defs.push({ questionnaire, cadence, periodIdent, existing });
+  }
+  const order: Cadence[] = ['D', 'W', 'M'];
+  return defs.sort((a, b) => order.indexOf(a.cadence) - order.indexOf(b.cadence));
+}
+
+// --- Follow-up tasks (event-triggered cadence) --------------------------------
+
+export function loadFollowUps(medplum: MedplumClient): Promise<Task[]> {
+  return medplum.searchResources('Task', {
+    status: 'requested',
+    code: `${CS_TASK}|symptom-follow-up`,
+    _sort: '-_lastUpdated',
+    _count: '50',
+  });
+}
+
+export async function completeFollowUp(medplum: MedplumClient, task: Task): Promise<void> {
+  await medplum.updateResource({ ...task, status: 'completed' });
 }
 
 // --- Adherence aggregates ----------------------------------------------------
