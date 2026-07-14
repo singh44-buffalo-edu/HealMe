@@ -17,7 +17,7 @@ import { normalizeErrorString } from '@medplum/core';
 import { useMedplum } from '@medplum/react';
 import { useCallback, useEffect, useState } from 'react';
 import type { ReviewTask } from '../api';
-import { approveTask, listReviewTasks, rejectTask, uploadDocument } from '../api';
+import { approveTask, exportCsvUrl, exportFhirUrl, listReviewTasks, rejectTask, uploadDocument } from '../api';
 
 export function IngestPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -106,6 +106,24 @@ export function IngestPage() {
       {tasks.map((task) => (
         <TaskCard key={task.task_id} task={task} onChanged={reload} />
       ))}
+
+      <Title order={3}>Export your record</Title>
+      <Card withBorder>
+        <Stack gap="xs">
+          <Text size="sm">
+            You own everything here. Download the complete record as a FHIR R4 bundle (portable to any
+            FHIR system) or all observations as CSV.
+          </Text>
+          <Group>
+            <Button variant="light" component="a" href={exportFhirUrl} target="_blank">
+              Download FHIR bundle (JSON)
+            </Button>
+            <Button variant="light" component="a" href={exportCsvUrl} target="_blank">
+              Download observations (CSV)
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
     </Stack>
   );
 }

@@ -50,6 +50,12 @@ export interface ReviewResult {
 export const generateReview = (windowDays: number) =>
   request<ReviewResult>('health-review', json({ window_days: windowDays }));
 
+export const generateDataSummary = (windowDays: number) =>
+  request<ReviewResult>('health-review/data-summary', json({ window_days: windowDays }));
+
+export const exportFhirUrl = `${AI_BASE}export/fhir`;
+export const exportCsvUrl = `${AI_BASE}export/observations.csv`;
+
 export const getLatestReview = () => request<ReviewResult>('health-review/latest');
 
 export const reviewPdfUrl = (docId: string) => `${AI_BASE}health-review/${docId}/pdf`;

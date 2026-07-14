@@ -56,7 +56,10 @@ Proposed local systems:
 | Cartridge/dispenser | `Device` | Cartridge is an instance; future dispenser is parent Device; project extension references assigned Medication |
 | Cartridge refill | `SupplyDelivery` + `Device` update | Event records medication/quantity; custom extension identifies target cartridge; transaction resets stock |
 | Ingestion processing state | `Task` | `requested` → `in-progress` → `completed` or `rejected`/`failed` |
-| Generated AI Health Review | `DocumentReference` + `Binary` (PDF) | Local type code `health-review`; window + generated-on retained; carries the not-medical-advice disclaimer; never a clinical source resource |
+| Generated AI Health Review | `DocumentReference` + `Binary` (PDF) | Local type code `health-review`; window + generated-on retained; carries the not-medical-advice disclaimer; never a clinical source resource. Same shape for the deterministic data-only summary (no AI). |
+| Vitals (BP/HR/temp/SpO2/glucose) | `Observation` category `vital-signs` | Verified LOINC: BP panel `85354-9` (components `8480-6`/`8462-4`), HR `8867-4`, temperature `8310-5`, SpO2 `59408-5`, glucose `2339-0`. Plausible-range validation at entry; no clinical thresholds until set with a clinician. |
+| Question for prescriber | `Observation` local code `rx-question` | `valueString`; surfaced in AI review and data-only summary under "Questions for the prescriber". |
+| Check-in extras (rested 1–5, stress 0–10) | `Observation` via Bot | Local codes `rested`, `stress`; questionnaire v1.1.0 items; superseded questionnaire versions are `retired` so `status=active` resolves uniquely. |
 
 ## 3. Medication and adherence
 

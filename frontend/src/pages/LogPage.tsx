@@ -37,6 +37,8 @@ export function LogPage() {
         <SleepCard />
         <MoodEnergyCard />
         <SymptomCard />
+        <VitalsCard />
+        <RxQuestionCard />
       </SimpleGrid>
     </Stack>
   );
@@ -200,6 +202,161 @@ function MoodEnergyCard() {
         <WhenInput value={when} onChange={setWhen} />
         <Button onClick={submit} loading={busy}>
           Save mood & energy
+        </Button>
+      </Stack>
+    </CardShell>
+  );
+}
+
+// Verified LOINC only (per FHIR-MAPPING rules); plausible-range validation
+// from the ingestion-module spec §12.12. No clinical thresholds — trends are
+// displayed without judgment until thresholds are set with a clinician.
+const VITALS = [
+  { key: 'systolic', label: 'Systolic (mm Hg)', min: 70, max: 260 },
+  { key: 'diastolic', label: 'Diastolic (mm Hg)', min: 40, max: 160 },
+  { key: 'hr', label: 'Heart rate (/min)', min: 30, max: 220 },
+  { key: 'temp', label: 'Temperature (°C)', min: 34, max: 42, decimals: 1 },
+  { key: 'spo2', label: 'SpO2 (%)', min: 70, max: 100 },
+  { key: 'glucose', label: 'Glucose (mg/dL)', min: 40, max: 500 },
+] as const;
+
+function VitalsCard() {
+  const saveObs = useSaveObservation();
+  const [values, setValues] = useState<Record<string, number | string>>({});
+  const [when, setWhen] = useState(nowLocalInput());
+  const { busy, submit } = useSubmit(async () => {
+    const v = (key: string) => {
+      const raw = values[key];
+      return raw === '' || raw === undefined ? undefined : Number(raw);
+    };
+    for (const field of VITALS) {
+      const value = v(field.key);
+      if (value !== undefined && (value < field.min || value > field.max)) {
+        throw new Error(`${field.label}: expected ${field.min}–${field.max}`);
+      }
+    }
+    const sys = v('systolic');
+    const dia = v('diastolic');
+    if ((sys === undefined) !== (dia === undefined)) {
+      throw new Error('Blood pressure needs both systolic and diastolic');
+    }
+    const effectiveDateTime = toIso(when);
+    const vitalsCat = [{ coding: [{ system: OBS_CATEGORY, code: 'vital-signs' }] }];
+    const quantity = (value: number, unit: string, ucum: string) => ({
+      value,
+      unit,
+      system: UCUM,
+      code: ucum,
+    });
+    const observations: Observation[] = [];
+    if (sys !== undefined && dia !== undefined) {
+      observations.push({
+        resourceType: 'Observation',
+        status: 'final',
+        category: vitalsCat,
+        code: { coding: [{ system: LOINC, code: '85354-9', display: 'Blood pressure panel' }] },
+        effectiveDateTime,
+        component: [
+          {
+            code: { coding: [{ system: LOINC, code: '8480-6', display: 'Systolic blood pressure' }] },
+            valueQuantity: quantity(sys, 'mmHg', 'mm[Hg]'),
+          },
+          {
+            code: { coding: [{ system: LOINC, code: '8462-4', display: 'Diastolic blood pressure' }] },
+            valueQuantity: quantity(dia, 'mmHg', 'mm[Hg]'),
+          },
+        ],
+      } as Observation);
+    }
+    const simple: [string, string, string, string, string][] = [
+      // key, loinc, display, unit label, ucum
+      ['hr', '8867-4', 'Heart rate', '/min', '/min'],
+      ['temp', '8310-5', 'Body temperature', '°C', 'Cel'],
+      ['spo2', '59408-5', 'Oxygen saturation (pulse oximetry)', '%', '%'],
+      ['glucose', '2339-0', 'Glucose', 'mg/dL', 'mg/dL'],
+    ];
+    for (const [key, code, display, unit, ucum] of simple) {
+      const value = v(key);
+      if (value !== undefined) {
+        observations.push({
+          resourceType: 'Observation',
+          status: 'final',
+          category: vitalsCat,
+          code: { coding: [{ system: LOINC, code, display }] },
+          effectiveDateTime,
+          valueQuantity: quantity(value, unit, ucum),
+        } as Observation);
+      }
+    }
+    if (observations.length === 0) throw new Error('Enter at least one vital');
+    await saveObs((patientRef) =>
+      observations.map((o) => ({ ...o, subject: { reference: patientRef } }))
+    );
+    setValues({});
+  }, 'Vitals');
+
+  return (
+    <CardShell title="Vitals (BP · HR · temp · SpO2 · glucose)">
+      <Stack gap="xs">
+        <SimpleGrid cols={2}>
+          {VITALS.map((field) => (
+            <NumberInput
+              key={field.key}
+              label={field.label}
+              value={values[field.key] ?? ''}
+              onChange={(value) => setValues((prev) => ({ ...prev, [field.key]: value }))}
+              min={field.min}
+              max={field.max}
+              decimalScale={'decimals' in field ? field.decimals : 0}
+            />
+          ))}
+        </SimpleGrid>
+        <WhenInput value={when} onChange={setWhen} />
+        <Button onClick={submit} loading={busy}>
+          Save vitals
+        </Button>
+      </Stack>
+    </CardShell>
+  );
+}
+
+function RxQuestionCard() {
+  const saveObs = useSaveObservation();
+  const [text, setText] = useState('');
+  const { busy, submit } = useSubmit(async () => {
+    if (!text.trim()) throw new Error('Write the question first');
+    await saveObs((patientRef) => [
+      {
+        resourceType: 'Observation',
+        status: 'final',
+        category: [{ coding: [{ system: OBS_CATEGORY, code: 'survey' }] }],
+        code: {
+          coding: [{ system: CS_OBS, code: 'rx-question', display: 'Question for prescriber' }],
+          text: 'Question for prescriber',
+        },
+        subject: { reference: patientRef },
+        effectiveDateTime: new Date().toISOString(),
+        valueString: text.trim(),
+      },
+    ]);
+    setText('');
+  }, 'Question for your clinician');
+
+  return (
+    <CardShell title="Question for your clinician">
+      <Stack gap="xs">
+        <Text size="xs" c="dimmed">
+          Jot it down now — it lands in the clinician summary so you remember to raise it at the
+          appointment.
+        </Text>
+        <TextInput
+          label="What do you want to ask?"
+          placeholder="e.g. is the morning nausea expected to fade?"
+          value={text}
+          onChange={(e) => setText(e.currentTarget.value)}
+        />
+        <Button onClick={submit} loading={busy} disabled={!text.trim()}>
+          Save question
         </Button>
       </Stack>
     </CardShell>

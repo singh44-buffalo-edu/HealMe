@@ -15,7 +15,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useEffect, useState } from 'react';
 import type { AiStatus, ReviewResult } from '../api';
-import { generateReview, getAiHealth, getLatestReview, reviewPdfUrl } from '../api';
+import { generateDataSummary, generateReview, getAiHealth, getLatestReview, reviewPdfUrl } from '../api';
 
 export function ReviewPage() {
   const [ai, setAi] = useState<AiStatus>();
@@ -41,12 +41,18 @@ export function ReviewPage() {
     })();
   }, []);
 
-  const generate = async () => {
+  const generate = async (kind: 'ai' | 'data') => {
     setGenerating(true);
     try {
-      const result = await generateReview(Number(windowDays));
+      const result =
+        kind === 'ai'
+          ? await generateReview(Number(windowDays))
+          : await generateDataSummary(Number(windowDays));
       setReview(result);
-      notifications.show({ color: 'teal', message: 'Health Review generated' });
+      notifications.show({
+        color: 'teal',
+        message: kind === 'ai' ? 'Health Review generated' : 'Data-only summary generated',
+      });
     } catch (err) {
       notifications.show({
         color: 'red',
@@ -66,7 +72,7 @@ export function ReviewPage() {
       <Title order={2}>AI Health Review</Title>
 
       {!ai?.configured && (
-        <Alert color="yellow" title="Configure an AI provider to generate reviews">
+        <Alert color="yellow" title="AI review needs a provider — the data-only summary below works without one">
           <Stack gap={4}>
             <Text size="sm">{ai?.reason}</Text>
             <Text size="sm">
@@ -77,34 +83,39 @@ export function ReviewPage() {
         </Alert>
       )}
 
-      {ai?.configured && (
-        <Card withBorder>
-          <Stack gap="xs">
-            <Group>
-              <SegmentedControl
-                value={windowDays}
-                onChange={setWindowDays}
-                data={[
-                  { label: '30 days', value: '30' },
-                  { label: '90 days', value: '90' },
-                ]}
-              />
-              <Button onClick={generate} loading={generating}>
-                Generate review
+      <Card withBorder>
+        <Stack gap="xs">
+          <Group>
+            <SegmentedControl
+              value={windowDays}
+              onChange={setWindowDays}
+              data={[
+                { label: '30 days', value: '30' },
+                { label: '90 days', value: '90' },
+              ]}
+            />
+            {ai?.configured && (
+              <Button onClick={() => generate('ai')} loading={generating}>
+                Generate AI review
               </Button>
-              {generating && (
-                <Text size="sm" c="dimmed">
-                  Summarizing your record — this can take a minute or two…
-                </Text>
-              )}
-            </Group>
-            <Text size="xs" c="dimmed">
-              Generating sends aggregated data from your record (medications, adherence, measurements, symptoms,
-              labs) to {ai.provider} ({ai.model}). Nothing is sent until you click Generate.
-            </Text>
-          </Stack>
-        </Card>
-      )}
+            )}
+            <Button variant="light" onClick={() => generate('data')} loading={generating}>
+              Data-only summary (no AI)
+            </Button>
+            {generating && (
+              <Text size="sm" c="dimmed">
+                Working — the AI review can take a minute or two…
+              </Text>
+            )}
+          </Group>
+          <Text size="xs" c="dimmed">
+            The data-only summary never leaves your machine.
+            {ai?.configured &&
+              ` Generating the AI review sends aggregated data from your record (medications, adherence, measurements, symptoms, labs) to ${ai.provider} (${ai.model}) — nothing is sent until you click Generate.`}{' '}
+            Questions saved under Quick add → "Question for your clinician" are included in both.
+          </Text>
+        </Stack>
+      </Card>
 
       {review ? (
         <Card withBorder>

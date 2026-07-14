@@ -40,7 +40,10 @@ export async function handler(
   }
 
   const canonicalUrl = response.questionnaire.split('|')[0];
-  const questionnaire = await medplum.searchOne('Questionnaire', { url: canonicalUrl });
+  // status=active resolves uniquely — superseded versions are retired by seed
+  const questionnaire =
+    (await medplum.searchOne('Questionnaire', { url: canonicalUrl, status: 'active' })) ??
+    (await medplum.searchOne('Questionnaire', { url: canonicalUrl }));
   if (!questionnaire) {
     return [];
   }

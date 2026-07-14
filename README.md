@@ -60,8 +60,14 @@ make logs             # tail medplum-server logs
 - **Documents** — upload PDFs/photos; AI proposes FHIR resources into a review queue; nothing
   joins the record until you approve (committed with Provenance).
 - **AI Health Review** — grounded summary of a 30/90-day window with PDF export for clinic visits.
-- **More dashboards** — Trends (30d/90d/1y windows), Labs (per-analyte trends vs reference ranges),
-  Symptoms-vs-medication timeline, and a check-in explorer.
+- **More dashboards** — Trends (30d/90d/1y windows), Vitals (BP/HR/temp/SpO2/glucose), Labs
+  (per-analyte trends vs reference ranges), Symptoms-vs-medication timeline, Correlations
+  (any two metrics, Pearson r, association-not-causation framing), and a check-in explorer.
+- **Clinician summary without AI** — a deterministic data-only summary (meds + adherence,
+  measurements, labs, symptoms, your saved questions for the prescriber) generates with zero AI
+  keys, alongside the AI review.
+- **Own your data** — one-click export of the complete record as a FHIR R4 bundle or
+  observations CSV.
 
 ## Containerized deployment
 

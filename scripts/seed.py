@@ -128,16 +128,29 @@ def main() -> None:
 
     # --- Daily check-in Questionnaire ---------------------------------------
     q_url = f"{BASE_URL}/Questionnaire/daily-check-in"
+    q_version = "1.1.0"
     questionnaire = {
-        "fullUrl": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, q_url)}",
+        "fullUrl": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, q_url + q_version)}",
         "resource": {
             "resourceType": "Questionnaire",
             "url": q_url,
-            "version": "1.0.0",
+            "version": q_version,
             "name": "DailyCheckIn",
             "title": "Daily check-in",
             "status": "active",
             "item": [
+                {
+                    "linkId": "rested",
+                    "text": "Waking up, how rested did you feel? (1 = exhausted, 5 = fully rested)",
+                    "type": "integer",
+                    "code": [{"system": CS_OBS, "code": "rested", "display": "Rested on waking (1-5)"}],
+                },
+                {
+                    "linkId": "sleep-hours",
+                    "text": "Hours slept last night",
+                    "type": "decimal",
+                    "code": [{"system": CS_OBS, "code": "sleep-duration", "display": "Sleep duration (h)"}],
+                },
                 {
                     "linkId": "mood",
                     "text": "Mood (1 = worst, 10 = best)",
@@ -151,15 +164,16 @@ def main() -> None:
                     "code": [{"system": CS_OBS, "code": "energy", "display": "Energy (1-10)"}],
                 },
                 {
-                    "linkId": "sleep-hours",
-                    "text": "Hours slept last night",
-                    "type": "decimal",
-                    "code": [{"system": CS_OBS, "code": "sleep-duration", "display": "Sleep duration (h)"}],
+                    "linkId": "stress",
+                    "text": "Peak stress today (0 = none, 10 = worst)",
+                    "type": "integer",
+                    "code": [{"system": CS_OBS, "code": "stress", "display": "Peak stress (0-10)"}],
                 },
+                {"linkId": "symptoms", "text": "Any new symptom today — anything at all?", "type": "string"},
                 {"linkId": "notes", "text": "Anything notable today?", "type": "string"},
             ],
         },
-        "request": {"method": "POST", "url": "Questionnaire", "ifNoneExist": f"url={q_url}&version=1.0.0"},
+        "request": {"method": "POST", "url": "Questionnaire", "ifNoneExist": f"url={q_url}&version={q_version}"},
     }
     entries.append(questionnaire)
 
@@ -468,6 +482,23 @@ def main() -> None:
     # Conditional create skips existing resources, so upgrades to seed
     # resources (like the life-critical flag) must be ensured explicitly.
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/fhir+json"}
+
+    # Retire superseded questionnaire versions so `status=active` search
+    # resolves uniquely to the current one (frontend + bot rely on this).
+    old_versions = httpx.get(
+        base + "fhir/R4/Questionnaire",
+        params={"url": q_url, "_count": 20},
+        headers=headers,
+        timeout=15,
+    ).json()
+    for e in old_versions.get("entry", []):
+        res = e["resource"]
+        if res.get("version") != q_version and res.get("status") == "active":
+            res["status"] = "retired"
+            put = httpx.put(base + f"fhir/R4/Questionnaire/{res['id']}", json=res, headers=headers, timeout=15)
+            if put.status_code >= 400:
+                die(f"retiring questionnaire v{res.get('version')} failed: {put.status_code}")
+            log(f"retired daily-check-in v{res.get('version')}")
     find_req = httpx.get(
         base + "fhir/R4/MedicationRequest",
         params={"identifier": f"{IDENT}/medication-request|sample-med-a-daily", "_count": 1},

@@ -105,6 +105,22 @@ class MedplumFhirClient:
             raise MedplumError(f"binary read: {resp.status_code} {resp.text[:300]}")
         return resp.content
 
+    def read_attachment(self, url: str) -> bytes:
+        """Fetch an Attachment.url as returned by Medplum. On read, Medplum
+        rewrites Binary/{id} references into presigned absolute
+        /storage/{binaryId}/{versionId}?... URLs whose signature is bound to
+        the server's public host — unusable from inside the compose network.
+        Extract the binary id and read it through the authenticated FHIR
+        endpoint instead (Accept */* streams the raw content)."""
+        if url.startswith("http"):
+            from urllib.parse import urlparse
+
+            parts = urlparse(url).path.strip("/").split("/")
+            if len(parts) >= 2 and parts[0] == "storage":
+                return self.read_binary(parts[1])
+            raise MedplumError(f"unrecognized attachment url shape: {url[:120]}")
+        return self.read_binary(url.split("/")[-1])
+
     def post_bundle(self, bundle: dict[str, Any]) -> dict[str, Any]:
         resp = self.request("POST", self.base_url + "fhir/R4", json=bundle)
         if resp.status_code >= 400:

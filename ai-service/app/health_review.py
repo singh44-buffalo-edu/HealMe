@@ -117,6 +117,8 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
             series["sleep_hours"].append((when[:10], obs.get("valueQuantity", {}).get("value")))
         elif code == "symptom":
             symptoms.append({"date": when[:10], "description": obs.get("valueString", "")})
+        elif code == "rx-question":
+            series.setdefault("rx_questions", []).append((when[:10], obs.get("valueString", "")))
         elif obs.get("category", [{}])[0].get("coding", [{}])[0].get("code") == "laboratory":
             series.setdefault("labs", []).append(
                 (when[:10], f"{obs.get('code', {}).get('text', code)}: {obs.get('valueQuantity', {}).get('value')}")
@@ -154,42 +156,96 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
         "energy_1_to_10": summarize_series(series.get("energy", [])),
         "symptoms": symptoms[:50],
         "recent_lab_values": series.get("labs", [])[-20:],
+        "questions_for_prescriber": [
+            {"date": d, "question": q} for d, q in series.get("rx_questions", [])[-20:]
+        ],
         "conditions": conditions,
         "lab_report_count_all_time": reports_total,
     }
 
 
-def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: str) -> dict[str, Any]:
-    provider = get_provider()  # raises ProviderNotConfigured with a friendly reason
-    context = collect_context(medplum, window_days)
+def build_data_summary(context: dict[str, Any]) -> str:
+    """Deterministic, data-only clinician summary — no AI involved, works with
+    no provider configured. Data and user-authored questions only; never a
+    diagnosis, severity assessment, or recommendation."""
+    lines: list[str] = ["# Health data summary (no AI — data only)", ""]
 
-    user_prompt = (
-        f"Data window: last {window_days} days (since {context['window_start']}). "
-        f"Generated {context['generated_at']}.\n\n"
-        "Aggregated personal health record data (JSON):\n\n"
-        + json.dumps(context, indent=2, default=str)
-    )
-    markdown = provider.generate(SYSTEM_PROMPT, user_prompt)
+    lines.append("## Current medications & adherence")
+    if context["medications"]:
+        for med in context["medications"]:
+            flag = " **[life-critical]**" if med["life_critical"] else ""
+            pct = med["adherence_pct_of_logged"]
+            lines.append(
+                f"- **{med['name']}**{flag} — {med['instructions'] or 'no instructions recorded'}. "
+                f"Logged doses: {med['doses_taken']} taken, {med['doses_not_taken']} not taken"
+                + (f" ({pct}% of logged)" if pct is not None else "")
+            )
+            if med["not_taken_dates"]:
+                lines.append(f"  - Not taken on: {', '.join(med['not_taken_dates'])}")
+    else:
+        lines.append("- No active medications recorded.")
 
-    header = (
-        f"> **{fc.DISCLAIMER}**\n>\n"
-        f"> Window: last {window_days} days · generated {context['generated_at']} · "
-        f"provider: {provider.name} ({provider.model})\n\n"
-    )
-    markdown = header + markdown
+    def series_line(label: str, key: str, unit: str) -> None:
+        s = context.get(key)
+        if s:
+            lines.append(
+                f"- **{label}**: latest {s['latest']['value']}{unit} on {s['latest']['date']}; "
+                f"first in window {s['first']['value']}{unit} ({s['first']['date']}); "
+                f"average {s['average']}{unit} over {s['count']} readings"
+            )
+        else:
+            lines.append(f"- **{label}**: no data in window")
 
+    lines += ["", "## Measurements"]
+    series_line("Weight", "weight_kg", " kg")
+    series_line("Sleep", "sleep_hours", " h")
+    series_line("Mood (1-10)", "mood_1_to_10", "")
+    series_line("Energy (1-10)", "energy_1_to_10", "")
+
+    lines += ["", "## Recent lab values"]
+    if context["recent_lab_values"]:
+        for date, text in context["recent_lab_values"]:
+            lines.append(f"- {date}: {text}")
+    else:
+        lines.append("- None in window.")
+
+    lines += ["", "## Symptoms reported"]
+    if context["symptoms"]:
+        for s in context["symptoms"]:
+            lines.append(f"- {s['date']}: {s['description']}")
+    else:
+        lines.append("- None recorded in window.")
+
+    lines += ["", "## Questions for the prescriber (user-authored)"]
+    if context["questions_for_prescriber"]:
+        for q in context["questions_for_prescriber"]:
+            lines.append(f"- {q['date']}: {q['question']}")
+    else:
+        lines.append("- None recorded.")
+
+    if context["conditions"]:
+        lines += ["", "## Conditions on record"]
+        for c in context["conditions"]:
+            lines.append(f"- {c['text']} ({c['status']})")
+
+    lines += ["", f"{fc.DISCLAIMER}"]
+    return "\n".join(lines)
+
+
+def _store_review(
+    medplum: MedplumFhirClient, markdown: str, context: dict[str, Any], window_days: int, patient_id: str, description: str
+) -> dict[str, Any]:
     pdf_bytes = markdown_to_pdf(markdown, title="HealMeDaily Health Review")
     md_binary = medplum.create_binary(markdown.encode(), "text/markdown")
     pdf_binary = medplum.create_binary(pdf_bytes, "application/pdf")
-
     doc_ref = medplum.create(
         {
             "resourceType": "DocumentReference",
             "status": "current",
-            "type": {"coding": [{"system": fc.CS_DOC, "code": "health-review"}], "text": "AI Health Review"},
+            "type": {"coding": [{"system": fc.CS_DOC, "code": "health-review"}], "text": "Health Review"},
             "subject": {"reference": f"Patient/{patient_id}"},
             "date": context["generated_at"],
-            "description": f"Health Review — last {window_days} days",
+            "description": description,
             "content": [
                 {"attachment": {"url": f"Binary/{md_binary['id']}", "contentType": "text/markdown"}},
                 {
@@ -210,6 +266,40 @@ def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: 
     }
 
 
+def run_data_summary(medplum: MedplumFhirClient, window_days: int, patient_id: str) -> dict[str, Any]:
+    """Clinician summary without any AI provider — FR-RPT-1/2 style."""
+    context = collect_context(medplum, window_days)
+    markdown = (
+        f"> **{fc.DISCLAIMER}**\n>\n"
+        f"> Window: last {window_days} days · generated {context['generated_at']} · data-only (no AI)\n\n"
+        + build_data_summary(context)
+    )
+    return _store_review(medplum, markdown, context, window_days, patient_id, f"Data summary (no AI) — last {window_days} days")
+
+
+def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: str) -> dict[str, Any]:
+    provider = get_provider()  # raises ProviderNotConfigured with a friendly reason
+    context = collect_context(medplum, window_days)
+
+    user_prompt = (
+        f"Data window: last {window_days} days (since {context['window_start']}). "
+        f"Generated {context['generated_at']}.\n\n"
+        "Aggregated personal health record data (JSON):\n\n"
+        + json.dumps(context, indent=2, default=str)
+    )
+    markdown = provider.generate(SYSTEM_PROMPT, user_prompt)
+
+    header = (
+        f"> **{fc.DISCLAIMER}**\n>\n"
+        f"> Window: last {window_days} days · generated {context['generated_at']} · "
+        f"provider: {provider.name} ({provider.model})\n\n"
+    )
+    markdown = header + markdown
+    return _store_review(
+        medplum, markdown, context, window_days, patient_id, f"AI Health Review — last {window_days} days"
+    )
+
+
 def latest_review(medplum: MedplumFhirClient) -> dict[str, Any] | None:
     docs = medplum.search_resources(
         "DocumentReference",
@@ -222,7 +312,7 @@ def latest_review(medplum: MedplumFhirClient) -> dict[str, Any] | None:
         (c["attachment"]["url"] for c in doc.get("content", []) if c["attachment"].get("contentType") == "text/markdown"),
         None,
     )
-    markdown = medplum.read_binary(md_url.split("/")[-1]).decode() if md_url else ""
+    markdown = medplum.read_attachment(md_url).decode() if md_url else ""
     return {
         "document_reference_id": doc["id"],
         "generated_at": doc.get("date"),
@@ -239,4 +329,4 @@ def review_pdf(medplum: MedplumFhirClient, doc_id: str) -> bytes:
     )
     if not pdf_url:
         raise KeyError("no PDF attachment on this review")
-    return medplum.read_binary(pdf_url.split("/")[-1])
+    return medplum.read_attachment(pdf_url)

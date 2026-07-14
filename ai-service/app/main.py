@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import health_review, ingest
+from . import export, health_review, ingest
 from .config import settings
 from .medplum import MedplumError, medplum
 from .providers import ProviderError, ProviderNotConfigured, provider_status
@@ -74,6 +74,36 @@ def create_health_review(body: HealthReviewRequest) -> dict:
     if not 1 <= body.window_days <= 3650:
         raise HTTPException(status_code=400, detail="window_days must be between 1 and 3650")
     return _wrap(health_review.run_health_review, medplum, body.window_days, _patient_id())
+
+
+@app.post("/health-review/data-summary")
+def create_data_summary(body: HealthReviewRequest) -> dict:
+    """Deterministic clinician summary — no AI provider required."""
+    if not 1 <= body.window_days <= 3650:
+        raise HTTPException(status_code=400, detail="window_days must be between 1 and 3650")
+    return _wrap(health_review.run_data_summary, medplum, body.window_days, _patient_id())
+
+
+@app.get("/export/fhir")
+def export_fhir() -> Response:
+    import json
+
+    bundle = _wrap(export.export_fhir_bundle, medplum)
+    return Response(
+        content=json.dumps(bundle, indent=1),
+        media_type="application/fhir+json",
+        headers={"Content-Disposition": 'attachment; filename="healmedaily-export.fhir.json"'},
+    )
+
+
+@app.get("/export/observations.csv")
+def export_csv() -> Response:
+    csv_text = _wrap(export.export_observations_csv, medplum)
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="healmedaily-observations.csv"'},
+    )
 
 
 @app.get("/health-review/latest")

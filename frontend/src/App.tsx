@@ -9,16 +9,20 @@ import { IngestPage } from './pages/IngestPage';
 import { LabsPage } from './pages/LabsPage';
 import { LogPage } from './pages/LogPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { CorrelationsPage } from './pages/CorrelationsPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { TimelinePage } from './pages/TimelinePage';
 import { TrendsPage } from './pages/TrendsPage';
+import { VitalsPage } from './pages/VitalsPage';
 
 const NAV = [
   { to: '/', label: 'Adherence' },
   { to: '/overview', label: 'Health overview' },
   { to: '/trends', label: 'Trends' },
+  { to: '/vitals', label: 'Vitals' },
   { to: '/labs', label: 'Labs' },
   { to: '/timeline', label: 'Timeline' },
+  { to: '/correlations', label: 'Correlations' },
   { to: '/checkin', label: 'Daily check-in' },
   { to: '/checkins', label: 'Check-in explorer' },
   { to: '/log', label: 'Quick add' },
@@ -89,6 +93,8 @@ export function App() {
           <Route path="/" element={<AdherencePage />} />
           <Route path="/overview" element={<OverviewPage />} />
           <Route path="/trends" element={<TrendsPage />} />
+          <Route path="/vitals" element={<VitalsPage />} />
+          <Route path="/correlations" element={<CorrelationsPage />} />
           <Route path="/labs" element={<LabsPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/checkin" element={<CheckinPage />} />

@@ -22,7 +22,7 @@ export function CheckinPage() {
   const reload = useCallback(async () => {
     try {
       const [q, existingResponse] = await Promise.all([
-        medplum.searchOne('Questionnaire', { url: Q_URL }),
+        medplum.searchOne('Questionnaire', { url: Q_URL, status: 'active' }),
         medplum.searchOne('QuestionnaireResponse', {
           identifier: `${QR_IDENT_SYSTEM}|${identValue}`,
         }),
