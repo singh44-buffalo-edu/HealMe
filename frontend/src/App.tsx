@@ -1,15 +1,28 @@
-import { Alert, Anchor, Button, Center, Container, Group, Loader, Stack, Text, Title } from '@mantine/core';
-import { getDisplayString, normalizeErrorString } from '@medplum/core';
-import type { Patient } from '@medplum/fhirtypes';
-import { Document, SignInForm, useMedplum, useMedplumProfile } from '@medplum/react';
-import { useEffect, useState } from 'react';
+import { AppShell, Button, Center, Group, Loader, NavLink, Stack, Text, Title } from '@mantine/core';
+import { SignInForm, useMedplum, useMedplumProfile } from '@medplum/react';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
+import { AdherencePage } from './pages/AdherencePage';
+import { CartridgesPage } from './pages/CartridgesPage';
+import { CheckinPage } from './pages/CheckinPage';
+import { IngestPage } from './pages/IngestPage';
+import { LogPage } from './pages/LogPage';
+import { OverviewPage } from './pages/OverviewPage';
+import { ReviewPage } from './pages/ReviewPage';
 
-const PATIENT_IDENTIFIER_SYSTEM = 'https://healmedaily.local/fhir/identifier/patient';
-const PATIENT_IDENTIFIER_VALUE = 'healmedaily-user';
+const NAV = [
+  { to: '/', label: 'Adherence' },
+  { to: '/overview', label: 'Health overview' },
+  { to: '/checkin', label: 'Daily check-in' },
+  { to: '/log', label: 'Quick add' },
+  { to: '/cartridges', label: 'Cartridges' },
+  { to: '/ingest', label: 'Documents' },
+  { to: '/review', label: 'Health Review' },
+];
 
 export function App() {
   const medplum = useMedplum();
   const profile = useMedplumProfile();
+  const location = useLocation();
 
   if (medplum.isLoading()) {
     return (
@@ -33,60 +46,48 @@ export function App() {
     );
   }
 
-  return <Home />;
-}
-
-function Home() {
-  const medplum = useMedplum();
-  const profile = useMedplumProfile();
-  const [patient, setPatient] = useState<Patient | undefined>();
-  const [error, setError] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    medplum
-      .searchOne('Patient', { identifier: `${PATIENT_IDENTIFIER_SYSTEM}|${PATIENT_IDENTIFIER_VALUE}` })
-      .then(setPatient)
-      .catch((err) => setError(normalizeErrorString(err)))
-      .finally(() => setLoading(false));
-  }, [medplum]);
-
   return (
-    <Container size="sm" py="xl">
-      <Document>
-        <Stack>
-          <Group justify="space-between">
-            <Title order={2}>HealMeDaily</Title>
-            <Button variant="subtle" onClick={() => medplum.signOut().then(() => window.location.reload())}>
+    <AppShell header={{ height: 56 }} navbar={{ width: 220, breakpoint: 'sm' }} padding="md">
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between">
+          <Title order={3}>HealMeDaily</Title>
+          <Group gap="xs">
+            <Text size="xs" c="dimmed">
+              Not medical advice — a personal record & discussion aid
+            </Text>
+            <Button
+              size="compact-sm"
+              variant="subtle"
+              onClick={() => medplum.signOut().then(() => window.location.reload())}
+            >
               Sign out
             </Button>
           </Group>
-          <Text>
-            Signed in as <b>{profile ? getDisplayString(profile) : '…'}</b>
-          </Text>
-          {loading && <Loader size="sm" />}
-          {!loading && patient && (
-            <Alert color="teal" title="Walking skeleton is alive">
-              Patient record found: <b>{getDisplayString(patient)}</b> (Patient/{patient.id}). The browser is talking
-              FHIR to the local Medplum server.
-            </Alert>
-          )}
-          {!loading && !patient && !error && (
-            <Alert color="yellow" title="No patient record yet">
-              Run <code>make seed</code> to create the Patient and sample data.
-            </Alert>
-          )}
-          {error && (
-            <Alert color="red" title="FHIR request failed">
-              {error}
-            </Alert>
-          )}
-          <Text size="sm" c="dimmed">
-            Admin console: <Anchor href="http://localhost:3000">Medplum App</Anchor> · API:{' '}
-            <Anchor href="http://localhost:8103/healthcheck">healthcheck</Anchor>
-          </Text>
-        </Stack>
-      </Document>
-    </Container>
+        </Group>
+      </AppShell.Header>
+      <AppShell.Navbar p="xs">
+        {NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            component={Link}
+            to={item.to}
+            label={item.label}
+            active={location.pathname === item.to}
+          />
+        ))}
+      </AppShell.Navbar>
+      <AppShell.Main>
+        <Routes>
+          <Route path="/" element={<AdherencePage />} />
+          <Route path="/overview" element={<OverviewPage />} />
+          <Route path="/checkin" element={<CheckinPage />} />
+          <Route path="/log" element={<LogPage />} />
+          <Route path="/cartridges" element={<CartridgesPage />} />
+          <Route path="/ingest" element={<IngestPage />} />
+          <Route path="/review" element={<ReviewPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell.Main>
+    </AppShell>
   );
 }

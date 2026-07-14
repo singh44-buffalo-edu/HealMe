@@ -11,4 +11,4 @@ def test_health_ok():
     body = resp.json()
     assert body["status"] == "ok"
     assert "medplum_configured" in body
-    assert "ai_provider" in body
+    assert "configured" in body["ai"]

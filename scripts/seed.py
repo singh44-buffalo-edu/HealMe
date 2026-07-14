@@ -36,6 +36,7 @@ CS_OBS = BASE_URL + "/CodeSystem/observation"
 CS_ADHERENCE = BASE_URL + "/CodeSystem/adherence-reason"
 CS_DEVICE = BASE_URL + "/CodeSystem/device"
 EXT_DEVICE_MED = BASE_URL + "/StructureDefinition/device-assigned-medication"
+EXT_LIFE_CRITICAL = BASE_URL + "/StructureDefinition/medicationrequest-life-critical"
 TAGS = BASE_URL + "/tags"
 SEED_TAG = {"system": TAGS, "code": "seed-sample", "display": "Seed sample data"}
 
@@ -170,32 +171,31 @@ def main() -> None:
             slug,
         )
 
-    def med_request(slug: str, med: dict, sig: str, times: list[str]) -> dict:
-        return entry(
-            {
-                "resourceType": "MedicationRequest",
-                "status": "active",
-                "intent": "order",
-                "subject": subject,
-                "medicationReference": ref(med),
-                "dosageInstruction": [
-                    {
-                        "text": sig,
-                        "timing": {
-                            "repeat": {"frequency": len(times), "period": 1, "periodUnit": "d", "timeOfDay": times}
-                        },
-                    }
-                ],
-                "meta": {"tag": [SEED_TAG]},
-            },
-            "medication-request",
-            slug,
-        )
+    def med_request(slug: str, med: dict, sig: str, times: list[str], life_critical: bool = False) -> dict:
+        resource = {
+            "resourceType": "MedicationRequest",
+            "status": "active",
+            "intent": "order",
+            "subject": subject,
+            "medicationReference": ref(med),
+            "dosageInstruction": [
+                {
+                    "text": sig,
+                    "timing": {
+                        "repeat": {"frequency": len(times), "period": 1, "periodUnit": "d", "timeOfDay": times}
+                    },
+                }
+            ],
+            "meta": {"tag": [SEED_TAG]},
+        }
+        if life_critical:
+            resource["extension"] = [{"url": EXT_LIFE_CRITICAL, "valueBoolean": True}]
+        return entry(resource, "medication-request", slug)
 
     med_a = medication("sample-med-a", "Sample Medication A 10 mg tablet")
     med_b = medication("sample-med-b", "Sample Medication B 500 mg tablet")
     # FHIR `time` requires seconds: HH:MM:SS
-    req_a = med_request("sample-med-a-daily", med_a, "1 tablet daily at 09:00", ["09:00:00"])
+    req_a = med_request("sample-med-a-daily", med_a, "1 tablet daily at 09:00", ["09:00:00"], life_critical=True)
     req_b = med_request("sample-med-b-bid", med_b, "1 tablet twice daily (09:00, 21:00)", ["09:00:00", "21:00:00"])
     entries += [med_a, med_b, req_a, req_b]
 
@@ -229,32 +229,48 @@ def main() -> None:
     cart_2 = cartridge("cartridge-2", "Cartridge 2", med_b, capacity=30, remaining=3, threshold=5)
     entries += [cart_1, cart_2]
 
-    # --- 14 days of sample administrations (med A daily 09:00) --------------
-    skipped_days = {3, 9}
-    for days_ago in range(1, 15):
-        d = today - timedelta(days=days_ago)
-        when = local_dt(d, "09:00", tz)
-        slug = f"sample-med-a-daily-{d.isoformat()}T09:00"
+    # --- 14 days of sample administrations ----------------------------------
+    def administration(req: dict, med: dict, device: dict | None, slug_base: str, d: date, hhmm: str, reason: str | None) -> dict:
         admin: dict = {
             "resourceType": "MedicationAdministration",
             "subject": subject,
-            "medicationReference": ref(med_a),
-            "request": ref(req_a),
-            "device": [ref(cart_1)],
-            "effectiveDateTime": when,
+            "medicationReference": ref(med),
+            "request": ref(req),
+            "effectiveDateTime": local_dt(d, hhmm, tz),
             "meta": {"tag": [SEED_TAG]},
         }
-        if days_ago in skipped_days:
+        if device:
+            admin["device"] = [ref(device)]
+        if reason:
             admin["status"] = "not-done"
             admin["statusReason"] = [
                 {
-                    "coding": [{"system": CS_ADHERENCE, "code": "user-skipped", "display": "Skipped by user"}],
-                    "text": "Skipped (sample data)",
+                    "coding": [
+                        {
+                            "system": CS_ADHERENCE,
+                            "code": reason,
+                            "display": "Skipped by user" if reason == "user-skipped" else "Marked missed by user",
+                        }
+                    ],
+                    "text": "Sample data",
                 }
             ]
         else:
             admin["status"] = "completed"
-        entries.append(entry(admin, "medication-administration", slug))
+        return entry(admin, "medication-administration", f"{slug_base}-{d.isoformat()}T{hhmm}")
+
+    med_a_skipped = {3, 9}
+    med_a_missed = {6}
+    med_b_missed_evening = {2, 6}
+    for days_ago in range(1, 15):
+        d = today - timedelta(days=days_ago)
+        reason_a = (
+            "user-skipped" if days_ago in med_a_skipped else "user-marked-missed" if days_ago in med_a_missed else None
+        )
+        entries.append(administration(req_a, med_a, cart_1, "sample-med-a-daily", d, "09:00", reason_a))
+        entries.append(administration(req_b, med_b, cart_2, "sample-med-b-bid", d, "09:00", None))
+        reason_b_pm = "user-marked-missed" if days_ago in med_b_missed_evening else None
+        entries.append(administration(req_b, med_b, cart_2, "sample-med-b-bid", d, "21:00", reason_b_pm))
 
     # --- Sample observations -------------------------------------------------
     def observation(slug: str, resource: dict) -> dict:
@@ -357,6 +373,25 @@ def main() -> None:
         log(f"UNEXPECTED entry[{i}] ({sent}): {e.get('response', {})}")
     if bad:
         die(f"{len(bad)} bundle entries did not succeed")
+
+    # Conditional create skips existing resources, so upgrades to seed
+    # resources (like the life-critical flag) must be ensured explicitly.
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/fhir+json"}
+    find_req = httpx.get(
+        base + "fhir/R4/MedicationRequest",
+        params={"identifier": f"{IDENT}/medication-request|sample-med-a-daily", "_count": 1},
+        headers=headers,
+        timeout=15,
+    ).json()
+    if find_req.get("entry"):
+        req = find_req["entry"][0]["resource"]
+        exts = req.get("extension", [])
+        if not any(e.get("url") == EXT_LIFE_CRITICAL for e in exts):
+            req["extension"] = exts + [{"url": EXT_LIFE_CRITICAL, "valueBoolean": True}]
+            put = httpx.put(base + f"fhir/R4/MedicationRequest/{req['id']}", json=req, headers=headers, timeout=15)
+            if put.status_code >= 400:
+                die(f"life-critical flag update failed: {put.status_code} {put.text[:300]}")
+            log("ensured life-critical flag on sample-med-a-daily")
 
     # Persist the Patient id for the service/frontend
     find = httpx.get(

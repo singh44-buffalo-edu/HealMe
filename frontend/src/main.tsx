@@ -8,6 +8,7 @@ import { MedplumClient } from '@medplum/core';
 import { MedplumProvider } from '@medplum/react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router';
 import { App } from './App';
 
 const medplum = new MedplumClient({
@@ -20,11 +21,13 @@ const theme = createTheme({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MedplumProvider medplum={medplum}>
-      <MantineProvider theme={theme}>
-        <Notifications />
-        <App />
-      </MantineProvider>
-    </MedplumProvider>
+    <BrowserRouter>
+      <MedplumProvider medplum={medplum}>
+        <MantineProvider theme={theme}>
+          <Notifications />
+          <App />
+        </MantineProvider>
+      </MedplumProvider>
+    </BrowserRouter>
   </StrictMode>
 );

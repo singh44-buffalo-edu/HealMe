@@ -1,0 +1,10 @@
+{
+  "bots": [
+    {
+      "name": "questionnaire-response-to-observations",
+      "id": "",
+      "source": "src/questionnaire-response-to-observations.ts",
+      "dist": "dist/questionnaire-response-to-observations.js"
+    }
+  ]
+}

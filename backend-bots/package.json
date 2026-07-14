@@ -1,0 +1,21 @@
+{
+  "name": "healmedaily-bots",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/questionnaire-response-to-observations.ts --bundle --platform=node --target=node20 --format=cjs --external:@medplum/core --footer:js=\"exports.handler = module.exports.handler;\" --outfile=dist/questionnaire-response-to-observations.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@medplum/core": "5.1.26",
+    "@medplum/fhirtypes": "5.1.26"
+  },
+  "devDependencies": {
+    "@medplum/definitions": "^5.1.26",
+    "@medplum/mock": "5.1.26",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

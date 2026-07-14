@@ -76,11 +76,50 @@ class MedplumFhirClient:
     def search(self, resource_type: str, params: dict[str, Any]) -> dict[str, Any]:
         return self.get(resource_type, params=params)
 
+    def search_resources(self, resource_type: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        bundle = self.search(resource_type, params)
+        return [e["resource"] for e in bundle.get("entry", [])]
+
+    def create(self, resource: dict[str, Any]) -> dict[str, Any]:
+        resp = self.request("POST", resource["resourceType"], json=resource)
+        if resp.status_code >= 400:
+            raise MedplumError(f"create {resource['resourceType']}: {resp.status_code} {resp.text[:300]}")
+        return resp.json()
+
+    def update(self, resource: dict[str, Any]) -> dict[str, Any]:
+        path = f"{resource['resourceType']}/{resource['id']}"
+        resp = self.request("PUT", path, json=resource)
+        if resp.status_code >= 400:
+            raise MedplumError(f"update {path}: {resp.status_code} {resp.text[:300]}")
+        return resp.json()
+
+    def create_binary(self, data: bytes, content_type: str) -> dict[str, Any]:
+        resp = self.request("POST", "Binary", content=data, headers={"Content-Type": content_type})
+        if resp.status_code >= 400:
+            raise MedplumError(f"binary create: {resp.status_code} {resp.text[:300]}")
+        return resp.json()
+
+    def read_binary(self, binary_id: str) -> bytes:
+        resp = self.request("GET", f"Binary/{binary_id}", headers={"Accept": "*/*"})
+        if resp.status_code >= 400:
+            raise MedplumError(f"binary read: {resp.status_code} {resp.text[:300]}")
+        return resp.content
+
     def post_bundle(self, bundle: dict[str, Any]) -> dict[str, Any]:
         resp = self.request("POST", self.base_url + "fhir/R4", json=bundle)
         if resp.status_code >= 400:
             raise MedplumError(f"bundle POST: {resp.status_code} {resp.text[:300]}")
-        return resp.json()
+        result = resp.json()
+        bad = [
+            e.get("response", {})
+            for e in result.get("entry", [])
+            if not e.get("response", {}).get("status", "").startswith(("200", "201"))
+        ]
+        if bad:
+            # Medplum commits valid entries despite per-entry errors (see CLAUDE.md) —
+            # treat any per-entry failure as a hard error so callers notice.
+            raise MedplumError(f"bundle had failing entries: {bad[:3]}")
+        return result
 
 
 medplum = MedplumFhirClient()
