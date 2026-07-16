@@ -40,8 +40,14 @@ Not a certified medical device. Not medical advice. Human-in-the-loop for all AI
 /scripts        seed.py, smoke_test.py, helpers
 /infra          docker-compose.yml (Medplum full stack)
 /data           local runtime data (gitignored): inbox/ watched folder
+/ios            native SwiftUI iPhone app (2026-07-16): HealMeDailyKit SwiftPM
+                data core (DoseEngine = behavioral twin of frontend/src/fhir.ts;
+                its tests mirror fhir.test.ts — change both in lockstep) +
+                HealMeDaily app target (XcodeGen project.yml, .xcodeproj
+                gitignored). make ios-project / ios-test / ios-build; docs:
+                ios/README.md + APPSTORE.md.
 /personal-health-record-system 2/project/design_handoff_healmedaily/   design handoff (canonical UI reference)
-CLAUDE.md  FHIR-MAPPING.md  Makefile  .env  .env.example
+CLAUDE.md  FHIR-MAPPING.md  APPSTORE.md  Makefile  .env  .env.example
 ```
 
 ### Design system (adopted 2026-07-15 from the Claude-design handoff)

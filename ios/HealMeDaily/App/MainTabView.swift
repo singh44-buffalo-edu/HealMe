@@ -1,0 +1,117 @@
+import SwiftUI
+
+/// Tab shell — the iOS counterpart of the web MobileTabBar. Five tabs:
+/// Today (dose panel + due check-ins), Meds, Adherence, Assistant (the one
+/// AI-identity tab), and More (everything else, mirroring the web More hub).
+struct MainTabView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        TabView {
+            NavigationStack {
+                TodayView()
+            }
+            .tabItem {
+                Label("Today", systemImage: "sun.max")
+            }
+
+            NavigationStack {
+                MedsView()
+            }
+            .tabItem {
+                Label("Meds", systemImage: "pills")
+            }
+
+            NavigationStack {
+                AdherenceView()
+            }
+            .tabItem {
+                Label("Adherence", systemImage: "chart.bar")
+            }
+
+            NavigationStack {
+                AssistantView()
+            }
+            .tabItem {
+                Label("Assistant", systemImage: "sparkles")
+            }
+
+            NavigationStack {
+                MoreView()
+            }
+            .tabItem {
+                Label("More", systemImage: "ellipsis.circle")
+            }
+            .badge(model.reviewQueueCount > 0 ? model.reviewQueueCount : 0)
+        }
+    }
+}
+
+/// The More hub: remaining surfaces, mirroring the web nav registry.
+struct MoreView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    QuickAddView()
+                } label: {
+                    Label("Quick add", systemImage: "plus.circle")
+                }
+                NavigationLink {
+                    CheckinsView()
+                } label: {
+                    Label("Check-ins", systemImage: "checklist")
+                }
+                NavigationLink {
+                    VitalsView()
+                } label: {
+                    Label("Vitals", systemImage: "heart")
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    DocumentsView()
+                } label: {
+                    HStack {
+                        Label("Documents", systemImage: "doc.on.doc")
+                        Spacer()
+                        if model.reviewQueueCount > 0 {
+                            Text("\(model.reviewQueueCount) to review")
+                                .font(.mono(10, weight: .medium))
+                                .foregroundStyle(T.ai)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(T.aiBg, in: Capsule())
+                        }
+                    }
+                }
+                NavigationLink {
+                    HealthReviewView()
+                } label: {
+                    Label("Health Review", systemImage: "doc.text.magnifyingglass")
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+            } footer: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Signed in as \(model.profileName)")
+                        .font(.mono(11))
+                    DisclaimerFooter()
+                }
+                .padding(.top, 8)
+            }
+        }
+        .navigationTitle("More")
+        .scrollContentBackground(.hidden)
+        .background(T.canvas)
+    }
+}

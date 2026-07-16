@@ -124,3 +124,21 @@ pi-sim:
 
 pi-test:
 	$(PY) -m pytest pi-dispenser/tests -q
+
+# --- iOS app (SwiftUI, ios/) ---
+# ios-project regenerates the .xcodeproj from ios/project.yml (the project
+# file itself is gitignored — project.yml is the source of truth).
+# ios-test runs the HealMeDailyKit unit tests natively on macOS (dose-engine
+# parity with the web frontend); ios-build compiles the full app for the
+# iOS simulator without code signing.
+.PHONY: ios-project ios-test ios-build
+ios-project:
+	cd ios && xcodegen generate
+
+ios-test:
+	cd ios/HealMeDailyKit && swift test
+
+ios-build: ios-project
+	cd ios && xcodebuild -project HealMeDaily.xcodeproj -scheme HealMeDaily \
+		-destination 'generic/platform=iOS Simulator' \
+		CODE_SIGNING_ALLOWED=NO build
