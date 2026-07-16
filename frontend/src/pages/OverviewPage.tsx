@@ -29,6 +29,7 @@ import {
 } from '../fhir';
 import type { CartridgeInfo, MedInfo } from '../fhir';
 import { T, mono } from '../tokens';
+import { useIsMobile } from '../useIsMobile';
 
 interface Point {
   date: string;
@@ -83,6 +84,7 @@ const TOOLTIP_STYLE = {
 
 export function OverviewPage() {
   const medplum = useMedplum();
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [weight, setWeight] = useState<Point[]>([]);
@@ -209,7 +211,16 @@ export function OverviewPage() {
   const hasData = !summary.startsWith('No data yet');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: isMobile ? 16 : 20,
+        // Mobile shell floats a blurred pill tab bar over the page bottom —
+        // clear it plus the home-indicator safe area.
+        paddingBottom: isMobile ? 'calc(90px + env(safe-area-inset-bottom))' : undefined,
+      }}
+    >
       <PageHeader
         title="Health overview"
         subtitle={`${fmtDay(localDateString(new Date()))} · 90-day window`}
@@ -225,14 +236,27 @@ export function OverviewPage() {
         }
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gap: isMobile ? 12 : 16,
+        }}
+      >
         <MetricCard label="Weight" range="90D" unit="kg" points={weight} accent={T.metric.weight} />
         <MetricCard label="Sleep" range="14N" unit="h" points={sleep} accent={T.metric.sleep} />
         <MetricCard label="Mood" range="90D" unit="/10" points={mood} accent={T.metric.mood} />
         <MetricCard label="Energy" range="90D" unit="/10" points={energy} accent={T.metric.energy} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: 16, alignItems: 'start' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1.25fr 1fr',
+          gap: 16,
+          alignItems: 'start',
+        }}
+      >
         <TodayMedsCard meds={medList} admins={adminList} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <DsCard padding={20} gap={10}>
@@ -306,7 +330,14 @@ export function OverviewPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: 16,
+          alignItems: 'start',
+        }}
+      >
         <ChartCard title="Weight" range="kg · 90d" data={weight} color={T.metric.weight} domain={['auto', 'auto']} />
         <DsCard padding={20} gap={12}>
           <div style={{ display: 'flex', alignItems: 'baseline' }}>
@@ -354,7 +385,14 @@ export function OverviewPage() {
         </DsCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: 16, alignItems: 'start' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1.25fr',
+          gap: 16,
+          alignItems: 'start',
+        }}
+      >
         <ChartCard
           title="Sleep"
           range="hours · last 14 nights"
@@ -492,6 +530,7 @@ function MetricCard({
 /** Read-only view of today's dose slots derived from already-loaded meds + admins.
  * Logging itself lives on the Medications page — "Log now" links there. */
 function TodayMedsCard({ meds, admins }: { meds: MedInfo[]; admins: MedicationAdministration[] }) {
+  const isMobile = useIsMobile();
   const [now, setNow] = useState(() => new Date());
 
   // Dose status depends on wall-clock time — same 60s ticker as AdherencePage so
@@ -585,36 +624,77 @@ function TodayMedsCard({ meds, admins }: { meds: MedInfo[]; admins: MedicationAd
                   padding: '5px 13px',
                   textDecoration: 'none',
                   whiteSpace: 'nowrap',
+                  // Mobile: comfortable thumb target, stretched across the action row.
+                  ...(isMobile
+                    ? {
+                        flex: 1,
+                        minHeight: 44,
+                        boxSizing: 'border-box' as const,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }
+                    : null),
                 }}
               >
                 Log now
               </Link>
             );
           }
+          // Shared fragments — identical markup on both layouts.
+          const nameDetail = (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+              <span
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  letterSpacing: '-.01em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                }}
+              >
+                {slot.med.name}
+                {slot.med.lifeCritical ? (
+                  <span style={{ ...mono(9.5, 500, T.outOfRange), letterSpacing: '.08em' }}>CRITICAL</span>
+                ) : null}
+              </span>
+              <span style={mono(10.5, 400, T.tertiary)}>
+                {hhmm}
+                {slot.med.instructions ? ` · ${slot.med.instructions}` : ''}
+              </span>
+            </div>
+          );
+          if (isMobile) {
+            // Stacked mobile row: dot + name/detail on top, status + action below.
+            return (
+              <TableRow key={slot.identValue} columns="1fr" padding="12px 22px">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <StatusDot color={dot} size={8} />
+                    {nameDetail}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ whiteSpace: 'nowrap', ...mono(11, 500, stateColor) }}>{state}</span>
+                    <span
+                      style={{
+                        marginLeft: 'auto',
+                        flex: 1,
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                      }}
+                    >
+                      {action}
+                    </span>
+                  </div>
+                </div>
+              </TableRow>
+            );
+          }
           return (
             <TableRow key={slot.identValue} columns="auto 1fr auto auto" padding="12px 22px">
               <StatusDot color={dot} size={8} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                <span
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 600,
-                    letterSpacing: '-.01em',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                  }}
-                >
-                  {slot.med.name}
-                  {slot.med.lifeCritical ? (
-                    <span style={{ ...mono(9.5, 500, T.outOfRange), letterSpacing: '.08em' }}>CRITICAL</span>
-                  ) : null}
-                </span>
-                <span style={mono(10.5, 400, T.tertiary)}>
-                  {hhmm}
-                  {slot.med.instructions ? ` · ${slot.med.instructions}` : ''}
-                </span>
-              </div>
+              {nameDetail}
               <span style={mono(11, 500, stateColor)}>{state}</span>
               {action}
             </TableRow>

@@ -17,6 +17,10 @@ import {
   TableRow,
 } from '../components/ds';
 import { T, mono } from '../tokens';
+import { useIsMobile } from '../useIsMobile';
+
+/** Mobile shell: floating pill tab bar clearance (tab height + its bottom offset). */
+const MOBILE_TAB_BAR_CLEARANCE = 'calc(84px + env(safe-area-inset-bottom))';
 
 // ---------------------------------------------------------------------------
 // Local presentation helpers
@@ -109,11 +113,12 @@ interface Exchange {
 // ---------------------------------------------------------------------------
 
 function UserBubble({ question }: { question: string }) {
+  const isMobile = useIsMobile();
   return (
     <div
       style={{
         alignSelf: 'flex-end',
-        maxWidth: 520,
+        maxWidth: isMobile ? '88%' : 520,
         background: T.ink,
         color: '#f5f5f4',
         borderRadius: '18px 18px 4px 18px',
@@ -180,9 +185,18 @@ function SourcesList({ commId, citations }: { commId: string; citations: Assista
 }
 
 function AssistantBubble({ answer }: { answer: AssistantAnswer }) {
+  const isMobile = useIsMobile();
   const local = answer.provider.is_local;
   return (
-    <div style={{ alignSelf: 'flex-start', maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div
+      style={{
+        alignSelf: 'flex-start',
+        maxWidth: isMobile ? '96%' : 640,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <AssistantAvatar />
         <AIPill />
@@ -238,6 +252,7 @@ function PendingBubble() {
 // ---------------------------------------------------------------------------
 
 export function AssistantPage() {
+  const isMobile = useIsMobile();
   const [settings, setSettings] = useState<AiSettings>();
   const [needsProvider, setNeedsProvider] = useState(false);
   const [providerReason, setProviderReason] = useState<string>();
@@ -273,7 +288,11 @@ export function AssistantPage() {
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [exchanges, pending]);
+    if (isMobile) {
+      // mobile: the page itself scrolls (no inner scroll container)
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    }
+  }, [exchanges, pending, isMobile]);
 
   const refreshSettings = async (): Promise<boolean> => {
     try {
@@ -361,35 +380,52 @@ export function AssistantPage() {
 
   const emptyChat = exchanges.length === 0 && !pending;
 
+  // Data-boundary chip — desktop keeps it in the header; mobile moves it below
+  // the title so the 390px header row never overflows.
+  const providerChip =
+    settings && route !== 'off' && !needsProvider ? (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          border: `1px solid ${cloud ? '#f3e3c8' : T.chip}`,
+          borderRadius: 20,
+          padding: '6px 13px',
+          background: cloud ? '#fdf9f1' : T.card,
+        }}
+      >
+        <StatusDot color={cloud ? T.watch : T.inRange} size={7} />
+        <span style={{ fontSize: 12, fontWeight: 500 }}>
+          {cloud ? 'Cloud AI' : 'Local AI'} · {cap(boundaryName)}
+        </span>
+        <span style={mono(9.5, 400, cloud ? T.watch : T.quaternary)}>
+          {cloud ? 'leaves device' : 'stays home'}
+        </span>
+      </span>
+    ) : null;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+        // clear the floating mobile tab bar for in-flow content
+        paddingBottom: isMobile ? 'calc(120px + env(safe-area-inset-bottom))' : undefined,
+      }}
+    >
       <PageHeader
         title="Assistant"
         subtitle="answers come only from your record · every claim cites its source"
         right={
           <>
-            {settings && route !== 'off' && !needsProvider ? (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  border: `1px solid ${cloud ? '#f3e3c8' : T.chip}`,
-                  borderRadius: 20,
-                  padding: '6px 13px',
-                  background: cloud ? '#fdf9f1' : T.card,
-                }}
-              >
-                <StatusDot color={cloud ? T.watch : T.inRange} size={7} />
-                <span style={{ fontSize: 12, fontWeight: 500 }}>
-                  {cloud ? 'Cloud AI' : 'Local AI'} · {cap(boundaryName)}
-                </span>
-                <span style={mono(9.5, 400, cloud ? T.watch : T.quaternary)}>
-                  {cloud ? 'leaves device' : 'stays home'}
-                </span>
-              </span>
-            ) : null}
-            <PillButton variant="secondary" onClick={() => setHistoryOpen((o) => !o)}>
+            {isMobile ? null : providerChip}
+            <PillButton
+              variant="secondary"
+              onClick={() => setHistoryOpen((o) => !o)}
+              style={isMobile ? { minHeight: 44, padding: '10px 16px' } : undefined}
+            >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <IconHistory size={14} stroke={1.7} />
                 History
@@ -401,6 +437,7 @@ export function AssistantPage() {
           </>
         }
       />
+      {isMobile && providerChip ? <div style={{ display: 'flex' }}>{providerChip}</div> : null}
 
       {historyOpen ? (
         <DsCard flush>
@@ -416,7 +453,11 @@ export function AssistantPage() {
             </div>
           ) : (
             sessions.map((s, i) => (
-              <TableRow key={s.id} first={i === 0} columns="minmax(0,1fr) auto auto">
+              <TableRow
+                key={s.id}
+                first={i === 0}
+                columns={isMobile ? 'minmax(0,1fr) auto' : 'minmax(0,1fr) auto auto'}
+              >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                   <span
                     style={{
@@ -440,20 +481,34 @@ export function AssistantPage() {
                   >
                     {s.answer_preview}
                   </span>
+                  {isMobile ? (
+                    <span style={mono(10.5, 400, T.tertiary)}>{fmtStamp(s.sent)}</span>
+                  ) : null}
                 </div>
-                <span style={mono(10.5, 400, T.tertiary)}>{fmtStamp(s.sent)}</span>
+                {isMobile ? null : <span style={mono(10.5, 400, T.tertiary)}>{fmtStamp(s.sent)}</span>}
                 {confirmingId === s.id ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div
+                    style={
+                      isMobile
+                        ? { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }
+                        : { display: 'flex', alignItems: 'center', gap: 8 }
+                    }
+                  >
                     <span style={mono(10.5, 400, T.outOfRange)}>delete this conversation?</span>
                     <PillButton
                       variant="destructive-tint"
                       onClick={() => doDelete(s.id)}
                       disabled={deletingId === s.id}
                       disabledReason="Deleting…"
+                      style={isMobile ? { minHeight: 44 } : undefined}
                     >
                       Delete
                     </PillButton>
-                    <PillButton variant="ghost" onClick={() => setConfirmingId(undefined)}>
+                    <PillButton
+                      variant="ghost"
+                      onClick={() => setConfirmingId(undefined)}
+                      style={isMobile ? { minHeight: 44 } : undefined}
+                    >
                       Keep
                     </PillButton>
                   </div>
@@ -469,7 +524,7 @@ export function AssistantPage() {
                       color: T.quaternary,
                       display: 'grid',
                       placeItems: 'center',
-                      padding: 4,
+                      padding: isMobile ? 13 : 4,
                     }}
                   >
                     <IconTrash size={15} stroke={1.7} />
@@ -485,21 +540,31 @@ export function AssistantPage() {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          height: needsProvider && emptyChat ? undefined : 'calc(100vh - 250px)',
-          minHeight: needsProvider && emptyChat ? undefined : 420,
+          height: isMobile || (needsProvider && emptyChat) ? undefined : 'calc(100vh - 250px)',
+          minHeight: isMobile || (needsProvider && emptyChat) ? undefined : 420,
         }}
       >
-        {/* messages — scrolls independently of the page */}
+        {/* messages — desktop scrolls independently of the page; mobile flows with
+            the page and leaves clearance for the fixed composer + tab bar */}
         <div
           ref={scrollRef}
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 18,
-            padding: '2px 2px 20px',
-          }}
+          style={
+            isMobile
+              ? {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                  padding: needsProvider ? '2px 2px 20px' : '2px 2px 96px',
+                }
+              : {
+                  flex: 1,
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                  padding: '2px 2px 20px',
+                }
+          }
         >
           {emptyChat && !needsProvider ? (
             <>
@@ -522,7 +587,8 @@ export function AssistantPage() {
                       background: 'transparent',
                       border: '1px solid #cfe5dc',
                       borderRadius: 20,
-                      padding: '8px 16px',
+                      padding: isMobile ? '12px 16px' : '8px 16px',
+                      minHeight: isMobile ? 44 : undefined,
                       cursor: 'pointer',
                     }}
                   >
@@ -573,16 +639,29 @@ export function AssistantPage() {
               e.preventDefault();
               ask(input);
             }}
+            style={
+              isMobile
+                ? {
+                    // thumb-reach composer: pinned just above the floating tab bar
+                    position: 'fixed',
+                    left: 16,
+                    right: 16,
+                    bottom: MOBILE_TAB_BAR_CLEARANCE,
+                    zIndex: 10,
+                  }
+                : undefined
+            }
           >
             <div
               style={{
                 background: T.card,
                 borderRadius: 22,
-                padding: '10px 12px 10px 20px',
+                padding: isMobile ? '8px 10px 8px 16px' : '10px 12px 10px 20px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
                 boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 36px rgba(0,0,0,.08)',
+                minHeight: isMobile ? 52 : undefined,
               }}
             >
               <input
@@ -604,7 +683,13 @@ export function AssistantPage() {
               />
               {settings && route !== 'off' ? (
                 <span style={{ ...mono(9.5, 400, cloud ? T.watch : T.quaternary), whiteSpace: 'nowrap' }}>
-                  {cloud ? '⚠ questions leave this device' : '⌂ stays on this device'}
+                  {isMobile
+                    ? cloud
+                      ? '⚠ leaves device'
+                      : '⌂ on device'
+                    : cloud
+                      ? '⚠ questions leave this device'
+                      : '⌂ stays on this device'}
                 </span>
               ) : null}
               <PillButton
@@ -612,16 +697,36 @@ export function AssistantPage() {
                 type="submit"
                 disabled={pending || !input.trim()}
                 disabledReason={pending ? 'Asking…' : undefined}
+                style={isMobile ? { minHeight: 44, padding: '11px 18px' } : undefined}
               >
                 Ask
               </PillButton>
             </div>
+            {isMobile ? (
+              <p
+                style={{
+                  margin: '8px auto 0',
+                  ...mono(10, 400, T.quaternary),
+                  textAlign: 'center',
+                  width: 'fit-content',
+                  maxWidth: '100%',
+                  background: 'rgba(239,239,237,.88)',
+                  backdropFilter: 'blur(6px)',
+                  borderRadius: 10,
+                  padding: '3px 10px',
+                }}
+              >
+                {footerText}
+              </p>
+            ) : null}
           </form>
         )}
 
-        <p style={{ margin: '10px 4px 0', ...mono(10, 400, T.quaternary), textAlign: 'center' }}>
-          {footerText}
-        </p>
+        {isMobile && !needsProvider ? null : (
+          <p style={{ margin: '10px 4px 0', ...mono(10, 400, T.quaternary), textAlign: 'center' }}>
+            {footerText}
+          </p>
+        )}
       </div>
     </div>
   );

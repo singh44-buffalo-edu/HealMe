@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { DsCard, PageHeader, PillButton } from '../components/ds';
 import { CS_OBS, IDENT, LOINC, OBS_CATEGORY, UCUM, getPatient } from '../fhir';
 import { T, mono } from '../tokens';
+import { useIsMobile } from '../useIsMobile';
 
 const QUICK_IDENT = `${IDENT}/quick-observation`;
 
@@ -27,8 +28,17 @@ function nowLocalInput(): string {
 }
 
 export function LogPage() {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+        // clear the floating mobile tab bar so the last card stays reachable
+        paddingBottom: isMobile ? 'calc(96px + env(safe-area-inset-bottom))' : undefined,
+      }}
+    >
       <PageHeader
         title="Quick add"
         subtitle="Everything saves straight into your FHIR record with the time you choose — backdating is fine."
@@ -36,7 +46,7 @@ export function LogPage() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(440px, 1fr))',
           gap: 16,
         }}
       >
@@ -89,6 +99,29 @@ const inputStyles = {
 const monoInputStyles = {
   input: { ...inputStyles.input, fontFamily: T.mono } as CSSProperties,
 };
+
+// Mobile variants: same look, taller touch targets (design min hit target 44px).
+const MOBILE_INPUT_HEIGHT = 46;
+
+const mobileInputStyles = {
+  input: {
+    ...inputStyles.input,
+    minHeight: MOBILE_INPUT_HEIGHT,
+    height: MOBILE_INPUT_HEIGHT,
+  } as CSSProperties,
+};
+
+const mobileMonoInputStyles = {
+  input: { ...mobileInputStyles.input, fontFamily: T.mono } as CSSProperties,
+};
+
+/** Desktop returns the exact same style objects as before; mobile swaps in ≥44px-tall inputs. */
+function useInputStyles() {
+  const isMobile = useIsMobile();
+  return isMobile
+    ? { base: mobileInputStyles, mono: mobileMonoInputStyles }
+    : { base: inputStyles, mono: monoInputStyles };
+}
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return <span style={{ ...mono(10, 500, T.quaternary), letterSpacing: '.04em' }}>{children}</span>;
@@ -143,13 +176,24 @@ function SaveButton(props: {
   onClick: () => void;
   children: ReactNode;
 }) {
+  const isMobile = useIsMobile();
   return (
     <PillButton
       variant="primary"
       size={12.5}
       onClick={props.onClick}
       disabled={props.busy || props.disabled}
-      style={{ alignSelf: 'flex-start', marginTop: 'auto' }}
+      style={
+        isMobile
+          ? {
+              alignSelf: 'stretch',
+              width: '100%',
+              marginTop: 'auto',
+              minHeight: 46,
+              padding: '13px 18px',
+            }
+          : { alignSelf: 'flex-start', marginTop: 'auto' }
+      }
     >
       {props.busy ? 'Saving…' : props.children}
     </PillButton>
@@ -157,13 +201,14 @@ function SaveButton(props: {
 }
 
 function WhenInput(props: { value: string; onChange: (v: string) => void }) {
+  const fieldStyles = useInputStyles();
   return (
     <Field label="When">
       <TextInput
         type="datetime-local"
         value={props.value}
         onChange={(e) => props.onChange(e.currentTarget.value)}
-        styles={monoInputStyles}
+        styles={fieldStyles.mono}
       />
     </Field>
   );
@@ -206,6 +251,7 @@ function WeightCard() {
     setKg('');
   }, 'Weight');
 
+  const fieldStyles = useInputStyles();
   return (
     <CardShell icon={IconScale} title="Weight" sub="kg · backdatable">
       <Field label="Weight (kg)">
@@ -216,7 +262,7 @@ function WeightCard() {
           min={1}
           max={400}
           hideControls
-          styles={monoInputStyles}
+          styles={fieldStyles.mono}
         />
       </Field>
       <WhenInput value={when} onChange={setWhen} />
@@ -248,6 +294,7 @@ function SleepCard() {
     setHours('');
   }, 'Sleep');
 
+  const fieldStyles = useInputStyles();
   return (
     <CardShell icon={IconMoon} title="Sleep" sub="hours slept · backdatable">
       <Field label="Hours slept">
@@ -258,7 +305,7 @@ function SleepCard() {
           min={0}
           max={24}
           hideControls
-          styles={monoInputStyles}
+          styles={fieldStyles.mono}
         />
       </Field>
       <WhenInput value={when} onChange={setWhen} />
@@ -306,13 +353,21 @@ function MoodEnergyCard() {
 }
 
 function SliderRow(props: { label: string; value: number; onChange: (v: number) => void }) {
+  const isMobile = useIsMobile();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontSize: 12.5, fontWeight: 500 }}>{props.label}</span>
         <span style={mono(12, 500, T.ink)}>{props.value}/10</span>
       </div>
-      <Slider min={1} max={10} value={props.value} onChange={props.onChange} size="sm" />
+      <Slider
+        min={1}
+        max={10}
+        value={props.value}
+        onChange={props.onChange}
+        size={isMobile ? 'lg' : 'sm'}
+        style={isMobile ? { padding: '8px 0' } : undefined}
+      />
     </div>
   );
 }
@@ -404,6 +459,7 @@ function VitalsCard() {
     setValues({});
   }, 'Vitals');
 
+  const fieldStyles = useInputStyles();
   return (
     <CardShell icon={IconHeartbeat} title="Vitals" sub="BP · HR · temp · SpO2 · glucose">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
@@ -417,7 +473,7 @@ function VitalsCard() {
               decimalScale={'decimals' in field ? field.decimals : 0}
               hideControls
               placeholder={`${field.min}–${field.max}`}
-              styles={monoInputStyles}
+              styles={fieldStyles.mono}
             />
           </Field>
         ))}
@@ -452,6 +508,7 @@ function RxQuestionCard() {
     setText('');
   }, 'Question for your clinician');
 
+  const fieldStyles = useInputStyles();
   return (
     <CardShell icon={IconMessageQuestion} title="Question for your clinician" sub="free text · saved with today's time">
       <span style={{ fontSize: 12, lineHeight: 1.5, color: T.secondary }}>
@@ -463,7 +520,7 @@ function RxQuestionCard() {
           placeholder="e.g. is the morning nausea expected to fade?"
           value={text}
           onChange={(e) => setText(e.currentTarget.value)}
-          styles={inputStyles}
+          styles={fieldStyles.base}
         />
       </Field>
       <SaveButton onClick={submit} busy={busy} disabled={!text.trim()}>
@@ -493,6 +550,7 @@ function SymptomCard() {
     setText('');
   }, 'Symptom');
 
+  const fieldStyles = useInputStyles();
   return (
     <CardShell icon={IconStethoscope} title="Symptom / side effect" sub="free text · backdatable">
       <Field label="What happened?">
@@ -500,7 +558,7 @@ function SymptomCard() {
           placeholder="e.g. mild headache after lunch"
           value={text}
           onChange={(e) => setText(e.currentTarget.value)}
-          styles={inputStyles}
+          styles={fieldStyles.base}
         />
       </Field>
       <WhenInput value={when} onChange={setWhen} />

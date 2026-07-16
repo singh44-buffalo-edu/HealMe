@@ -34,6 +34,7 @@ import {
   summarizeDays,
 } from '../fhir';
 import { T, mono } from '../tokens';
+import { useIsMobile } from '../useIsMobile';
 
 const HEATMAP_DAYS = 91; // 13 weeks
 const STATS_DAYS = 30;
@@ -45,6 +46,24 @@ const STATS_DAYS = 30;
 const STRIP_PARTIAL = T.heatLate;
 
 const PAGE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 20 };
+
+/** Mobile page frame: tighter gap + clearance for the floating pill tab bar
+ * (blurred white, bottom-anchored) plus the home-indicator safe area. */
+const PAGE_MOBILE: CSSProperties = {
+  ...PAGE,
+  gap: 16,
+  paddingBottom: 'calc(90px + env(safe-area-inset-bottom))',
+};
+
+/** ≥44px touch target stretched across a stacked mobile action row. */
+const MOBILE_ACTION: CSSProperties = {
+  flex: 1,
+  minHeight: 44,
+  boxSizing: 'border-box',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
 
 // ---------------------------------------------------------------------------
 // Local presentation helpers (design-handoff "Medications" screen language)
@@ -85,10 +104,13 @@ function PillLink({
   to,
   variant = 'primary',
   children,
+  style,
 }: {
   to: string;
   variant?: 'primary' | 'secondary';
   children: ReactNode;
+  /** additive override — mobile passes touch-target sizing; desktop passes nothing */
+  style?: CSSProperties;
 }) {
   const styles: Record<'primary' | 'secondary', CSSProperties> = {
     primary: { background: T.green, color: '#fff', fontWeight: 600 },
@@ -105,6 +127,7 @@ function PillLink({
         textDecoration: 'none',
         whiteSpace: 'nowrap',
         ...styles[variant],
+        ...style,
       }}
     >
       {children}
@@ -188,6 +211,7 @@ function monthYear(date: string): string {
 
 export function AdherencePage() {
   const medplum = useMedplum();
+  const isMobile = useIsMobile();
   const [meds, setMeds] = useState<MedInfo[]>([]);
   const [admins, setAdmins] = useState<MedicationAdministration[]>([]);
   const [checkins, setCheckins] = useState<CheckinDef[]>([]);
@@ -230,9 +254,11 @@ export function AdherencePage() {
     reload();
   }, [reload]);
 
+  const pageStyle = isMobile ? PAGE_MOBILE : PAGE;
+
   if (loading) {
     return (
-      <div style={PAGE}>
+      <div style={pageStyle}>
         <PageHeader title="Medications" subtitle="loading adherence data" />
         <Loader size="sm" color={T.green} />
       </div>
@@ -240,7 +266,7 @@ export function AdherencePage() {
   }
   if (error) {
     return (
-      <div style={PAGE}>
+      <div style={pageStyle}>
         <PageHeader title="Medications" />
         <AlertCard tone="critical" title="Could not load adherence data">
           <span style={{ fontSize: 13, color: T.secondary }}>{error}</span>
@@ -250,7 +276,7 @@ export function AdherencePage() {
   }
   if (!patientId) {
     return (
-      <div style={PAGE}>
+      <div style={pageStyle}>
         <PageHeader title="Medications" />
         <AlertCard tone="watch" title="No patient record">
           <span style={{ fontSize: 13, color: T.secondary }}>
@@ -333,7 +359,7 @@ export function AdherencePage() {
     slotsForDate(meds, today).length > 0 || slotsForDate(meds, yesterday).length > 0;
 
   return (
-    <div style={PAGE}>
+    <div style={pageStyle}>
       <PageHeader title="Medications" subtitle={subtitle} />
 
       {criticalProblems.length > 0 && (
@@ -422,33 +448,56 @@ export function AdherencePage() {
           ]
             .filter(Boolean)
             .join(' · ');
+          // Shared fragments — identical markup on both layouts.
+          const nameBlock = (
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-.01em' }}>
+                  {med.name}
+                </span>
+                {med.lifeCritical && <CriticalChip />}
+              </span>
+              <span style={mono(10.5, 400, T.tertiary)}>{detail}</span>
+            </span>
+          );
+          const strip = (
+            <Heatstrip
+              days={stripDaysFor(med)}
+              header={`adherence ${STATS_DAYS}D`}
+              headerRight={
+                <span style={{ color: pctColor }}>{pct === null ? 'no logs' : `${pct}%`}</span>
+              }
+            />
+          );
+          const counts = (
+            <span style={mono(9.5, 400, T.quaternary)}>
+              {pct === null ? 'no logs' : `${taken} taken / ${notDone} not taken`}
+            </span>
+          );
+          if (isMobile) {
+            // Stacked mobile row: name + detail on top, heatstrip, then status row.
+            return (
+              <Row key={med.request.id} columns="1fr" padding="15px 22px">
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                  {nameBlock}
+                  {strip}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <StatusTag color={tag.color} label={tag.label} />
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>{counts}</span>
+                  </span>
+                </span>
+              </Row>
+            );
+          }
           return (
             <Row key={med.request.id} columns="1.3fr auto auto" padding="15px 22px">
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-.01em' }}>
-                    {med.name}
-                  </span>
-                  {med.lifeCritical && <CriticalChip />}
-                </span>
-                <span style={mono(10.5, 400, T.tertiary)}>{detail}</span>
-              </span>
-              <span style={{ width: 238 }}>
-                <Heatstrip
-                  days={stripDaysFor(med)}
-                  header={`adherence ${STATS_DAYS}D`}
-                  headerRight={
-                    <span style={{ color: pctColor }}>{pct === null ? 'no logs' : `${pct}%`}</span>
-                  }
-                />
-              </span>
+              {nameBlock}
+              <span style={{ width: 238 }}>{strip}</span>
               <span
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}
               >
                 <StatusTag color={tag.color} label={tag.label} />
-                <span style={mono(9.5, 400, T.quaternary)}>
-                  {pct === null ? 'no logs' : `${taken} taken / ${notDone} not taken`}
-                </span>
+                {counts}
               </span>
             </Row>
           );
@@ -489,6 +538,7 @@ function TodayDuePanel({
   onChanged: () => void;
 }) {
   const medplum = useMedplum();
+  const isMobile = useIsMobile();
   const due = checkins.filter((d) => !d.existing);
   if (due.length === 0 && followUps.length === 0) {
     return null;
@@ -507,20 +557,54 @@ function TodayDuePanel({
   return (
     <DsCard flush gap={0}>
       <CardHeader title="Due now" meta={`${due.length + followUps.length} due`} />
-      {due.map((def) => (
-        <Row key={def.questionnaire.url} columns="1fr auto">
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      {due.map((def) => {
+        const title = (
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              minWidth: 0,
+              ...(isMobile ? { flexWrap: 'wrap' as const } : null),
+            }}
+          >
             <span style={{ fontSize: 13.5, fontWeight: 500, letterSpacing: '-.01em' }}>
               {def.questionnaire.title}
             </span>
             <Chip>{CADENCE_LABEL[def.cadence]}</Chip>
           </span>
-          <PillLink to="/checkin">Check in</PillLink>
-        </Row>
-      ))}
-      {followUps.map((task) => (
-        <Row key={task.id} columns="1fr auto">
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        );
+        if (isMobile) {
+          // Stacked mobile row: title on top, full-width ≥44px action below.
+          return (
+            <Row key={def.questionnaire.url} columns="1fr">
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                {title}
+                <PillLink to="/checkin" style={MOBILE_ACTION}>
+                  Check in
+                </PillLink>
+              </span>
+            </Row>
+          );
+        }
+        return (
+          <Row key={def.questionnaire.url} columns="1fr auto">
+            {title}
+            <PillLink to="/checkin">Check in</PillLink>
+          </Row>
+        );
+      })}
+      {followUps.map((task) => {
+        const title = (
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              minWidth: 0,
+              ...(isMobile ? { flexWrap: 'wrap' as const } : null),
+            }}
+          >
             <Chip>follow-up</Chip>
             <span style={{ fontSize: 13.5, fontWeight: 500, letterSpacing: '-.01em' }}>
               {task.description}
@@ -531,20 +615,50 @@ function TodayDuePanel({
               </span>
             )}
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <PillLink to="/log" variant="secondary">
+        );
+        const actions = (
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: isMobile ? 8 : 6,
+            }}
+          >
+            <PillLink to="/log" variant="secondary" style={isMobile ? MOBILE_ACTION : undefined}>
               Log update
             </PillLink>
             <PillButton
               size={12.5}
               onClick={() => resolve(task)}
-              style={{ background: T.greenTint, color: T.green, padding: '6px 14px' }}
+              style={{
+                background: T.greenTint,
+                color: T.green,
+                padding: '6px 14px',
+                ...(isMobile ? MOBILE_ACTION : null),
+              }}
             >
               Resolved
             </PillButton>
           </span>
-        </Row>
-      ))}
+        );
+        if (isMobile) {
+          // Stacked mobile row: description on top, full-width ≥44px actions below.
+          return (
+            <Row key={task.id} columns="1fr">
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                {title}
+                {actions}
+              </span>
+            </Row>
+          );
+        }
+        return (
+          <Row key={task.id} columns="1fr auto">
+            {title}
+            {actions}
+          </Row>
+        );
+      })}
     </DsCard>
   );
 }
@@ -563,6 +677,7 @@ function DayPanel(props: {
   now: Date;
 }) {
   const medplum = useMedplum();
+  const isMobile = useIsMobile();
   const [busy, setBusy] = useState<string>();
   const slots = slotsForDate(props.meds, props.date);
 
@@ -607,83 +722,125 @@ function DayPanel(props: {
           !isFuture &&
           props.now.getTime() - slot.scheduled.getTime() > OVERDUE_GRACE_MINUTES * 60_000;
         const saving = busy === slot.identValue;
+        // Shared fragments — identical markup on both layouts.
+        const nameCluster = (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 500, letterSpacing: '-.01em' }}>
+              {slot.med.name}
+            </span>
+            {slot.med.lifeCritical && <CriticalChip />}
+          </span>
+        );
+        const statusTags = (
+          <>
+            {admin?.status === 'completed' && <StatusTag color={T.inRange} label="taken" />}
+            {admin?.status === 'not-done' &&
+              (admin.statusReason?.[0]?.coding?.[0]?.code === 'user-marked-missed' ? (
+                <StatusTag color={T.outOfRange} label="missed" />
+              ) : (
+                <StatusTag color={T.watch} label="skipped" />
+              ))}
+            {!admin && isFuture && <StatusTag color={T.quaternary} label="upcoming" />}
+            {overdue && <StatusTag color={T.watch} label="overdue" />}
+          </>
+        );
+        const actionButtons = !admin && !isFuture && (
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: isMobile ? 8 : 6,
+              ...(isMobile ? { alignSelf: 'stretch' as const } : null),
+            }}
+          >
+            <PillButton
+              variant="primary"
+              size={12.5}
+              disabled={saving}
+              onClick={() => act(slot, 'taken')}
+              style={{ padding: '6px 14px', ...(isMobile ? MOBILE_ACTION : null) }}
+            >
+              Taken
+            </PillButton>
+            <PillButton
+              variant="secondary"
+              size={12.5}
+              disabled={saving}
+              onClick={() => act(slot, 'skipped')}
+              style={isMobile ? MOBILE_ACTION : undefined}
+            >
+              Skip
+            </PillButton>
+            <PillButton
+              variant="destructive-tint"
+              size={12.5}
+              disabled={saving}
+              onClick={() => act(slot, 'missed')}
+              style={{ padding: '6px 14px', ...(isMobile ? MOBILE_ACTION : null) }}
+            >
+              Missed
+            </PillButton>
+          </span>
+        );
+        const changeMenu = admin && (
+          <Menu position="bottom-end">
+            <Menu.Target>
+              <button
+                type="button"
+                disabled={saving}
+                style={{
+                  border: 'none',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  background: 'transparent',
+                  fontFamily: 'inherit',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: T.tertiary,
+                  padding: '4px 10px',
+                  borderRadius: 16,
+                  // Mobile: keep the tap target comfortable even for the quiet control.
+                  ...(isMobile ? { minHeight: 44, minWidth: 44 } : null),
+                }}
+              >
+                change
+              </button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item onClick={() => act(slot, 'taken')}>Mark taken</Menu.Item>
+              <Menu.Item onClick={() => act(slot, 'skipped')}>Mark skipped</Menu.Item>
+              <Menu.Item onClick={() => act(slot, 'missed')}>Mark missed</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        );
+        if (isMobile) {
+          // Stacked mobile row: time + name + status on top, full-width ≥44px
+          // action buttons below (only when the dose is still actionable).
+          return (
+            <Row key={slot.identValue} columns="1fr">
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <span style={mono(12.5, 500, T.ink)}>{slot.time.slice(0, 5)}</span>
+                  {nameCluster}
+                  <span
+                    style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    {statusTags}
+                    {changeMenu}
+                  </span>
+                </span>
+                {actionButtons}
+              </span>
+            </Row>
+          );
+        }
         return (
           <Row key={slot.identValue} columns="46px 1fr auto">
             <span style={mono(12.5, 500, T.ink)}>{slot.time.slice(0, 5)}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 500, letterSpacing: '-.01em' }}>
-                {slot.med.name}
-              </span>
-              {slot.med.lifeCritical && <CriticalChip />}
-            </span>
+            {nameCluster}
             <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {admin?.status === 'completed' && <StatusTag color={T.inRange} label="taken" />}
-              {admin?.status === 'not-done' &&
-                (admin.statusReason?.[0]?.coding?.[0]?.code === 'user-marked-missed' ? (
-                  <StatusTag color={T.outOfRange} label="missed" />
-                ) : (
-                  <StatusTag color={T.watch} label="skipped" />
-                ))}
-              {!admin && isFuture && <StatusTag color={T.quaternary} label="upcoming" />}
-              {overdue && <StatusTag color={T.watch} label="overdue" />}
-              {!admin && !isFuture && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <PillButton
-                    variant="primary"
-                    size={12.5}
-                    disabled={saving}
-                    onClick={() => act(slot, 'taken')}
-                    style={{ padding: '6px 14px' }}
-                  >
-                    Taken
-                  </PillButton>
-                  <PillButton
-                    variant="secondary"
-                    size={12.5}
-                    disabled={saving}
-                    onClick={() => act(slot, 'skipped')}
-                  >
-                    Skip
-                  </PillButton>
-                  <PillButton
-                    variant="destructive-tint"
-                    size={12.5}
-                    disabled={saving}
-                    onClick={() => act(slot, 'missed')}
-                    style={{ padding: '6px 14px' }}
-                  >
-                    Missed
-                  </PillButton>
-                </span>
-              )}
-              {admin && (
-                <Menu position="bottom-end">
-                  <Menu.Target>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      style={{
-                        border: 'none',
-                        cursor: saving ? 'not-allowed' : 'pointer',
-                        background: 'transparent',
-                        fontFamily: 'inherit',
-                        fontSize: 12,
-                        fontWeight: 500,
-                        color: T.tertiary,
-                        padding: '4px 10px',
-                        borderRadius: 16,
-                      }}
-                    >
-                      change
-                    </button>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    <Menu.Item onClick={() => act(slot, 'taken')}>Mark taken</Menu.Item>
-                    <Menu.Item onClick={() => act(slot, 'skipped')}>Mark skipped</Menu.Item>
-                    <Menu.Item onClick={() => act(slot, 'missed')}>Mark missed</Menu.Item>
-                  </Menu.Dropdown>
-                </Menu>
-              )}
+              {statusTags}
+              {actionButtons}
+              {changeMenu}
             </span>
           </Row>
         );

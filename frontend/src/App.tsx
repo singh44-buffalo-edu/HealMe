@@ -1,3 +1,6 @@
+/* oxlint-disable react/only-export-components --
+   NAV / NAV_SETTINGS / count hooks are intentionally shared with MorePage
+   (mobile hub needs full nav parity); cost is full-reload HMR for this file. */
 import { Center, Loader, Stack, Text, Title } from '@mantine/core';
 import { SignInForm, useMedplum, useMedplumProfile } from '@medplum/react';
 import {
@@ -25,7 +28,9 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import { listReviewTasks } from './api';
 import { VaultChip } from './components/ds';
+import { MobileTabBar } from './components/MobileTabBar';
 import { T, mono } from './tokens';
+import { useIsMobile } from './useIsMobile';
 import { AccessControlPage } from './pages/AccessControlPage';
 import { AdherencePage } from './pages/AdherencePage';
 import { AiSettingsPage } from './pages/AiSettingsPage';
@@ -39,13 +44,14 @@ import { CorrelationsPage } from './pages/CorrelationsPage';
 import { IngestPage } from './pages/IngestPage';
 import { LabsPage } from './pages/LabsPage';
 import { LogPage } from './pages/LogPage';
+import { MorePage } from './pages/MorePage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { TimelinePage } from './pages/TimelinePage';
 import { TrendsPage } from './pages/TrendsPage';
 import { VitalsPage } from './pages/VitalsPage';
 
-interface NavItem {
+export interface NavItem {
   to: string;
   label: string;
   icon: Icon;
@@ -53,7 +59,7 @@ interface NavItem {
   badge?: number;
 }
 
-const NAV: NavItem[] = [
+export const NAV: NavItem[] = [
   { to: '/overview', label: 'Dashboard', icon: IconLayoutDashboard },
   { to: '/', label: 'Medications', icon: IconPill },
   { to: '/vitals', label: 'Vitals', icon: IconHeart },
@@ -72,13 +78,13 @@ const NAV: NavItem[] = [
 ];
 
 /** Bottom nav cluster: privacy & configuration surfaces. */
-const NAV_SETTINGS: NavItem[] = [
+export const NAV_SETTINGS: NavItem[] = [
   { to: '/history', label: 'History log', icon: IconHistory },
   { to: '/access', label: 'Access control', icon: IconLock },
   { to: '/ai-settings', label: 'AI settings', icon: IconSettings },
 ];
 
-function useReviewQueueCount(): number {
+export function useReviewQueueCount(): number {
   const [count, setCount] = useState(0);
   const location = useLocation();
   useEffect(() => {
@@ -99,7 +105,7 @@ function useReviewQueueCount(): number {
   return count;
 }
 
-function useRecordCount(): number | undefined {
+export function useRecordCount(): number | undefined {
   const medplum = useMedplum();
   const [count, setCount] = useState<number>();
   useEffect(() => {
@@ -109,6 +115,93 @@ function useRecordCount(): number | undefined {
       .catch(() => setCount(undefined));
   }, [medplum]);
   return count;
+}
+
+/** Route table — shared between the desktop and mobile shells. */
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<AdherencePage />} />
+      <Route path="/overview" element={<OverviewPage />} />
+      <Route path="/trends" element={<TrendsPage />} />
+      <Route path="/vitals" element={<VitalsPage />} />
+      <Route path="/correlations" element={<CorrelationsPage />} />
+      <Route path="/labs" element={<LabsPage />} />
+      <Route path="/timeline" element={<TimelinePage />} />
+      <Route path="/checkin" element={<CheckinPage />} />
+      <Route path="/checkins" element={<CheckinExplorerPage />} />
+      <Route path="/log" element={<LogPage />} />
+      <Route path="/cartridges" element={<CartridgesPage />} />
+      <Route path="/ingest" element={<IngestPage />} />
+      <Route path="/review" element={<ReviewPage />} />
+      <Route path="/devices" element={<DevicesPage />} />
+      <Route path="/assistant" element={<AssistantPage />} />
+      <Route path="/history" element={<HistoryPage />} />
+      <Route path="/access" element={<AccessControlPage />} />
+      <Route path="/ai-settings" element={<AiSettingsPage />} />
+      <Route path="/more" element={<MorePage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+/** Mobile shell (design 2a/4d): slim top row, full-width main, floating tab bar. */
+function MobileShell() {
+  const reviewCount = useReviewQueueCount();
+  return (
+    <div style={{ minHeight: '100vh', background: T.canvas }}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 0' }}>
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            background: T.green,
+            color: '#fff',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 14,
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          H
+        </div>
+        <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.015em' }}>HealMeDaily</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {reviewCount > 0 ? (
+            <Link
+              to="/ingest"
+              style={{
+                ...mono(10, 500, T.ai),
+                background: T.aiBg,
+                borderRadius: 10,
+                padding: '3px 8px',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {reviewCount} to review
+            </Link>
+          ) : null}
+          <VaultChip />
+        </span>
+      </header>
+      <main
+        style={{
+          padding: '16px 16px calc(110px + env(safe-area-inset-bottom))',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          boxSizing: 'border-box',
+          width: '100%',
+        }}
+      >
+        <AppRoutes />
+      </main>
+      <MobileTabBar reviewCount={reviewCount} />
+    </div>
+  );
 }
 
 function Sidebar() {
@@ -242,6 +335,7 @@ function Sidebar() {
 export function App() {
   const medplum = useMedplum();
   const profile = useMedplumProfile();
+  const isMobile = useIsMobile();
 
   if (medplum.isLoading()) {
     return (
@@ -292,6 +386,10 @@ export function App() {
     );
   }
 
+  if (isMobile) {
+    return <MobileShell />;
+  }
+
   return (
     <div
       style={{
@@ -314,27 +412,7 @@ export function App() {
           width: '100%',
         }}
       >
-        <Routes>
-          <Route path="/" element={<AdherencePage />} />
-          <Route path="/overview" element={<OverviewPage />} />
-          <Route path="/trends" element={<TrendsPage />} />
-          <Route path="/vitals" element={<VitalsPage />} />
-          <Route path="/correlations" element={<CorrelationsPage />} />
-          <Route path="/labs" element={<LabsPage />} />
-          <Route path="/timeline" element={<TimelinePage />} />
-          <Route path="/checkin" element={<CheckinPage />} />
-          <Route path="/checkins" element={<CheckinExplorerPage />} />
-          <Route path="/log" element={<LogPage />} />
-          <Route path="/cartridges" element={<CartridgesPage />} />
-          <Route path="/ingest" element={<IngestPage />} />
-          <Route path="/review" element={<ReviewPage />} />
-          <Route path="/devices" element={<DevicesPage />} />
-          <Route path="/assistant" element={<AssistantPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/access" element={<AccessControlPage />} />
-          <Route path="/ai-settings" element={<AiSettingsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <AppRoutes />
       </main>
     </div>
   );

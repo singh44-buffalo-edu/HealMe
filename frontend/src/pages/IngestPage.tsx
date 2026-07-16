@@ -29,6 +29,7 @@ import {
   StatusDot,
 } from '../components/ds';
 import { T, mono } from '../tokens';
+import { useIsMobile } from '../useIsMobile';
 
 // ---------------------------------------------------------------------------
 // Local presentation helpers
@@ -106,6 +107,7 @@ function FilterChip({
   active: boolean;
   onClick: () => void;
 }) {
+  const isMobile = useIsMobile();
   return (
     <button
       type="button"
@@ -117,7 +119,7 @@ function FilterChip({
         alignItems: 'center',
         gap: 7,
         borderRadius: 20,
-        padding: '7px 15px',
+        padding: isMobile ? '12px 15px' : '7px 15px',
         fontSize: 12.5,
         fontWeight: 500,
         fontFamily: 'inherit',
@@ -169,6 +171,7 @@ const LINK_BUTTON: CSSProperties = {
 // ---------------------------------------------------------------------------
 
 export function IngestPage() {
+  const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [tasks, setTasks] = useState<ReviewTask[]>([]);
@@ -226,7 +229,15 @@ export function IngestPage() {
   const effectiveFilter = filter !== 'All' && kinds.some(([k]) => k === filter) ? filter : 'All';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+        // clear the floating mobile tab bar
+        paddingBottom: isMobile ? 'calc(96px + env(safe-area-inset-bottom))' : undefined,
+      }}
+    >
       <PageHeader
         title="Documents"
         subtitle={
@@ -244,49 +255,64 @@ export function IngestPage() {
         }
       />
 
-      {/* ---- Add a document (upload → extraction proposals) ---- */}
-      <div ref={uploadRef}>
-        <DsCard padding={22} gap={13}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <IconTile bg={T.greenTint} fg={T.green}>
-              <IconScan size={16} stroke={1.7} />
-            </IconTile>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <CardTitle size={15}>Add a document</CardTitle>
-              <span style={mono(10.5, 400, T.tertiary)}>PDF · PNG · JPEG · original stored unchanged</span>
-            </div>
+      {/* ---- Add a document (upload → extraction proposals) + quick capture.
+              Mobile puts quick capture first (thumb-first text beats file pickers). ---- */}
+      {(() => {
+        const uploadCard = (
+          <div ref={uploadRef} key="upload">
+            <DsCard padding={22} gap={13}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <IconTile bg={T.greenTint} fg={T.green}>
+                  <IconScan size={16} stroke={1.7} />
+                </IconTile>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <CardTitle size={15}>Add a document</CardTitle>
+                  <span style={mono(10.5, 400, T.tertiary)}>PDF · PNG · JPEG · original stored unchanged</span>
+                </div>
+              </div>
+              <span style={{ fontSize: 13, color: T.secondary, lineHeight: 1.55 }}>
+                Upload a lab report, prescription or discharge summary (PDF/photo). The original is stored unchanged;
+                the AI proposes structured entries which{' '}
+                <b style={{ color: T.ink }}>you review below before anything joins your record</b>.
+              </span>
+              <span style={{ fontSize: 11.5, color: T.quaternary, lineHeight: 1.5 }}>
+                Privacy: with a cloud AI provider configured, the document content is sent to that provider for
+                extraction. Without one, the document is stored and no extraction happens.
+              </span>
+              <div
+                style={
+                  isMobile
+                    ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10 }
+                    : { display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }
+                }
+              >
+                <FileInput
+                  label="File"
+                  placeholder="Choose PDF / PNG / JPEG"
+                  accept="application/pdf,image/png,image/jpeg"
+                  value={file}
+                  onChange={setFile}
+                  w={isMobile ? '100%' : 320}
+                  clearable
+                />
+                <PillButton
+                  variant="primary"
+                  onClick={upload}
+                  disabled={!file || uploading}
+                  style={isMobile ? { width: '100%', minHeight: 44, padding: '12px 18px' } : undefined}
+                >
+                  {uploading ? 'Uploading…' : 'Upload & extract'}
+                </PillButton>
+              </div>
+              <AssuranceLine style={{ borderTop: `1px solid ${T.chip}`, paddingTop: 12 }}>
+                Everything lands in your review queue first — nothing enters the record unapproved.
+              </AssuranceLine>
+            </DsCard>
           </div>
-          <span style={{ fontSize: 13, color: T.secondary, lineHeight: 1.55 }}>
-            Upload a lab report, prescription or discharge summary (PDF/photo). The original is stored unchanged;
-            the AI proposes structured entries which{' '}
-            <b style={{ color: T.ink }}>you review below before anything joins your record</b>.
-          </span>
-          <span style={{ fontSize: 11.5, color: T.quaternary, lineHeight: 1.5 }}>
-            Privacy: with a cloud AI provider configured, the document content is sent to that provider for
-            extraction. Without one, the document is stored and no extraction happens.
-          </span>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
-            <FileInput
-              label="File"
-              placeholder="Choose PDF / PNG / JPEG"
-              accept="application/pdf,image/png,image/jpeg"
-              value={file}
-              onChange={setFile}
-              w={320}
-              clearable
-            />
-            <PillButton variant="primary" onClick={upload} disabled={!file || uploading}>
-              {uploading ? 'Uploading…' : 'Upload & extract'}
-            </PillButton>
-          </div>
-          <AssuranceLine style={{ borderTop: `1px solid ${T.chip}`, paddingTop: 12 }}>
-            Everything lands in your review queue first — nothing enters the record unapproved.
-          </AssuranceLine>
-        </DsCard>
-      </div>
-
-      {/* ---- Quick capture (natural language → proposals) ---- */}
-      <QuickCaptureCard onProposals={reload} />
+        );
+        const quickCapture = <QuickCaptureCard key="quick-capture" onProposals={reload} />;
+        return isMobile ? [quickCapture, uploadCard] : [uploadCard, quickCapture];
+      })()}
 
       {/* ---- Review queue — the gate into the record ---- */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -377,11 +403,27 @@ export function IngestPage() {
           You own everything here. Download the complete record as a FHIR R4 bundle (portable to any FHIR
           system) or all observations as CSV.
         </span>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <a href={exportFhirUrl} target="_blank" rel="noreferrer" style={PILL_LINK}>
+        <div
+          style={
+            isMobile
+              ? { display: 'flex', gap: 10, flexDirection: 'column', alignItems: 'stretch' }
+              : { display: 'flex', gap: 10, flexWrap: 'wrap' }
+          }
+        >
+          <a
+            href={exportFhirUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={isMobile ? { ...PILL_LINK, justifyContent: 'center', minHeight: 44, boxSizing: 'border-box' } : PILL_LINK}
+          >
             Download FHIR bundle (JSON)
           </a>
-          <a href={exportCsvUrl} target="_blank" rel="noreferrer" style={PILL_LINK}>
+          <a
+            href={exportCsvUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={isMobile ? { ...PILL_LINK, justifyContent: 'center', minHeight: 44, boxSizing: 'border-box' } : PILL_LINK}
+          >
             Download observations (CSV)
           </a>
         </div>
@@ -404,6 +446,7 @@ const IMPORT_KIND_OPTIONS: { value: 'auto' | ImportKind; label: string }[] = [
 ];
 
 function ImportCard() {
+  const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState<'auto' | ImportKind>('auto');
   const [busy, setBusy] = useState(false);
@@ -455,14 +498,20 @@ function ImportCard() {
         Prefer hands-off? Drop files into <span style={mono(11, 500, T.tertiary)}>data/inbox/</span> — they are
         imported automatically (PDFs/photos go through the review queue).
       </span>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+      <div
+        style={
+          isMobile
+            ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10 }
+            : { display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }
+        }
+      >
         <FileInput
           label="File"
           placeholder="Choose .json / .csv / .xml / .cda / .hl7"
           accept=".json,.csv,.xml,.cda,.ccda,.hl7,application/json,text/csv,text/xml"
           value={file}
           onChange={setFile}
-          w={320}
+          w={isMobile ? '100%' : 320}
           clearable
         />
         <Select
@@ -471,9 +520,14 @@ function ImportCard() {
           value={kind}
           onChange={(v) => setKind((v as 'auto' | ImportKind) ?? 'auto')}
           allowDeselect={false}
-          w={210}
+          w={isMobile ? '100%' : 210}
         />
-        <PillButton variant="primary" onClick={doImport} disabled={!file || busy}>
+        <PillButton
+          variant="primary"
+          onClick={doImport}
+          disabled={!file || busy}
+          style={isMobile ? { width: '100%', minHeight: 44, padding: '12px 18px' } : undefined}
+        >
           {busy ? 'Importing…' : 'Import'}
         </PillButton>
       </div>
@@ -512,6 +566,7 @@ function AiSettingsNote({ children }: { children: ReactNode }) {
 }
 
 function QuickCaptureCard({ onProposals }: { onProposals: () => void }) {
+  const isMobile = useIsMobile();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [needsProvider, setNeedsProvider] = useState<string | null>(null);
@@ -607,7 +662,12 @@ function QuickCaptureCard({ onProposals }: { onProposals: () => void }) {
         }}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <PillButton variant="primary" onClick={propose} disabled={!text.trim() || busy}>
+        <PillButton
+          variant="primary"
+          onClick={propose}
+          disabled={!text.trim() || busy}
+          style={isMobile ? { width: '100%', minHeight: 44, padding: '12px 18px' } : undefined}
+        >
           {busy ? 'Proposing…' : 'Propose entries'}
         </PillButton>
       </div>
@@ -634,9 +694,13 @@ function QuickCaptureCard({ onProposals }: { onProposals: () => void }) {
 // ---------------------------------------------------------------------------
 
 function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void }) {
+  const isMobile = useIsMobile();
   const medplum = useMedplum();
   const [json, setJson] = useState(() => JSON.stringify(task.resource, null, 2));
   const [busy, setBusy] = useState(false);
+  // Mobile keeps cards scannable: the JSON editor hides behind a toggle.
+  // Edits to `json` survive collapsing — only visibility changes.
+  const [showJson, setShowJson] = useState(false);
   // Plain-text sources (quick-capture notes) render inline instead of a browser tab.
   const [sourceText, setSourceText] = useState<string | null>(null);
 
@@ -714,99 +778,182 @@ function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void
     }
   };
 
+  // Shared between the desktop and mobile layouts (identical output on desktop).
+  const headerBody = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 14.5, fontWeight: 600, letterSpacing: '-.01em' }}>{task.description}</span>
+        <AIPill />
+        <span style={mono(9.5, 500, T.watch)}>AWAITING REVIEW</span>
+        {task.confidence != null && task.confidence < 0.5 && (
+          <span style={mono(9.5, 500, T.outOfRange)}>low confidence — check carefully</span>
+        )}
+      </div>
+      <span style={mono(11, 400, T.tertiary)}>
+        {taskKind(task)} · extracted by AI · original document kept
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {task.confidence != null ? (
+          <>
+            <div style={{ width: 120 }}>
+              <ConfidenceBar value={task.confidence} />
+            </div>
+            <span style={mono(9.5, 400, confColor)}>conf {task.confidence.toFixed(2)}</span>
+          </>
+        ) : (
+          <span style={mono(9.5, 400, T.quaternary)}>conf n/a</span>
+        )}
+        {task.authored_on ? (
+          <span style={mono(9.5, 400, T.quaternary)}>· {fmtDate(task.authored_on)}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const excerptBlock = task.source_excerpt ? (
+    <div
+      style={{
+        background: T.band,
+        borderRadius: 10,
+        padding: '10px 14px',
+        fontSize: 12,
+        color: T.secondary,
+        lineHeight: 1.5,
+      }}
+    >
+      {task.source_excerpt}
+    </div>
+  ) : null;
+
+  const jsonEditor = (
+    <Textarea
+      value={json}
+      onChange={(e) => setJson(e.currentTarget.value)}
+      autosize
+      minRows={4}
+      maxRows={16}
+      styles={{
+        input: {
+          fontFamily: T.mono,
+          fontSize: 12,
+          border: `1px solid ${T.chip}`,
+          borderRadius: 10,
+          background: '#fbfbfa',
+        },
+      }}
+    />
+  );
+
   return (
-    <DsCard padding="18px 22px" gap={14}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 16, alignItems: 'center' }}>
-        <IconTile bg={T.aiBg} fg={T.ai} size={38} radius={12}>
-          <IconFileText size={16} stroke={1.7} />
-        </IconTile>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 14.5, fontWeight: 600, letterSpacing: '-.01em' }}>{task.description}</span>
-            <AIPill />
-            <span style={mono(9.5, 500, T.watch)}>AWAITING REVIEW</span>
-            {task.confidence != null && task.confidence < 0.5 && (
-              <span style={mono(9.5, 500, T.outOfRange)}>low confidence — check carefully</span>
-            )}
+    <DsCard padding={isMobile ? 16 : '18px 22px'} gap={isMobile ? 12 : 14}>
+      {isMobile ? (
+        <>
+          {/* stacked queue card: header row, then full-width actions */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <IconTile bg={T.aiBg} fg={T.ai} size={38} radius={12}>
+              <IconFileText size={16} stroke={1.7} />
+            </IconTile>
+            <div style={{ flex: 1, minWidth: 0 }}>{headerBody}</div>
           </div>
-          <span style={mono(11, 400, T.tertiary)}>
-            {taskKind(task)} · extracted by AI · original document kept
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {task.confidence != null ? (
+
+          {excerptBlock}
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <PillButton
+              variant="primary"
+              size={13}
+              style={{ flex: '1 1 100%', width: '100%', minHeight: 44, padding: '12px 16px' }}
+              onClick={approve}
+              disabled={busy || !jsonValid}
+              disabledReason={jsonValid ? undefined : 'Fix the JSON before approving'}
+            >
+              Approve & commit
+            </PillButton>
+            <PillButton
+              variant="secondary"
+              size={13}
+              style={{ flex: '1 1 100%', width: '100%', minHeight: 44, padding: '12px 16px' }}
+              onClick={reject}
+              disabled={busy}
+            >
+              Reject
+            </PillButton>
+          </div>
+
+          {/* JSON editor collapses behind a toggle so the queue stays scannable */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${T.band}`, paddingTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => setShowJson((o) => !o)}
+              aria-expanded={showJson}
+              style={{
+                ...LINK_BUTTON,
+                minHeight: 44,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                textAlign: 'left',
+              }}
+            >
+              {showJson ? 'Hide proposed entry' : 'View proposed entry'}
+              <span style={mono(10, 400, T.quaternary)}>{showJson ? '▲' : '▼'}</span>
+            </button>
+            {showJson ? (
               <>
-                <div style={{ width: 120 }}>
-                  <ConfidenceBar value={task.confidence} />
+                <span style={{ fontSize: 12, fontWeight: 500, color: T.secondary }}>
+                  Proposed FHIR resource (edit before approving if needed)
+                </span>
+                {jsonEditor}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={openSource} style={{ ...LINK_BUTTON, minHeight: 44 }}>
+                    View source document
+                  </button>
+                  <span style={{ marginLeft: 'auto', ...mono(10, 400, T.quaternary) }}>original stored unchanged</span>
                 </div>
-                <span style={mono(9.5, 400, confColor)}>conf {task.confidence.toFixed(2)}</span>
               </>
-            ) : (
-              <span style={mono(9.5, 400, T.quaternary)}>conf n/a</span>
-            )}
-            {task.authored_on ? (
-              <span style={mono(9.5, 400, T.quaternary)}>· {fmtDate(task.authored_on)}</span>
             ) : null}
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <PillButton
-            variant="primary"
-            size={12.5}
-            style={{ padding: '7px 16px' }}
-            onClick={approve}
-            disabled={busy || !jsonValid}
-            disabledReason={jsonValid ? undefined : 'Fix the JSON before approving'}
-          >
-            Approve & commit
-          </PillButton>
-          <PillButton variant="secondary" size={12.5} onClick={reject} disabled={busy}>
-            Reject
-          </PillButton>
-        </div>
-      </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 16, alignItems: 'center' }}>
+            <IconTile bg={T.aiBg} fg={T.ai} size={38} radius={12}>
+              <IconFileText size={16} stroke={1.7} />
+            </IconTile>
+            {headerBody}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <PillButton
+                variant="primary"
+                size={12.5}
+                style={{ padding: '7px 16px' }}
+                onClick={approve}
+                disabled={busy || !jsonValid}
+                disabledReason={jsonValid ? undefined : 'Fix the JSON before approving'}
+              >
+                Approve & commit
+              </PillButton>
+              <PillButton variant="secondary" size={12.5} onClick={reject} disabled={busy}>
+                Reject
+              </PillButton>
+            </div>
+          </div>
 
-      {task.source_excerpt && (
-        <div
-          style={{
-            background: T.band,
-            borderRadius: 10,
-            padding: '10px 14px',
-            fontSize: 12,
-            color: T.secondary,
-            lineHeight: 1.5,
-          }}
-        >
-          {task.source_excerpt}
-        </div>
+          {excerptBlock}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${T.band}`, paddingTop: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: T.secondary }}>
+              Proposed FHIR resource (edit before approving if needed)
+            </span>
+            {jsonEditor}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button type="button" onClick={openSource} style={LINK_BUTTON}>
+                View source document
+              </button>
+              <span style={{ marginLeft: 'auto', ...mono(10, 400, T.quaternary) }}>original stored unchanged</span>
+            </div>
+          </div>
+        </>
       )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${T.band}`, paddingTop: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 500, color: T.secondary }}>
-          Proposed FHIR resource (edit before approving if needed)
-        </span>
-        <Textarea
-          value={json}
-          onChange={(e) => setJson(e.currentTarget.value)}
-          autosize
-          minRows={4}
-          maxRows={16}
-          styles={{
-            input: {
-              fontFamily: T.mono,
-              fontSize: 12,
-              border: `1px solid ${T.chip}`,
-              borderRadius: 10,
-              background: '#fbfbfa',
-            },
-          }}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button type="button" onClick={openSource} style={LINK_BUTTON}>
-            View source document
-          </button>
-          <span style={{ marginLeft: 'auto', ...mono(10, 400, T.quaternary) }}>original stored unchanged</span>
-        </div>
-      </div>
 
       <Modal
         opened={sourceText != null}
