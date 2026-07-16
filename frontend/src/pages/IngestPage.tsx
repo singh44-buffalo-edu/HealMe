@@ -1,21 +1,33 @@
-import { FileInput, Loader, Textarea } from '@mantine/core';
+import { FileInput, Loader, Modal, Select, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
 import { useMedplum } from '@medplum/react';
-import { IconDownload, IconFileImport, IconFileText, IconScan } from '@tabler/icons-react';
+import { IconDownload, IconFileImport, IconFileText, IconScan, IconSparkles } from '@tabler/icons-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReviewTask } from '../api';
+import { Link } from 'react-router';
+import type { ImportKind, ReviewTask } from '../api';
 import {
   approveTask,
   exportCsvUrl,
   exportFhirUrl,
+  getAiSettings,
   importStructured,
   listReviewTasks,
+  nlImport,
   rejectTask,
   uploadDocument,
 } from '../api';
-import { AIPill, CardTitle, ConfidenceBar, DsCard, PageHeader, PillButton, StatusDot } from '../components/ds';
+import {
+  AIPill,
+  BoundaryRow,
+  CardTitle,
+  ConfidenceBar,
+  DsCard,
+  PageHeader,
+  PillButton,
+  StatusDot,
+} from '../components/ds';
 import { T, mono } from '../tokens';
 
 // ---------------------------------------------------------------------------
@@ -186,7 +198,7 @@ export function IngestPage() {
     try {
       const result = await uploadDocument(file);
       notifications.show({
-        color: 'teal',
+        color: 'hmdGreen',
         title: 'Document stored',
         message:
           result.note ??
@@ -196,7 +208,7 @@ export function IngestPage() {
       setFile(null);
       await reload();
     } catch (err) {
-      notifications.show({ color: 'red', title: 'Upload failed', message: normalizeErrorString(err) });
+      notifications.show({ color: 'hmdRed', title: 'Upload failed', message: normalizeErrorString(err) });
     } finally {
       setUploading(false);
     }
@@ -272,6 +284,9 @@ export function IngestPage() {
           </AssuranceLine>
         </DsCard>
       </div>
+
+      {/* ---- Quick capture (natural language → proposals) ---- */}
+      <QuickCaptureCard onProposals={reload} />
 
       {/* ---- Review queue — the gate into the record ---- */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -379,18 +394,28 @@ export function IngestPage() {
 // Import card (deterministic structured importers)
 // ---------------------------------------------------------------------------
 
+const IMPORT_KIND_OPTIONS: { value: 'auto' | ImportKind; label: string }[] = [
+  { value: 'auto', label: 'Auto by extension' },
+  { value: 'fhir', label: 'FHIR bundle (.json)' },
+  { value: 'csv', label: 'Observations CSV' },
+  { value: 'apple', label: 'Apple Health (.xml)' },
+  { value: 'ccda', label: 'C-CDA (.xml/.cda/.ccda)' },
+  { value: 'hl7', label: 'HL7v2 ORU (.hl7)' },
+];
+
 function ImportCard() {
   const [file, setFile] = useState<File | null>(null);
+  const [kind, setKind] = useState<'auto' | ImportKind>('auto');
   const [busy, setBusy] = useState(false);
 
   const doImport = async () => {
     if (!file) return;
     setBusy(true);
     try {
-      const result = await importStructured(file);
+      const result = await importStructured(file, kind === 'auto' ? undefined : kind);
       const skippedTotal = Object.values(result.skipped ?? {}).reduce((a, b) => a + b, 0);
       notifications.show({
-        color: 'teal',
+        color: 'hmdGreen',
         title: 'Import finished',
         message: `${result.imported} imported, ${result.already_existed} already present${
           skippedTotal ? `, ${skippedTotal} skipped (unsupported/incomplete)` : ''
@@ -399,7 +424,7 @@ function ImportCard() {
       });
       setFile(null);
     } catch (err) {
-      notifications.show({ color: 'red', title: 'Import failed', message: normalizeErrorString(err) });
+      notifications.show({ color: 'hmdRed', title: 'Import failed', message: normalizeErrorString(err) });
     } finally {
       setBusy(false);
     }
@@ -413,15 +438,18 @@ function ImportCard() {
         </IconTile>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <CardTitle size={15}>Import records</CardTitle>
-          <span style={mono(10.5, 400, T.tertiary)}>FHIR bundle · CSV · Apple Health · deterministic, never duplicates</span>
+          <span style={mono(10.5, 400, T.tertiary)}>
+            FHIR bundle · CSV · Apple Health · C-CDA · HL7v2 · deterministic, never duplicates
+          </span>
         </div>
       </div>
       <span style={{ fontSize: 13, color: T.secondary, lineHeight: 1.55 }}>
         Bring history from elsewhere — a <b style={{ color: T.ink }}>FHIR R4 bundle</b> (.json) from a hospital
-        portal, an <b style={{ color: T.ink }}>observations CSV</b> (this app's export format), or an{' '}
-        <b style={{ color: T.ink }}>Apple Health</b> export.xml. Imports are deterministic: re-importing the
-        same file never duplicates, everything is tagged <span style={mono(11.5, 500, T.secondary)}>imported</span>{' '}
-        with provenance.
+        portal, an <b style={{ color: T.ink }}>observations CSV</b> (this app's export format), an{' '}
+        <b style={{ color: T.ink }}>Apple Health</b> export.xml, a <b style={{ color: T.ink }}>C-CDA</b> clinical
+        summary (.xml/.cda/.ccda — the standard US portal download), or <b style={{ color: T.ink }}>HL7v2 ORU</b>{' '}
+        lab results (.hl7). Imports are deterministic: re-importing the same file never duplicates, everything is
+        tagged <span style={mono(11.5, 500, T.secondary)}>imported</span> with provenance.
       </span>
       <span style={{ fontSize: 11.5, color: T.quaternary, lineHeight: 1.5 }}>
         Prefer hands-off? Drop files into <span style={mono(11, 500, T.tertiary)}>data/inbox/</span> — they are
@@ -430,17 +458,173 @@ function ImportCard() {
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
         <FileInput
           label="File"
-          placeholder="Choose .json / .csv / .xml"
-          accept=".json,.csv,.xml,application/json,text/csv,text/xml"
+          placeholder="Choose .json / .csv / .xml / .cda / .hl7"
+          accept=".json,.csv,.xml,.cda,.ccda,.hl7,application/json,text/csv,text/xml"
           value={file}
           onChange={setFile}
           w={320}
           clearable
         />
+        <Select
+          label="Format"
+          data={IMPORT_KIND_OPTIONS}
+          value={kind}
+          onChange={(v) => setKind((v as 'auto' | ImportKind) ?? 'auto')}
+          allowDeselect={false}
+          w={210}
+        />
         <PillButton variant="primary" onClick={doImport} disabled={!file || busy}>
           {busy ? 'Importing…' : 'Import'}
         </PillButton>
       </div>
+    </DsCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quick capture — natural-language note → AI-proposed entries (review-gated)
+// ---------------------------------------------------------------------------
+
+function cap(name: string): string {
+  return name ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+}
+
+/** Where the note goes, per the AI routing for quick capture. */
+type NlRoute = { local: boolean; provider: string } | 'off';
+
+/** ProviderNotConfigured surfaces as a 503 whose detail always points at AI Settings. */
+function isProviderNotConfigured(message: string): boolean {
+  return /AI Settings|Ollama not running|rejected the API key|No AI provider|^503\b/i.test(message);
+}
+
+function AiSettingsNote({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+      <StatusDot color={T.watch} size={7} />
+      <span style={{ fontSize: 12.5, color: T.secondary, lineHeight: 1.5 }}>
+        {children}{' '}
+        <Link to="/ai-settings" style={{ color: T.green, fontWeight: 500, textDecoration: 'none' }}>
+          Open AI settings
+        </Link>
+      </span>
+    </div>
+  );
+}
+
+function QuickCaptureCard({ onProposals }: { onProposals: () => void }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [needsProvider, setNeedsProvider] = useState<string | null>(null);
+  const [route, setRoute] = useState<NlRoute | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAiSettings()
+      .then((s) => {
+        if (cancelled) return;
+        const r = s.routing['nl-import'];
+        if (r === 'off') {
+          setRoute('off');
+        } else if (r === 'local') {
+          const local = s.providers.find((p) => p.is_local);
+          setRoute({ local: true, provider: cap(local?.name ?? 'ollama') });
+        } else {
+          setRoute({ local: false, provider: cap(s.cloud_provider ?? 'cloud provider') });
+        }
+      })
+      .catch(() => {
+        // quiet: the boundary row is simply absent; propose() still reports errors
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const propose = async () => {
+    const note = text.trim();
+    if (!note) return;
+    setBusy(true);
+    try {
+      const result = await nlImport(note);
+      if (result.proposals > 0) {
+        notifications.show({
+          color: 'hmdGreen',
+          message: `${result.proposals} proposal${result.proposals === 1 ? '' : 's'} added to the review queue`,
+        });
+        setText('');
+      } else {
+        notifications.show({
+          color: 'hmdAmber',
+          message: result.note ?? 'Nothing structurable found in that note',
+        });
+      }
+      setNeedsProvider(null);
+      onProposals();
+    } catch (err) {
+      const message = normalizeErrorString(err);
+      if (isProviderNotConfigured(message)) {
+        setNeedsProvider(message);
+      } else {
+        notifications.show({ color: 'hmdRed', title: 'Could not propose entries', message });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <DsCard ai padding={22} gap={13}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <IconTile bg={T.aiBg} fg={T.ai}>
+          <IconSparkles size={16} stroke={1.7} />
+        </IconTile>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CardTitle size={15}>Quick capture</CardTitle>
+            <AIPill />
+          </div>
+          <span style={mono(10.5, 400, T.tertiary)}>plain words in · proposed entries out · you approve</span>
+        </div>
+      </div>
+      <span style={{ fontSize: 13, color: T.secondary, lineHeight: 1.55 }}>
+        Jot down what happened in your own words — the AI turns it into proposed entries for the review
+        queue below.
+      </span>
+      <Textarea
+        value={text}
+        onChange={(e) => setText(e.currentTarget.value)}
+        placeholder="e.g. weighed 70.4 this morning, slept 6h, mild headache"
+        autosize
+        minRows={2}
+        maxRows={6}
+        styles={{
+          input: {
+            fontSize: 13,
+            border: `1px solid ${T.chip}`,
+            borderRadius: 10,
+            background: '#fbfbfa',
+          },
+        }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <PillButton variant="primary" onClick={propose} disabled={!text.trim() || busy}>
+          {busy ? 'Proposing…' : 'Propose entries'}
+        </PillButton>
+      </div>
+      {needsProvider ? (
+        <AiSettingsNote>Quick capture needs an AI model — {needsProvider}.</AiSettingsNote>
+      ) : route === 'off' ? (
+        <AiSettingsNote>AI is currently turned off for quick capture.</AiSettingsNote>
+      ) : route ? (
+        <BoundaryRow
+          local={route.local}
+          name={route.provider}
+          detail={route.local ? 'your note is structured on this device' : 'your note is sent to this provider'}
+        />
+      ) : null}
+      <AssuranceLine style={{ borderTop: `1px solid ${T.chip}`, paddingTop: 12 }}>
+        Nothing enters your record until you approve it below.
+      </AssuranceLine>
     </DsCard>
   );
 }
@@ -453,6 +637,8 @@ function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void
   const medplum = useMedplum();
   const [json, setJson] = useState(() => JSON.stringify(task.resource, null, 2));
   const [busy, setBusy] = useState(false);
+  // Plain-text sources (quick-capture notes) render inline instead of a browser tab.
+  const [sourceText, setSourceText] = useState<string | null>(null);
 
   // Visual gate only — approve() below still validates before any call.
   const jsonValid = useMemo(() => {
@@ -483,10 +669,10 @@ function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void
         throw new Error('The resource JSON is not valid JSON — fix it before approving');
       }
       const result = await approveTask(task.task_id, resource);
-      notifications.show({ color: 'teal', message: `Committed ${result.committed}` });
+      notifications.show({ color: 'hmdGreen', message: `Committed ${result.committed}` });
       onChanged();
     } catch (err) {
-      notifications.show({ color: 'red', title: 'Approve failed', message: normalizeErrorString(err) });
+      notifications.show({ color: 'hmdRed', title: 'Approve failed', message: normalizeErrorString(err) });
     } finally {
       setBusy(false);
     }
@@ -496,10 +682,10 @@ function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void
     setBusy(true);
     try {
       await rejectTask(task.task_id);
-      notifications.show({ color: 'yellow', message: 'Proposal rejected' });
+      notifications.show({ color: 'hmdAmber', message: 'Proposal rejected' });
       onChanged();
     } catch (err) {
-      notifications.show({ color: 'red', title: 'Reject failed', message: normalizeErrorString(err) });
+      notifications.show({ color: 'hmdRed', title: 'Reject failed', message: normalizeErrorString(err) });
     } finally {
       setBusy(false);
     }
@@ -512,12 +698,19 @@ function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void
         'DocumentReference',
         task.document_reference.split('/')[1]
       );
-      const url = doc.content?.[0]?.attachment?.url;
+      const attachment = doc.content?.[0]?.attachment;
+      const url = attachment?.url;
       if (!url) throw new Error('source document has no attachment');
       const blob = await medplum.download(url);
+      // Quick-capture sources are stored as text/plain — show the note inline
+      // (a raw text blob in a new tab is unreadable at best, a download at worst).
+      if (attachment.contentType?.startsWith('text/') || blob.type.startsWith('text/plain')) {
+        setSourceText(await blob.text());
+        return;
+      }
       window.open(URL.createObjectURL(blob), '_blank');
     } catch (err) {
-      notifications.show({ color: 'red', title: 'Could not open source', message: normalizeErrorString(err) });
+      notifications.show({ color: 'hmdRed', title: 'Could not open source', message: normalizeErrorString(err) });
     }
   };
 
@@ -614,6 +807,32 @@ function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void
           <span style={{ marginLeft: 'auto', ...mono(10, 400, T.quaternary) }}>original stored unchanged</span>
         </div>
       </div>
+
+      <Modal
+        opened={sourceText != null}
+        onClose={() => setSourceText(null)}
+        title={<span style={{ fontSize: 14.5, fontWeight: 600, letterSpacing: '-.01em' }}>Original note</span>}
+        centered
+        radius={18}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div
+            style={{
+              background: T.band,
+              borderRadius: 10,
+              padding: '12px 14px',
+              fontSize: 13,
+              color: T.ink,
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'break-word',
+            }}
+          >
+            {sourceText}
+          </div>
+          <span style={mono(10, 400, T.quaternary)}>exactly as you typed it · stored unchanged</span>
+        </div>
+      </Modal>
     </DsCard>
   );
 }

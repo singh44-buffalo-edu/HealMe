@@ -412,13 +412,28 @@ def main() -> None:
             slug,
         )
 
+    # Parent dispenser device — cartridges mount onto it via Device.parent
+    # (FHIR-MAPPING §5/§9; no Device.patient — R4 means affixed-to-body).
+    dispenser = entry(
+        {
+            "resourceType": "Device",
+            "status": "active",
+            "deviceName": [{"name": "Pi dispenser", "type": "user-friendly-name"}],
+            "type": {"coding": [{"system": CS_DEVICE, "code": "pill-dispenser"}]},
+            "meta": {"tag": [SEED_TAG]},
+        },
+        "device",
+        "pi-dispenser",
+    )
     cart_1 = cartridge(
         "cartridge-1", "Cartridge 1", med_a, capacity=30, remaining=12, threshold=5
     )
     cart_2 = cartridge(
         "cartridge-2", "Cartridge 2", med_b, capacity=30, remaining=3, threshold=5
     )
-    entries += [cart_1, cart_2]
+    for cart in (cart_1, cart_2):
+        cart["resource"]["parent"] = ref(dispenser)
+    entries += [dispenser, cart_1, cart_2]
 
     # --- 14 days of sample administrations ----------------------------------
     def administration(
@@ -886,6 +901,36 @@ def main() -> None:
             if put.status_code >= 400:
                 die(f"authoredOn backfill failed: {put.status_code}")
             log(f"backfilled authoredOn on MedicationRequest/{res['id']}")
+
+    # Existing cartridge Devices predate the parent dispenser — ensure the
+    # Device.parent mount (FHIR-MAPPING §5) on already-seeded cartridges.
+    find_disp = httpx.get(
+        base + "fhir/R4/Device",
+        params={"identifier": f"{IDENT}/device|pi-dispenser", "_count": 1},
+        headers=headers,
+        timeout=15,
+    ).json()
+    if find_disp.get("entry"):
+        disp_id = find_disp["entry"][0]["resource"]["id"]
+        carts = httpx.get(
+            base + "fhir/R4/Device",
+            params={"type": f"{CS_DEVICE}|medication-cartridge", "_count": 100},
+            headers=headers,
+            timeout=15,
+        ).json()
+        for e in carts.get("entry", []):
+            res = e["resource"]
+            if not res.get("parent"):
+                res["parent"] = {"reference": f"Device/{disp_id}"}
+                put = httpx.put(
+                    base + f"fhir/R4/Device/{res['id']}",
+                    json=res,
+                    headers=headers,
+                    timeout=15,
+                )
+                if put.status_code >= 400:
+                    die(f"cartridge parent mount failed: {put.status_code}")
+                log(f"mounted Device/{res['id']} onto the dispenser")
 
     # Persist the Patient id for the service/frontend
     find = httpx.get(

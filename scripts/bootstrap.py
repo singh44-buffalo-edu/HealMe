@@ -220,7 +220,9 @@ SERVICE_POLICY_RESOURCES: list[dict] = [
     {"resourceType": "Medication", "readonly": True},
     {"resourceType": "MedicationRequest", "readonly": True},
     {"resourceType": "Questionnaire", "readonly": True},
-    {"resourceType": "QuestionnaireResponse", "readonly": True},
+    # writable: service-side check-in replays exercise the QR→Observation bot
+    # through these credentials (smoke test does exactly this)
+    {"resourceType": "QuestionnaireResponse"},
     {"resourceType": "Observation"},
     {"resourceType": "MedicationAdministration"},
     {"resourceType": "MedicationStatement"},

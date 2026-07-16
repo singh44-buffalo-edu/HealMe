@@ -17,6 +17,10 @@ services:
     volumes:
       # Watched folder: files dropped in repo data/inbox are auto-imported
       - '../data/inbox:/data/inbox'
+      # BYOK keys + per-feature AI routing (0600 files, gitignored). Shared
+      # with the host so dev and container see the same AI settings.
+      # In-container REPO_ROOT resolves to / (app lives at /srv/app).
+      - '../data/secrets:/data/secrets'
     ports:
       - '8000:8000'
     depends_on:

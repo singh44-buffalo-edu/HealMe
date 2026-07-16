@@ -4,13 +4,18 @@ import {
   IconChartLine,
   IconCirclePlus,
   IconClipboardCheck,
+  IconDeviceDesktop,
   IconFiles,
   IconFlask,
   IconHeart,
+  IconHistory,
   IconLayoutDashboard,
+  IconLock,
+  IconMessageCircle,
   IconNotebook,
   IconPill,
   IconReportMedical,
+  IconSettings,
   IconSparkles,
   IconStack2,
   IconTimeline,
@@ -21,7 +26,12 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import { listReviewTasks } from './api';
 import { VaultChip } from './components/ds';
 import { T, mono } from './tokens';
+import { AccessControlPage } from './pages/AccessControlPage';
 import { AdherencePage } from './pages/AdherencePage';
+import { AiSettingsPage } from './pages/AiSettingsPage';
+import { AssistantPage } from './pages/AssistantPage';
+import { DevicesPage } from './pages/DevicesPage';
+import { HistoryPage } from './pages/HistoryPage';
 import { CartridgesPage } from './pages/CartridgesPage';
 import { CheckinExplorerPage } from './pages/CheckinExplorerPage';
 import { CheckinPage } from './pages/CheckinPage';
@@ -48,15 +58,24 @@ const NAV: NavItem[] = [
   { to: '/', label: 'Medications', icon: IconPill },
   { to: '/vitals', label: 'Vitals', icon: IconHeart },
   { to: '/labs', label: 'Labs', icon: IconFlask },
+  { to: '/devices', label: 'Devices', icon: IconDeviceDesktop },
   { to: '/trends', label: 'Trends', icon: IconChartLine },
   { to: '/correlations', label: 'Correlations', icon: IconSparkles },
   { to: '/timeline', label: 'Timeline', icon: IconTimeline },
   { to: '/checkin', label: 'Check-in', icon: IconClipboardCheck },
   { to: '/checkins', label: 'Check-in explorer', icon: IconNotebook },
   { to: '/log', label: 'Quick add', icon: IconCirclePlus },
+  { to: '/assistant', label: 'Assistant', icon: IconMessageCircle, ai: true },
   { to: '/cartridges', label: 'Cartridges', icon: IconStack2 },
   { to: '/ingest', label: 'Documents', icon: IconFiles },
   { to: '/review', label: 'Health Review', icon: IconReportMedical },
+];
+
+/** Bottom nav cluster: privacy & configuration surfaces. */
+const NAV_SETTINGS: NavItem[] = [
+  { to: '/history', label: 'History log', icon: IconHistory },
+  { to: '/access', label: 'Access control', icon: IconLock },
+  { to: '/ai-settings', label: 'AI settings', icon: IconSettings },
 ];
 
 function useReviewQueueCount(): number {
@@ -137,7 +156,15 @@ function Sidebar() {
       <VaultChip fullWidth />
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {NAV.map((item) => {
+        {[...NAV, null, ...NAV_SETTINGS].map((item, i) => {
+          if (item === null) {
+            return (
+              <span
+                key={`divider-${i}`}
+                style={{ height: 1, background: T.hairline, margin: '8px 10px' }}
+              />
+            );
+          }
           const active = location.pathname === item.to;
           const badge = item.to === '/ingest' && reviewCount > 0 ? reviewCount : undefined;
           const IconCmp = item.icon;
@@ -301,6 +328,11 @@ export function App() {
           <Route path="/cartridges" element={<CartridgesPage />} />
           <Route path="/ingest" element={<IngestPage />} />
           <Route path="/review" element={<ReviewPage />} />
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/assistant" element={<AssistantPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/access" element={<AccessControlPage />} />
+          <Route path="/ai-settings" element={<AiSettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
