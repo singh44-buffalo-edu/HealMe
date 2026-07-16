@@ -1,0 +1,188 @@
+# HealMeDaily — CLOUD deployment stack (self-contained; do NOT combine with
+# the other compose files). See DEPLOYMENT.md for the full walkthrough and the
+# privacy trade-offs of leaving the owner's machine.
+#
+#   docker compose -f infra/docker-compose.cloud.yml --env-file .env up -d --build
+#
+# Differences from the local stack, all deliberate:
+# - ONLY Caddy publishes host ports (80/443). Postgres, Redis, Medplum, the
+#   ai-service and the web build are reachable exclusively on the internal
+#   compose network — the health record is never directly exposed.
+# - Every URL is derived from HMD_DOMAIN (set in .env), served over TLS that
+#   Caddy provisions automatically via Let's Encrypt:
+#     app.{domain}      -> custom frontend        (healmedaily-web)
+#     fhir.{domain}     -> Medplum FHIR server    (medplum-server)
+#     medplum.{domain}  -> Medplum admin app      (medplum-app)
+#     ai.{domain}       -> ai-service             (healmedaily-ai)
+# - Passwords come from .env (HMD_DB_PASSWORD / HMD_REDIS_PASSWORD) — never
+#   ship the dev defaults to a public machine.
+# - Frontend VITE_* URLs are baked at build time from HMD_DOMAIN.
+#
+# Required .env keys (see .env.example "cloud" section):
+#   HMD_DOMAIN, HMD_DB_PASSWORD, HMD_REDIS_PASSWORD, HMD_ACME_EMAIL
+# plus the standard MEDPLUM_CLIENT_ID/SECRET etc. once bootstrapped.
+
+services:
+  caddy:
+    image: caddy:2
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      HMD_DOMAIN: ${HMD_DOMAIN:?set HMD_DOMAIN in .env}
+      HMD_ACME_EMAIL: ${HMD_ACME_EMAIL:?set HMD_ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - healmedaily-web
+      - medplum-server
+
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      - POSTGRES_USER=medplum
+      - POSTGRES_PASSWORD=${HMD_DB_PASSWORD:?set HMD_DB_PASSWORD in .env}
+    volumes:
+      - medplum-postgres-data:/var/lib/postgresql/data
+    command:
+      - 'postgres'
+      - '-c'
+      - 'listen_addresses=*'
+      - '-c'
+      - 'statement_timeout=60000'
+      - '-c'
+      - 'default_transaction_isolation=REPEATABLE READ'
+      - '-c'
+      - 'shared_preload_libraries=pg_stat_statements,auto_explain'
+    # No host port: the CDR is internal-only. Use `docker compose exec` for
+    # psql/pg_dump (scripts/backup.py handles this).
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U medplum']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    restart: always
+    command: redis-server --requirepass ${HMD_REDIS_PASSWORD:?set HMD_REDIS_PASSWORD in .env}
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      REDIS_PASSWORD: ${HMD_REDIS_PASSWORD}
+
+  medplum-server:
+    image: medplum/medplum-server:5.1.26 # keep pinned; upgrade deliberately
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # No host port — reached only via Caddy at https://fhir.{domain}
+    environment:
+      MEDPLUM_PORT: 8103
+      # Public URLs: presigned /storage links bind to MEDPLUM_BASE_URL, so it
+      # MUST be the URL browsers actually use (the Caddy hostname).
+      MEDPLUM_BASE_URL: 'https://fhir.${HMD_DOMAIN}/'
+      MEDPLUM_APP_BASE_URL: 'https://medplum.${HMD_DOMAIN}/'
+      MEDPLUM_STORAGE_BASE_URL: 'https://fhir.${HMD_DOMAIN}/storage/'
+
+      MEDPLUM_DATABASE_HOST: 'postgres'
+      MEDPLUM_DATABASE_PORT: 5432
+      MEDPLUM_DATABASE_DBNAME: 'medplum'
+      MEDPLUM_DATABASE_USERNAME: 'medplum'
+      MEDPLUM_DATABASE_PASSWORD: ${HMD_DB_PASSWORD}
+
+      MEDPLUM_REDIS_HOST: 'redis'
+      MEDPLUM_REDIS_PORT: 6379
+      MEDPLUM_REDIS_PASSWORD: ${HMD_REDIS_PASSWORD}
+
+      MEDPLUM_BINARY_STORAGE: 'file:./binary/'
+      MEDPLUM_SUPPORT_EMAIL: '"Medplum" <support@medplum.com>'
+      MEDPLUM_GOOGLE_CLIENT_ID: ''
+      MEDPLUM_GOOGLE_CLIENT_SECRET: ''
+      MEDPLUM_RECAPTCHA_SITE_KEY: ''
+      MEDPLUM_RECAPTCHA_SECRET_KEY: ''
+      MEDPLUM_MAX_JSON_SIZE: '1mb'
+      MEDPLUM_MAX_BATCH_SIZE: '50mb'
+      MEDPLUM_BOT_LAMBDA_ROLE_ARN: ''
+      MEDPLUM_BOT_LAMBDA_LAYER_NAME: 'medplum-bot-layer'
+      MEDPLUM_VM_CONTEXT_BOTS_ENABLED: 'true'
+      MEDPLUM_DEFAULT_BOT_RUNTIME_VERSION: 'vmcontext'
+      # Hardened CORS: only the two browser origins, never '*' in the cloud.
+      MEDPLUM_ALLOWED_ORIGINS: 'https://app.${HMD_DOMAIN},https://medplum.${HMD_DOMAIN}'
+      MEDPLUM_INTROSPECTION_ENABLED: 'true'
+      MEDPLUM_SHUTDOWN_TIMEOUT_MILLISECONDS: 30000
+      # Closed except for the one-time first-boot bootstrap (DEPLOYMENT.md).
+      MEDPLUM_REGISTER_ENABLED: 'false'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'fetch("http://localhost:8103/healthcheck").then(r => r.json()).then(console.log).catch(() => { process.exit(1); })',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  medplum-app:
+    image: medplum/medplum-app:5.1.26
+    restart: always
+    depends_on:
+      medplum-server:
+        condition: service_healthy
+    # The admin app needs to know where the API lives. Verify after first
+    # deploy: open https://medplum.{domain} and sign in — if it tries
+    # localhost:8103, check the image's runtime-config env support for your
+    # Medplum version (DEPLOYMENT.md, step 6).
+    environment:
+      MEDPLUM_BASE_URL: 'https://fhir.${HMD_DOMAIN}/'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  healmedaily-ai:
+    build: ../ai-service
+    restart: always
+    env_file: ../.env
+    environment:
+      # Server-to-server traffic stays on the internal network.
+      MEDPLUM_BASE_URL: 'http://medplum-server:8103/'
+      AI_ALLOWED_ORIGINS: 'https://app.${HMD_DOMAIN}'
+      INGEST_WATCH_DIR: '/data/inbox'
+    volumes:
+      - ../data/inbox:/data/inbox
+      # BYOK keys + AI routing (0600, gitignored). In-container REPO_ROOT
+      # resolves to / (see docker-compose.app.yml for the explanation).
+      - ../data/secrets:/data/secrets
+    depends_on:
+      medplum-server:
+        condition: service_healthy
+
+  healmedaily-web:
+    build:
+      context: ../frontend
+      args:
+        # Baked into the JS bundle at build time — rebuild after changing.
+        VITE_MEDPLUM_BASE_URL: 'https://fhir.${HMD_DOMAIN}/'
+        VITE_AI_SERVICE_URL: 'https://ai.${HMD_DOMAIN}/'
+    restart: always
+    depends_on:
+      - healmedaily-ai
+
+volumes:
+  medplum-postgres-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,40 @@
+# Caddy reverse proxy for the HealMeDaily cloud stack (docker-compose.cloud.yml).
+# Caddy provisions and renews Let's Encrypt certificates automatically for
+# every hostname below — you only need the four DNS A/AAAA records pointing at
+# this machine. {$HMD_DOMAIN} and {$HMD_ACME_EMAIL} come from the container env.
+
+{
+	email {$HMD_ACME_EMAIL}
+}
+
+# The app you use every day
+app.{$HMD_DOMAIN} {
+	reverse_proxy healmedaily-web:80
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+	}
+}
+
+# FHIR API (browser + ai-service OAuth flows). Large uploads pass through.
+fhir.{$HMD_DOMAIN} {
+	reverse_proxy medplum-server:8103
+	request_body {
+		max_size 220MB
+	}
+}
+
+# Medplum built-in admin UI — consider IP-allowlisting or basicauth (see
+# DEPLOYMENT.md hardening) since this is the resource browser for the record.
+medplum.{$HMD_DOMAIN} {
+	reverse_proxy medplum-app:3000
+}
+
+# ai-service (document upload/extraction, assistant, AI settings)
+ai.{$HMD_DOMAIN} {
+	reverse_proxy healmedaily-ai:8000
+	request_body {
+		max_size 220MB
+	}
+}
