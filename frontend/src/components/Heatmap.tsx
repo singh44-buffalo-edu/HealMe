@@ -1,12 +1,14 @@
-import { Box, Group, Stack, Text, Tooltip } from '@mantine/core';
+import { Tooltip } from '@mantine/core';
 import type { DaySummary, DayStatus } from '../fhir';
+import { T, mono } from '../tokens';
 
+/** Design-handoff adherence palette (tinted trio for large calendar cells). */
 const COLORS: Record<DayStatus, string> = {
-  'all-taken': 'var(--mantine-color-teal-6)',
-  partial: 'var(--mantine-color-yellow-5)',
-  'none-taken': 'var(--mantine-color-red-5)',
-  unlogged: 'var(--mantine-color-gray-3)',
-  'no-doses': 'var(--mantine-color-gray-1)',
+  'all-taken': T.heatTaken, // #ddf2e8
+  partial: T.heatLate, // #fbf3e4
+  'none-taken': T.heatMissed, // #f8dede
+  unlogged: T.hairline, // #e8e8e5 — scheduled but nothing logged
+  'no-doses': T.band, // #f4f4f2 — nothing scheduled
 };
 
 const LABELS: Record<DayStatus, string> = {
@@ -31,10 +33,10 @@ export function Heatmap({ days }: { days: DaySummary[] }) {
   }
 
   return (
-    <Stack gap="xs">
-      <Group gap={3} align="flex-start" wrap="nowrap" style={{ overflowX: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 3, alignItems: 'flex-start', overflowX: 'auto' }}>
         {weeks.map((week, wi) => (
-          <Stack key={wi} gap={3}>
+          <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {week.map((day, di) =>
               day ? (
                 <Tooltip
@@ -42,29 +44,33 @@ export function Heatmap({ days }: { days: DaySummary[] }) {
                   label={`${day.date}: ${day.taken}/${day.scheduled} taken — ${LABELS[day.status]}`}
                   withArrow
                 >
-                  <Box
-                    w={14}
-                    h={14}
-                    style={{ borderRadius: 3, background: COLORS[day.status], cursor: 'default' }}
+                  <div
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 3,
+                      background: COLORS[day.status],
+                      cursor: 'default',
+                    }}
                   />
                 </Tooltip>
               ) : (
-                <Box key={`pad-${di}`} w={14} h={14} />
+                <div key={`pad-${di}`} style={{ width: 14, height: 14 }} />
               )
             )}
-          </Stack>
+          </div>
         ))}
-      </Group>
-      <Group gap="sm">
+      </div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         {(Object.keys(LABELS) as DayStatus[]).map((status) => (
-          <Group key={status} gap={4}>
-            <Box w={10} h={10} style={{ borderRadius: 2, background: COLORS[status] }} />
-            <Text size="xs" c="dimmed">
-              {LABELS[status]}
-            </Text>
-          </Group>
+          <span key={status} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span
+              style={{ width: 10, height: 10, borderRadius: 2, background: COLORS[status] }}
+            />
+            <span style={mono(10, 400, T.tertiary)}>{LABELS[status]}</span>
+          </span>
         ))}
-      </Group>
-    </Stack>
+      </div>
+    </div>
   );
 }

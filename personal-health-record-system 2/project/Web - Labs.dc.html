@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Labs" style="display:grid; grid-template-columns:232px 1fr; min-height:100vh; min-width:1280px">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="background:#FFFFFF; border-right:1px solid #E8E8E5; padding:24px 14px; display:flex; flex-direction:column; gap:24px; position:sticky; top:0; height:100vh; box-sizing:border-box">
+    <div style="display:flex; align-items:center; gap:10px; padding:0 10px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font-size:15px; font-weight:600; letter-spacing:-.015em">HealMeDaily</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 12px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+    </div>
+    <nav style="display:flex; flex-direction:column; gap:2px">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="13">
+        <a href="#nav" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:12px; font-size:13.5px; font-weight:{{ item.weight }}; color:{{ item.color }}; background:{{ item.bg }}">
+          <span style="width:18px; text-align:center; font-size:13px">{{ item.icon }}</span>{{ item.label }}
+          <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:10px; padding:2px 7px">{{ item.badge }}</span>
+          </sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px; padding:0 10px">
+      <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">128,443 records · backup 03:00</span>
+      <span style="font-size:12px; color:#86868B">Arun Verma · <a href="#settings">Settings</a></span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main style="padding:32px 40px 64px; display:flex; flex-direction:column; gap:20px; max-width:1180px; box-sizing:border-box; width:100%">
+
+    <!-- top bar -->
+    <div style="display:flex; align-items:flex-start; gap:16px">
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:26px; font-weight:600; letter-spacing:-.02em">Labs</span>
+        <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">31 panels · 4 years · sources: Quest, hospital portal, scans</span>
+      </div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:10px">
+        <div style="display:flex; gap:2px; background:#F0F0EE; border-radius:20px; padding:2px">
+          <span style="font:500 11px 'IBM Plex Mono',monospace; padding:6px 14px; border-radius:16px; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,.08)">By panel</span>
+          <span style="font:500 11px 'IBM Plex Mono',monospace; padding:6px 14px; color:#86868B">By date</span>
+          <span style="font:500 11px 'IBM Plex Mono',monospace; padding:6px 14px; color:#86868B">Flagged</span>
+        </div>
+        <button onClick="{{ noop }}" style="border:none; cursor:pointer; display:flex; align-items:center; gap:7px; background:#0F8A63; color:#fff; border-radius:20px; padding:9px 18px; font-size:13px; font-weight:600; font-family:inherit">＋ Add results</button>
+      </div>
+    </div>
+
+    <!-- hero trend: the metric that matters for Arun -->
+    <div style="background:#FFFFFF; border-radius:18px; padding:22px 26px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <div style="display:flex; align-items:center; gap:12px">
+        <span style="width:8px; height:8px; border-radius:50%; background:#E8B10E"></span>
+        <span style="font-size:16px; font-weight:600; letter-spacing:-.015em">HbA1c <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">%</span></span>
+        <span style="display:flex; align-items:baseline; gap:5px; margin-left:6px">
+          <span style="font:500 24px 'IBM Plex Mono',monospace; letter-spacing:-.02em; color:#C7811B">5.8</span>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">Mar 2026 · ▾0.4 in 12 mo</span>
+        </span>
+        <div style="margin-left:auto; display:flex; gap:2px; background:#F0F0EE; border-radius:20px; padding:2px">
+          <span style="font:500 11px 'IBM Plex Mono',monospace; padding:4px 12px; color:#86868B">1Y</span>
+          <span style="font:500 11px 'IBM Plex Mono',monospace; padding:4px 12px; border-radius:16px; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,.08)">3Y</span>
+          <span style="font:500 11px 'IBM Plex Mono',monospace; padding:4px 12px; color:#86868B">ALL</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 1060 150" style="width:100%; height:150px; display:block">
+        <rect x="0" y="86" width="1060" height="36" rx="5" fill="#F4F4F2"></rect>
+        <text x="10" y="102" font-family="IBM Plex Mono" font-size="10" fill="#AEAEB2">REF 4.0–5.6</text>
+        <polyline points="0,34 130,38 260,44 390,42 520,52 650,58 780,66 880,74" fill="none" stroke="#1D1D1F" stroke-width="2.2" stroke-linecap="round"></polyline>
+        <circle cx="0" cy="34" r="3" fill="#1D1D1F"></circle><circle cx="130" cy="38" r="3" fill="#1D1D1F"></circle><circle cx="260" cy="44" r="3" fill="#1D1D1F"></circle><circle cx="390" cy="42" r="3" fill="#1D1D1F"></circle><circle cx="520" cy="52" r="3" fill="#1D1D1F"></circle><circle cx="650" cy="58" r="3" fill="#1D1D1F"></circle><circle cx="780" cy="66" r="3" fill="#1D1D1F"></circle>
+        <circle cx="880" cy="74" r="4" fill="#C7811B"></circle>
+        <text x="892" y="70" font-family="IBM Plex Mono" font-size="11" fill="#1D1D1F">5.8</text>
+        <path d="M880,74 L1060,88 L1060,104 L880,80 Z" fill="#5E5CE6" opacity=".12"></path>
+        <path d="M880,74 L1060,96" stroke="#5E5CE6" stroke-width="1.5" stroke-dasharray="4 4" fill="none"></path>
+        <text x="1055" y="120" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#4B49C8">✦ 5.4 BY OCT · conf 0.87</text>
+        <text x="10" y="20" font-family="IBM Plex Mono" font-size="9" fill="#AEAEB2">6.4 · DX PREDIABETES 2022</text>
+      </svg>
+      <div style="display:flex; gap:16px; font:400 10px 'IBM Plex Mono',monospace; color:#86868B">
+        <span style="color:#1D1D1F">— measured · 8 draws</span><span>▬ population ref</span><span style="color:#5E5CE6">▨ AI forecast ±CI</span>
+        <a href="#evidence" style="margin-left:auto; font-size:11px; color:#5E5CE6">✦ forecast evidence →</a>
+      </div>
+    </div>
+
+    <!-- panel groups -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start">
+      <sc-for list="{{ panels }}" as="p" hint-placeholder-count="4">
+        <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+          <div style="display:flex; align-items:center; gap:10px; padding:16px 22px 10px">
+            <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">{{ p.name }}</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ p.meta }}</span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:5px"><span style="width:6px; height:6px; border-radius:50%; background:{{ p.dot }}"></span><span style="font:500 9.5px 'IBM Plex Mono',monospace; color:{{ p.dot }}">{{ p.state }}</span></span>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid; grid-template-columns:1.3fr auto 1fr auto; gap:14px; align-items:center; padding:10px 22px; border-top:1px solid #F4F4F2">
+              <span style="font-size:13px; font-weight:500; letter-spacing:-.01em">{{ r.name }}</span>
+              <span style="display:flex; align-items:baseline; gap:4px"><span style="font:500 14px 'IBM Plex Mono',monospace; color:{{ r.valColor }}">{{ r.val }}</span><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ r.unit }}</span></span>
+              <svg viewBox="0 0 120 16" style="width:120px; height:16px; display:block">
+                <rect x="0" y="4" width="120" height="8" rx="4" fill="#F4F4F2"></rect>
+                <rect x="{{ r.refX }}" y="4" width="{{ r.refW }}" height="8" rx="4" fill="#E4EFE9"></rect>
+                <circle cx="{{ r.dotX }}" cy="8" r="3.4" fill="{{ r.valColor }}"></circle>
+              </svg>
+              <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ r.trend }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex; align-items:center; gap:8px; padding:11px 22px; background:#FAFAF9; border-top:1px solid #F4F4F2">
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">{{ p.source }}</span>
+            <a href="#panel" style="margin-left:auto; font-size:12px; font-weight:500">History →</a>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const active = (label) => label === 'Labs';
+    return {
+      noop: () => {},
+      nav: [
+        { icon: '◈', label: 'Dashboard' },
+        { icon: '♥', label: 'Vitals' },
+        { icon: '⚗', label: 'Labs' },
+        { icon: '⊞', label: 'Devices' },
+        { icon: '✦', label: 'AI Insights', badge: '3' },
+        { icon: '☰', label: 'Timeline' },
+        { icon: '⌸', label: 'Explorer' },
+        { icon: '▤', label: 'Documents' },
+        { icon: '◌', label: 'Medications' },
+        { icon: '☾', label: 'Sleep & Activity' },
+        { icon: '✎', label: 'Journal' },
+        { icon: '✉', label: 'Assistant' },
+        { icon: '⇄', label: 'Connections' },
+      ].map((n) => ({
+        ...n,
+        weight: active(n.label) ? 600 : 500,
+        color: active(n.label) ? '#1D1D1F' : '#6E6E73',
+        bg: active(n.label) ? '#F0F0EE' : 'transparent',
+        badge: n.badge || false,
+      })),
+      panels: [
+        {
+          name: 'Metabolic', meta: 'Mar 12 2026', dot: '#C7811B', state: '2 ABOVE REF', source: 'Quest Diagnostics · scanned PDF · reviewed by you',
+          rows: [
+            { name: 'HbA1c', val: '5.8', unit: '%', valColor: '#C7811B', refX: 10, refW: 62, dotX: 82, trend: '▾ improving' },
+            { name: 'Fasting glucose', val: '98', unit: 'mg/dL', valColor: '#1D1D1F', refX: 20, refW: 70, dotX: 86, trend: '→ steady' },
+            { name: 'Fasting insulin', val: '11.2', unit: 'µIU/mL', valColor: '#1D1D1F', refX: 14, refW: 76, dotX: 58, trend: '▾ improving' },
+            { name: 'HOMA-IR ✦', val: '2.7', unit: '', valColor: '#4B49C8', refX: 12, refW: 56, dotX: 74, trend: 'derived' },
+          ],
+        },
+        {
+          name: 'Lipids', meta: 'Mar 12 2026', dot: '#C7811B', state: '1 ABOVE REF', source: 'Quest Diagnostics · scanned PDF · reviewed by you',
+          rows: [
+            { name: 'Total cholesterol', val: '182', unit: 'mg/dL', valColor: '#1D1D1F', refX: 8, refW: 78, dotX: 70, trend: '→ steady' },
+            { name: 'LDL (calc)', val: '112', unit: 'mg/dL', valColor: '#C7811B', refX: 8, refW: 60, dotX: 78, trend: '▴ up 6' },
+            { name: 'HDL', val: '48', unit: 'mg/dL', valColor: '#1D1D1F', refX: 38, refW: 74, dotX: 52, trend: '▴ improving' },
+            { name: 'Triglycerides', val: '138', unit: 'mg/dL', valColor: '#1D1D1F', refX: 6, refW: 80, dotX: 74, trend: '▾ improving' },
+          ],
+        },
+        {
+          name: 'Kidney & electrolytes', meta: 'Mar 12 2026', dot: '#1E9E6A', state: 'ALL IN RANGE', source: 'Quest Diagnostics · scanned PDF · reviewed by you',
+          rows: [
+            { name: 'Creatinine', val: '0.9', unit: 'mg/dL', valColor: '#1D1D1F', refX: 18, refW: 72, dotX: 48, trend: '→ steady' },
+            { name: 'eGFR', val: '104', unit: 'mL/min', valColor: '#1D1D1F', refX: 34, refW: 80, dotX: 88, trend: '→ steady' },
+            { name: 'Sodium', val: '140', unit: 'mmol/L', valColor: '#1D1D1F', refX: 24, refW: 68, dotX: 56, trend: '→ steady' },
+            { name: 'Potassium', val: '4.2', unit: 'mmol/L', valColor: '#1D1D1F', refX: 22, refW: 70, dotX: 54, trend: '→ watch w/ lisinopril' },
+          ],
+        },
+        {
+          name: 'Thyroid & vitamins', meta: 'Nov 4 2025', dot: '#1E9E6A', state: 'ALL IN RANGE', source: 'Hospital portal · SMART-on-FHIR import',
+          rows: [
+            { name: 'TSH', val: '1.8', unit: 'mIU/L', valColor: '#1D1D1F', refX: 14, refW: 74, dotX: 44, trend: '→ steady' },
+            { name: 'Vitamin D 25-OH', val: '38', unit: 'ng/mL', valColor: '#1D1D1F', refX: 28, refW: 76, dotX: 60, trend: '▴ supplement working' },
+            { name: 'B12', val: '512', unit: 'pg/mL', valColor: '#1D1D1F', refX: 16, refW: 78, dotX: 58, trend: '→ steady' },
+            { name: 'Ferritin', val: '96', unit: 'ng/mL', valColor: '#1D1D1F', refX: 12, refW: 82, dotX: 50, trend: '→ steady' },
+          ],
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

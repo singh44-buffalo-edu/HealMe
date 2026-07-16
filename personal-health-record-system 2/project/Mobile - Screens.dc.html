@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:32px; padding:56px; align-items:flex-start">
+
+  <header style="display:flex; flex-direction:column; gap:8px">
+    <div style="display:flex; align-items:center; gap:12px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">HealMeDaily · Mobile — <a href="#4a">4a</a> review · <a href="#4b">4b</a> insights · <a href="#4c">4c</a> assistant · <a href="#4d">4d</a> health hub · <a href="#4e">4e</a> caretaker · <a href="#4f">4f</a> vault · <a href="#2a">2a</a> today · <a href="#2b">2b</a> glucose · <a href="#2c">2c</a> capture · <a href="#2d">2d</a> dose</span>
+    </div>
+    <p style="margin:0; max-width:640px; font-size:14px; line-height:1.6; color:#6E6E73">The phone is the capture device and the glanceable companion. Same vocabulary as web: vault chip, data classes, nothing enters unapproved.</p>
+  </header>
+
+  <div style="display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start">
+
+    <!-- ============ 4a · REVIEW QUEUE ============ -->
+    <div id="4a" data-screen-label="Mobile Review Queue" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">4a</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Review queue — swipe to approve</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; gap:12px; padding:10px 18px 40px; background:#EFEFED; min-height:100%; box-sizing:border-box">
+          <div style="display:flex; align-items:center; gap:10px; padding-top:4px">
+            <span style="font-size:13px; color:#0F8A63">‹ Today</span>
+            <div style="display:flex; flex-direction:column; gap:0; margin:0 auto; align-items:center">
+              <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Review queue</span>
+              <span style="font:400 9px 'IBM Plex Mono',monospace; color:#86868B">5 waiting · nothing enters unapproved</span>
+            </div>
+            <span style="font:500 10px 'IBM Plex Mono',monospace; color:#0F8A63">✓ 3 easy</span>
+          </div>
+          <!-- bulk -->
+          <div style="background:#0F8A63; border-radius:16px; padding:13px 16px; display:flex; align-items:center; gap:10px; color:#fff">
+            <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">Approve 3 high-confidence</span>
+            <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#BFE9D9; margin-left:auto">Oura ×412 · CSV ×90 · weight ×2</span>
+          </div>
+          <!-- card w/ swipe hint -->
+          <div style="position:relative; border-radius:16px; overflow:hidden">
+            <div style="position:absolute; inset:0; background:#1E9E6A; display:flex; align-items:center; padding-left:16px"><span style="color:#fff; font-size:14px; font-weight:600">✓ Approve</span></div>
+            <div style="position:relative; background:#FFFFFF; border-radius:16px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; transform:translateX(64px); box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.06)">
+              <div style="display:flex; align-items:center; gap:8px">
+                <span style="width:30px; height:30px; border-radius:9px; background:#E7F4EF; color:#0F8A63; display:grid; place-items:center; font-size:13px">▤</span>
+                <div style="display:flex; flex-direction:column; gap:1px">
+                  <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">Lipid panel — Quest</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">6 obs · conf 0.95</span>
+                </div>
+                <span style="margin-left:auto; font:500 9px 'IBM Plex Mono',monospace; color:#1E9E6A">READY</span>
+              </div>
+            </div>
+          </div>
+          <sc-for list="{{ mQueue }}" as="q" hint-placeholder-count="3">
+            <div style="background:#FFFFFF; border-radius:16px; padding:14px 16px; display:flex; flex-direction:column; gap:9px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05); border:{{ q.border }}">
+              <div style="display:flex; align-items:center; gap:8px">
+                <span style="width:30px; height:30px; border-radius:9px; background:{{ q.iconBg }}; color:{{ q.iconFg }}; display:grid; place-items:center; font-size:13px">{{ q.icon }}</span>
+                <div style="display:flex; flex-direction:column; gap:1px; min-width:0">
+                  <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">{{ q.title }}</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">{{ q.meta }}</span>
+                </div>
+                <span style="margin-left:auto; font:500 9px 'IBM Plex Mono',monospace; color:{{ q.stateColor }}; white-space:nowrap">{{ q.state }}</span>
+              </div>
+              <div style="display:flex; gap:8px">
+                <span style="flex:1; text-align:center; font-size:12px; font-weight:600; color:#fff; background:{{ q.btnBg }}; border-radius:16px; padding:9px 0">{{ q.btn }}</span>
+                <span style="flex:1; text-align:center; font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:9px 0">Details</span>
+              </div>
+            </div>
+          </sc-for>
+          <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2; text-align:center">swipe right to approve · swipe left to reject · originals always kept</span>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 4b · INSIGHTS ============ -->
+    <div id="4b" data-screen-label="Mobile Insights" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">4b</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Insights — evidence as bottom sheet</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; padding:10px 0 0; background:#EFEFED; min-height:100%; box-sizing:border-box; position:relative">
+          <div style="display:flex; align-items:center; gap:10px; padding:4px 18px 12px">
+            <span style="font-size:19px; font-weight:600; letter-spacing:-.02em">Insights</span>
+            <span style="font:500 8.5px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:16px; padding:2px 7px">✦ 3 OPEN</span>
+            <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#1E9E6A">⌂ local AI</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px; padding:0 18px; opacity:.45">
+            <div style="background:#FFFFFF; border-radius:16px; padding:13px 15px; display:flex; flex-direction:column; gap:6px">
+              <div style="display:flex; gap:7px"><span style="font:500 9px 'IBM Plex Mono',monospace; color:#5E5CE6">INFO</span><span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">Jul 13</span></div>
+              <span style="font-size:12.5px; font-weight:500; line-height:1.4">Late meals correlate with +12 mg/dL morning glucose.</span>
+            </div>
+            <div style="background:#FFFFFF; border-radius:16px; padding:13px 15px; display:flex; flex-direction:column; gap:6px">
+              <div style="display:flex; gap:7px"><span style="font:500 9px 'IBM Plex Mono',monospace; color:#1E9E6A">POSITIVE</span><span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">Jul 11</span></div>
+              <span style="font-size:12.5px; font-weight:500; line-height:1.4">Projected HbA1c 5.4% by Oct if trend holds.</span>
+            </div>
+          </div>
+          <!-- bottom sheet: evidence -->
+          <div style="position:absolute; left:0; right:0; bottom:0; background:#FFFFFF; border-radius:22px 22px 0 0; padding:12px 20px 34px; display:flex; flex-direction:column; gap:12px; box-shadow:0 -8px 40px rgba(0,0,0,.14)">
+            <span style="width:36px; height:4px; border-radius:2px; background:#D9D9D5; align-self:center"></span>
+            <div style="display:flex; align-items:center; gap:7px">
+              <span style="font:500 8.5px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:16px; padding:2px 7px">✦ FLAG</span>
+              <span style="font:500 9px 'IBM Plex Mono',monospace; color:#C7811B">MODERATE</span>
+              <span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">conf 0.84</span>
+            </div>
+            <span style="font-size:15px; font-weight:600; letter-spacing:-.01em; line-height:1.35">Resting HR up 8% over 7 days vs. your baseline.</span>
+            <svg viewBox="0 0 354 64" style="width:100%; height:64px; display:block">
+              <rect x="0" y="28" width="354" height="20" rx="4" fill="#F4F4F2"></rect>
+              <rect x="0" y="32" width="354" height="10" rx="3" fill="none" stroke="#5E5CE6" stroke-dasharray="3 4" stroke-width="1" opacity=".45"></rect>
+              <polyline points="0,40 40,39 80,40 120,38 160,36 200,33 240,30 280,27 320,24 354,22" fill="none" stroke="#FF375F" stroke-width="1.8" stroke-linecap="round"></polyline>
+              <circle cx="354" cy="22" r="3" fill="#FF375F"></circle>
+            </svg>
+            <div style="display:flex; flex-direction:column; gap:6px">
+              <sc-for list="{{ mEvidence }}" as="e" hint-placeholder-count="3">
+                <div style="display:flex; align-items:center; gap:9px; border:1px solid #F0F0EE; border-radius:11px; padding:9px 12px">
+                  <span style="font-size:13px">{{ e.icon }}</span>
+                  <span style="font-size:12px; font-weight:500">{{ e.title }}</span>
+                  <span style="margin-left:auto; font:500 11px 'IBM Plex Mono',monospace">{{ e.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; gap:8px">
+              <span style="flex:1; text-align:center; font-size:12.5px; font-weight:600; color:#fff; background:#1D1D1F; border-radius:16px; padding:10px 0">Track this</span>
+              <span style="flex:1; text-align:center; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:10px 0">Not useful</span>
+            </div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 4c · ASSISTANT ============ -->
+    <div id="4c" data-screen-label="Mobile Assistant" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">4c</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Assistant — cited answers, thumb-reach composer</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; padding:10px 0 30px; background:#EFEFED; min-height:100%; box-sizing:border-box">
+          <div style="display:flex; align-items:center; gap:8px; padding:4px 18px 10px">
+            <span style="font-size:19px; font-weight:600; letter-spacing:-.02em">Assistant</span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:5px; background:#FFFFFF; border-radius:14px; padding:4px 10px"><span style="width:5px; height:5px; border-radius:50%; background:#1E9E6A"></span><span style="font:500 9px 'IBM Plex Mono',monospace">⌂ local</span></span>
+          </div>
+          <div style="flex:1; display:flex; flex-direction:column; gap:12px; padding:6px 18px">
+            <div style="align-self:flex-end; max-width:270px; background:#1D1D1F; color:#F5F5F4; border-radius:16px 16px 4px 16px; padding:10px 14px; font-size:13px; line-height:1.45">Which labs are due before my Jul 21 visit?</div>
+            <div style="align-self:flex-start; max-width:320px; display:flex; flex-direction:column; gap:7px">
+              <div style="display:flex; align-items:center; gap:6px">
+                <span style="width:20px; height:20px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:9px; font-weight:600">H</span>
+                <span style="font:500 8px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:14px; padding:2px 6px">✦ AI</span>
+                <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#AEAEB2">read 12 resources · local</span>
+              </div>
+              <div style="background:#FFFFFF; border-radius:4px 16px 16px 16px; padding:13px 15px; display:flex; flex-direction:column; gap:9px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+                <span style="font-size:13px; line-height:1.55">One draw is already ordered: the <strong>quarterly fasting panel</strong> for Jul 18 <span style="font:500 9px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:8px; padding:1px 5px">1</span>. Dr. Rao also asked to recheck <strong>potassium</strong> with your lisinopril <span style="font:500 9px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:8px; padding:1px 5px">2</span>.</span>
+                <div style="display:flex; flex-direction:column; gap:5px; border-top:1px solid #F4F4F2; padding-top:9px">
+                  <span style="display:flex; align-items:center; gap:7px; font-size:11px; color:#6E6E73"><span style="font:500 9px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:8px; padding:1px 6px">1</span>Lab order · Jul 2 · Dr. Rao</span>
+                  <span style="display:flex; align-items:center; gap:7px; font-size:11px; color:#6E6E73"><span style="font:500 9px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:8px; padding:1px 6px">2</span>Visit note · Feb 3 · monitoring plan</span>
+                </div>
+              </div>
+              <div style="display:flex; gap:6px">
+                <span style="font-size:10.5px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:12px; padding:5px 10px; box-shadow:0 1px 2px rgba(0,0,0,.05)">Remind me Jul 17</span>
+                <span style="font-size:10.5px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:12px; padding:5px 10px; box-shadow:0 1px 2px rgba(0,0,0,.05)">Wrong?</span>
+              </div>
+            </div>
+          </div>
+          <div style="padding:0 14px">
+            <div style="background:#FFFFFF; border-radius:20px; padding:11px 14px; display:flex; align-items:center; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)">
+              <span style="color:#AEAEB2; font-size:13px">＋</span>
+              <span style="font-size:13px; color:#AEAEB2; flex:1">Ask your record…</span>
+              <span style="width:28px; height:28px; border-radius:50%; background:#0F8A63; color:#fff; font-size:12px; display:grid; place-items:center">↑</span>
+            </div>
+            <p style="margin:6px 0 0; font:400 8.5px 'IBM Plex Mono',monospace; color:#AEAEB2; text-align:center">not medical advice · reads only, never writes</p>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 4d · HEALTH HUB ============ -->
+    <div id="4d" data-screen-label="Mobile Health Hub" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">4d</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Health hub — full parity via the More tab</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; gap:12px; padding:10px 18px 90px; background:#EFEFED; min-height:100%; box-sizing:border-box; position:relative">
+          <div style="display:flex; align-items:center; gap:10px; padding-top:4px">
+            <span style="font-size:19px; font-weight:600; letter-spacing:-.02em">Your health</span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:6px; background:#FFFFFF; border-radius:16px; padding:5px 10px; box-shadow:0 1px 2px rgba(0,0,0,.04)"><span style="width:5px; height:5px; border-radius:50%; background:#1E9E6A"></span><span style="font:500 9.5px 'IBM Plex Mono',monospace">⌂ 128k records</span></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; background:#FFFFFF; border-radius:14px; padding:10px 14px; box-shadow:0 1px 2px rgba(0,0,0,.04)">
+            <span style="color:#AEAEB2; font-size:12px">⌕</span>
+            <span style="font-size:12.5px; color:#AEAEB2">Search everything…</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+            <sc-for list="{{ mHub }}" as="h" hint-placeholder-count="10">
+              <div style="background:#FFFFFF; border-radius:16px; padding:14px 15px; display:flex; flex-direction:column; gap:7px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+                <div style="display:flex; align-items:center; gap:8px">
+                  <span style="width:28px; height:28px; border-radius:9px; background:{{ h.iconBg }}; color:{{ h.iconFg }}; display:grid; place-items:center; font-size:13px">{{ h.icon }}</span>
+                  <sc-if value="{{ h.badge }}" hint-placeholder-val="{{ false }}">
+                    <span style="margin-left:auto; font:500 8.5px 'IBM Plex Mono',monospace; color:{{ h.badgeFg }}; background:{{ h.badgeBg }}; border-radius:10px; padding:2px 6px">{{ h.badge }}</span>
+                  </sc-if>
+                </div>
+                <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">{{ h.name }}</span>
+                <span style="font:400 9px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.45">{{ h.sub }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <!-- tab bar -->
+          <div style="position:absolute; left:14px; right:14px; bottom:26px; background:rgba(255,255,255,.92); backdrop-filter:blur(14px); border-radius:24px; padding:9px 20px; display:flex; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,.08)">
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px; color:#AEAEB2"><span style="font-size:15px">◈</span><span style="font:500 8.5px 'IBM Plex Mono',monospace">Today</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px; color:#AEAEB2"><span style="font-size:15px">♥</span><span style="font:500 8.5px 'IBM Plex Mono',monospace">Vitals</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px"><span style="width:38px; height:38px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:17px; margin-top:-14px; box-shadow:0 4px 12px rgba(15,138,99,.35)">＋</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px; color:#AEAEB2"><span style="font-size:15px">✦</span><span style="font:500 8.5px 'IBM Plex Mono',monospace">Insights</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px"><span style="font-size:15px">☰</span><span style="font:500 8.5px 'IBM Plex Mono',monospace; color:#1D1D1F">More</span></span>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 4e · CARETAKER ============ -->
+    <div id="4e" data-screen-label="Mobile Caretaker" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">4e</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Caretaker — Ma's card, alert first</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; gap:12px; padding:10px 18px 40px; background:#EFEFED; min-height:100%; box-sizing:border-box">
+          <div style="display:flex; align-items:center; gap:10px; padding-top:4px">
+            <span style="font-size:13px; color:#0F8A63">‹ You</span>
+            <div style="display:flex; align-items:center; gap:8px; margin:0 auto">
+              <span style="width:26px; height:26px; border-radius:50%; background:#F3E8FB; color:#8E44AD; display:grid; place-items:center; font-size:10px; font-weight:600">SV</span>
+              <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Ma</span>
+            </div>
+            <span style="font-size:13px; color:#0F8A63">✆</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:7px; background:#FBF3E4; border-radius:14px; padding:7px 12px; align-self:center">
+            <span style="width:5px; height:5px; border-radius:50%; background:#C7811B"></span>
+            <span style="font:500 9px 'IBM Plex Mono',monospace; color:#8A5A13">her vault · she shares meds, vitals &amp; alerts with you</span>
+          </div>
+          <!-- alert -->
+          <div style="background:#FFFFFF; border-radius:16px; padding:15px 16px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05); border:1.5px solid #F3E3C8">
+            <div style="display:flex; align-items:center; gap:9px">
+              <span style="width:30px; height:30px; border-radius:9px; background:#FBF3E4; color:#C7811B; display:grid; place-items:center; font-size:14px">⚠</span>
+              <div style="display:flex; flex-direction:column; gap:1px">
+                <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">Evening metformin — 2h late</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">reminded twice · kitchen motion 19:20</span>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px">
+              <span style="flex:1; text-align:center; font-size:12.5px; font-weight:600; color:#fff; background:#1D1D1F; border-radius:16px; padding:10px 0">Send reminder</span>
+              <span style="flex:1; text-align:center; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:10px 0">Call her</span>
+            </div>
+            <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#AEAEB2; text-align:center">her ladder: chime ✓ · phone ✓ · you — now · Priya at 21:30 if nothing</span>
+          </div>
+          <!-- glance -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+            <div style="background:#FFFFFF; border-radius:16px; padding:13px 14px; display:flex; flex-direction:column; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+              <span style="display:flex; align-items:center; gap:6px"><span style="width:6px; height:6px; border-radius:50%; background:#0F8A63; animation:hmdPulse 1.6s infinite"></span><span style="font-size:11px; font-weight:500; color:#6E6E73">Glucose</span></span>
+              <span style="display:flex; align-items:baseline; gap:4px"><span style="font:500 18px 'IBM Plex Mono',monospace">132</span><span style="font:400 9px 'IBM Plex Mono',monospace; color:#86868B">mg/dL</span></span>
+              <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#AEAEB2">post-dinner · normal for her</span>
+            </div>
+            <div style="background:#FFFFFF; border-radius:16px; padding:13px 14px; display:flex; flex-direction:column; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+              <span style="display:flex; align-items:center; gap:6px"><span style="width:6px; height:6px; border-radius:50%; background:#C7811B"></span><span style="font-size:11px; font-weight:500; color:#6E6E73">Evening meds</span></span>
+              <span style="display:flex; align-items:baseline; gap:4px"><span style="font:500 18px 'IBM Plex Mono',monospace; color:#C7811B">1 of 2</span></span>
+              <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#C7811B">metformin pending</span>
+            </div>
+          </div>
+          <!-- week strip -->
+          <div style="background:#FFFFFF; border-radius:16px; padding:14px 16px; display:flex; flex-direction:column; gap:9px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+            <div style="display:flex; align-items:center"><span style="font-size:13px; font-weight:600; letter-spacing:-.01em">Her week — meds</span><span style="margin-left:auto; font:500 11px 'IBM Plex Mono',monospace; color:#C7811B">86%</span></div>
+            <div style="display:flex; gap:4px">
+              <sc-for list="{{ mWeek }}" as="d" hint-placeholder-count="7">
+                <span style="flex:1; height:20px; border-radius:6px; background:{{ d.bg }}; display:grid; place-items:center; font:500 9px 'IBM Plex Mono',monospace; color:{{ d.fg }}">{{ d.mark }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <!-- locked note -->
+          <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2; text-align:center; line-height:1.6">🔒 journal, documents &amp; visits not shared<br>Ma controls this · <span style="color:#0F8A63">emergency access</span> if she can't respond</span>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 4f · VAULT ============ -->
+    <div id="4f" data-screen-label="Mobile Vault" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">4f</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Vault — dark, boundary ledger in the pocket</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" dark="{{ true }}" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; gap:14px; padding:10px 18px 40px; background:#161617; min-height:100%; box-sizing:border-box; color:#F5F5F4">
+          <div style="display:flex; align-items:center; gap:10px; padding-top:4px">
+            <span style="font-size:19px; font-weight:600; letter-spacing:-.02em">Your vault</span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.08); border-radius:16px; padding:5px 10px"><span style="width:5px; height:5px; border-radius:50%; background:#4FD6A6"></span><span style="font:500 9.5px 'IBM Plex Mono',monospace">⌂ on device</span></span>
+          </div>
+          <div style="background:#1F1F21; border-radius:18px; padding:17px 18px; display:flex; flex-direction:column; gap:11px">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font:400 10.5px 'IBM Plex Mono',monospace; color:#98989D">
+              <div style="display:flex; flex-direction:column; gap:2px"><span>observations</span><span style="font-size:16px; font-weight:500; color:#F5F5F4">128,443</span></div>
+              <div style="display:flex; flex-direction:column; gap:2px"><span>documents</span><span style="font-size:16px; font-weight:500; color:#F5F5F4">312</span></div>
+              <div style="display:flex; flex-direction:column; gap:2px"><span>last backup</span><span style="font-size:16px; font-weight:500; color:#30C98A">03:00 ✓</span></div>
+              <div style="display:flex; flex-direction:column; gap:2px"><span>history</span><span style="font-size:16px; font-weight:500; color:#F5F5F4">4y 2m</span></div>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.12em; color:#636366">WHAT HAS EVER LEFT THIS PHONE</span>
+            <sc-for list="{{ mLedger }}" as="l" hint-placeholder-count="3">
+              <div style="background:#1F1F21; border-radius:14px; padding:12px 14px; display:flex; align-items:center; gap:10px">
+                <span style="width:6px; height:6px; border-radius:50%; background:{{ l.dot }}"></span>
+                <div style="display:flex; flex-direction:column; gap:1px; min-width:0">
+                  <span style="font-size:12px; font-weight:500; letter-spacing:-.01em">{{ l.what }}</span>
+                  <span style="font:400 9px 'IBM Plex Mono',monospace; color:#636366">{{ l.meta }}</span>
+                </div>
+                <span style="margin-left:auto; font:400 9px 'IBM Plex Mono',monospace; color:#98989D">{{ l.when }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:auto">
+            <span style="text-align:center; font-size:12.5px; font-weight:600; color:#161617; background:#F5F5F4; border-radius:16px; padding:11px 0">⇩ Export all</span>
+            <span style="text-align:center; font-size:12.5px; font-weight:500; color:#F5F5F4; background:rgba(255,255,255,.10); border-radius:16px; padding:11px 0">Back up now</span>
+          </div>
+          <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#636366; text-align:center">Face ID locks the app · keys never leave the secure enclave</span>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 2a · TODAY ============ -->
+    <div id="2a" data-screen-label="Mobile Today" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">2a</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Today</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; gap:14px; padding:10px 18px 90px; background:#EFEFED; min-height:100%; box-sizing:border-box">
+          <!-- header -->
+          <div style="display:flex; align-items:center; gap:10px; padding-top:4px">
+            <div style="display:flex; flex-direction:column; gap:1px">
+              <span style="font-size:22px; font-weight:600; letter-spacing:-.02em">Good morning</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">Wed Jul 15 · steady</span>
+            </div>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:6px; background:#FFFFFF; border-radius:16px; padding:5px 10px; box-shadow:0 1px 2px rgba(0,0,0,.04)">
+              <span style="width:5px; height:5px; border-radius:50%; background:#1E9E6A"></span>
+              <span style="font:500 9.5px 'IBM Plex Mono',monospace">⌂</span>
+            </span>
+          </div>
+          <!-- status -->
+          <div style="background:#FFFFFF; border-radius:16px; padding:13px 16px; display:flex; align-items:center; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+            <span style="width:8px; height:8px; border-radius:50%; background:#1E9E6A"></span>
+            <span style="font-size:12.5px; font-weight:500; letter-spacing:-.01em">11 of 12 in range</span>
+            <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#C7811B">1 watch</span>
+          </div>
+          <!-- live glucose -->
+          <div style="background:#062E22; border-radius:16px; padding:15px 16px; display:flex; flex-direction:column; gap:9px; color:#F2FBF7">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="font-size:11.5px; font-weight:500; color:#8FC9B4">Glucose</span>
+              <span style="display:flex; align-items:center; gap:5px; font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#4FD6A6"><span style="width:5px;height:5px;border-radius:50%;background:#4FD6A6;animation:hmdPulse 1.6s infinite"></span>LIVE</span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:5px">
+              <span style="font:500 26px 'IBM Plex Mono',monospace; letter-spacing:-.02em">104</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#8FC9B4">mg/dL</span>
+              <span style="font:500 11px 'IBM Plex Mono',monospace; color:#4FD6A6; margin-left:auto">→ steady</span>
+            </div>
+            <svg viewBox="0 0 200 26" style="width:100%; height:26px; display:block">
+              <rect x="0" y="5" width="200" height="15" rx="3" fill="rgba(79,214,166,.10)"></rect>
+              <polyline points="0,16 20,14 40,18 60,20 80,17 100,12 120,10 140,13 160,15 180,14 200,13" fill="none" stroke="#4FD6A6" stroke-width="1.5" stroke-linecap="round"></polyline>
+              <circle cx="200" cy="13" r="2.5" fill="#4FD6A6"></circle>
+            </svg>
+          </div>
+          <!-- metric pair -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+            <div style="background:#FFFFFF; border-radius:16px; padding:13px 14px; display:flex; flex-direction:column; gap:6px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+              <span style="font-size:11px; font-weight:500; color:#6E6E73">BP · AM</span>
+              <span style="display:flex; align-items:baseline; gap:4px"><span style="font:500 18px 'IBM Plex Mono',monospace; color:#C7811B">128/82</span></span>
+              <span style="font:400 9px 'IBM Plex Mono',monospace; color:#C7811B">watch · morning high</span>
+            </div>
+            <div style="background:#FFFFFF; border-radius:16px; padding:13px 14px; display:flex; flex-direction:column; gap:6px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+              <span style="font-size:11px; font-weight:500; color:#6E6E73">Resting HR</span>
+              <span style="display:flex; align-items:baseline; gap:4px"><span style="font:500 18px 'IBM Plex Mono',monospace">54</span><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">bpm</span></span>
+              <span style="font:400 9px 'IBM Plex Mono',monospace; color:#1E9E6A">▾3 · in range</span>
+            </div>
+          </div>
+          <!-- next dose -->
+          <div style="background:#FFFFFF; border-radius:16px; padding:13px 16px; display:flex; align-items:center; gap:11px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)">
+            <span style="width:32px; height:32px; border-radius:10px; background:#F4F4F2; display:grid; place-items:center; font-size:14px">⊕</span>
+            <div style="display:flex; flex-direction:column; gap:1px">
+              <span style="font-size:12.5px; font-weight:600; letter-spacing:-.01em">Lisinopril 10 mg</span>
+              <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#D64545">missed 08:00</span>
+            </div>
+            <span style="margin-left:auto; font-size:11.5px; font-weight:600; color:#fff; background:#1D1D1F; border-radius:16px; padding:6px 13px">Log now</span>
+          </div>
+          <!-- insight -->
+          <div style="background:#FFFFFF; border-radius:16px; padding:13px 16px; display:flex; flex-direction:column; gap:7px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 6px 20px rgba(94,92,230,.10)">
+            <div style="display:flex; align-items:center; gap:7px">
+              <span style="font:500 8.5px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:16px; padding:2px 7px">✦ AI</span>
+              <span style="font:500 9px 'IBM Plex Mono',monospace; color:#C7811B">MODERATE</span>
+              <span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">07:10</span>
+            </div>
+            <span style="font-size:12.5px; line-height:1.45; font-weight:500; letter-spacing:-.01em">Resting HR up 8% over 7 days vs. your baseline.</span>
+            <a href="#ev" style="font-size:11px; font-weight:500; color:#5E5CE6">Evidence → 3 sources</a>
+          </div>
+          <!-- tab bar -->
+          <div style="position:absolute; left:14px; right:14px; bottom:26px; background:rgba(255,255,255,.92); backdrop-filter:blur(14px); border-radius:24px; padding:9px 20px; display:flex; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,.08)">
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px"><span style="font-size:15px">◈</span><span style="font:500 8.5px 'IBM Plex Mono',monospace; color:#1D1D1F">Today</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px; color:#AEAEB2"><span style="font-size:15px">♥</span><span style="font:500 8.5px 'IBM Plex Mono',monospace">Vitals</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px"><span style="width:38px; height:38px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:17px; margin-top:-14px; box-shadow:0 4px 12px rgba(15,138,99,.35)">＋</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px; color:#AEAEB2"><span style="font-size:15px">✦</span><span style="font:500 8.5px 'IBM Plex Mono',monospace">Insights</span></span>
+            <span style="display:flex; flex-direction:column; align-items:center; gap:2px; color:#AEAEB2"><span style="font-size:15px">☰</span><span style="font:500 8.5px 'IBM Plex Mono',monospace">More</span></span>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 2b · GLUCOSE DETAIL ============ -->
+    <div id="2b" data-screen-label="Mobile Glucose" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">2b</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Live glucose — dark</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" dark="{{ true }}" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; gap:14px; padding:10px 18px 40px; background:#0B2A20; min-height:100%; box-sizing:border-box; color:#F2FBF7">
+          <div style="display:flex; align-items:center; gap:10px; padding-top:4px">
+            <span style="font-size:13px; color:#8FC9B4">‹ Today</span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:6px; font:500 9.5px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#4FD6A6"><span style="width:6px; height:6px; border-radius:50%; background:#4FD6A6; animation:hmdPulse 1.6s infinite"></span>LIVE · 5 MIN</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px; padding-top:10px">
+            <span style="font-size:13px; font-weight:500; color:#8FC9B4">Glucose</span>
+            <div style="display:flex; align-items:baseline; gap:8px">
+              <span style="font:500 56px 'IBM Plex Mono',monospace; letter-spacing:-.03em">104</span>
+              <span style="font:400 13px 'IBM Plex Mono',monospace; color:#8FC9B4">mg/dL</span>
+              <span style="font:500 16px 'IBM Plex Mono',monospace; color:#4FD6A6">→</span>
+            </div>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#5E9781">Libre 3 · sensor day 9/14 · 09:42</span>
+          </div>
+          <svg viewBox="0 0 354 140" style="width:100%; height:140px; display:block">
+            <rect x="0" y="40" width="354" height="58" rx="6" fill="rgba(79,214,166,.10)"></rect>
+            <text x="8" y="54" font-family="IBM Plex Mono" font-size="8.5" fill="#5E9781">70–140 TARGET</text>
+            <polyline points="0,78 25,72 50,80 75,90 100,80 125,64 150,56 175,62 200,70 225,66 250,62 275,64 300,68 325,66 354,63" fill="none" stroke="#4FD6A6" stroke-width="2" stroke-linecap="round"></polyline>
+            <circle cx="354" cy="63" r="3.4" fill="#4FD6A6"></circle>
+            <text x="4" y="134" font-family="IBM Plex Mono" font-size="8.5" fill="#5E9781">03:00</text>
+            <text x="160" y="134" font-family="IBM Plex Mono" font-size="8.5" fill="#5E9781">06:00</text>
+            <text x="320" y="134" font-family="IBM Plex Mono" font-size="8.5" fill="#5E9781">NOW</text>
+          </svg>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; border-top:1px solid rgba(255,255,255,.08); padding-top:14px">
+            <div style="display:flex; flex-direction:column; gap:3px"><span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#5E9781">IN RANGE 24H</span><span style="font:500 16px 'IBM Plex Mono',monospace">94%</span></div>
+            <div style="display:flex; flex-direction:column; gap:3px"><span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#5E9781">AVG 24H</span><span style="font:500 16px 'IBM Plex Mono',monospace">108</span></div>
+            <div style="display:flex; flex-direction:column; gap:3px"><span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#5E9781">EVENTS</span><span style="font:500 16px 'IBM Plex Mono',monospace">0</span></div>
+          </div>
+          <!-- AI note -->
+          <div style="background:rgba(255,255,255,.06); border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:6px">
+            <div style="display:flex; align-items:center; gap:7px">
+              <span style="font:500 8.5px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#A3A1F5; background:rgba(94,92,230,.22); border-radius:16px; padding:2px 7px">✦ AI</span>
+              <span style="font:400 9px 'IBM Plex Mono',monospace; color:#5E9781">local · conf 0.91</span>
+            </div>
+            <span style="font-size:12.5px; line-height:1.5; color:#D7EFE4">Last night's 21:40 dinner shows in the 23:00 bump — 34 mg/dL smaller than your late-meal average. The earlier time helped.</span>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:auto">
+            <span style="flex:1; text-align:center; font-size:12.5px; font-weight:600; color:#062E22; background:#4FD6A6; border-radius:18px; padding:10px 0">Log meal</span>
+            <span style="flex:1; text-align:center; font-size:12.5px; font-weight:500; color:#F2FBF7; background:rgba(255,255,255,.10); border-radius:18px; padding:10px 0">Calibrate</span>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 2c · CAPTURE ============ -->
+    <div id="2c" data-screen-label="Mobile Capture" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">2c</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Scan &amp; confirm — camera</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" dark="{{ true }}" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; padding:10px 0 40px; background:#111112; min-height:100%; box-sizing:border-box; color:#F5F5F4">
+          <div style="display:flex; align-items:center; gap:10px; padding:4px 18px 12px">
+            <span style="font-size:13px; color:#98989D">✕</span>
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em; margin:0 auto">Scan document</span>
+            <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#4FD6A6">⌂ local OCR</span>
+          </div>
+          <!-- viewfinder -->
+          <div style="flex:1; margin:0 14px; border-radius:18px; background:linear-gradient(160deg,#2A2A2C,#1C1C1E); position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center">
+            <!-- doc mock -->
+            <div style="width:240px; background:#F8F8F6; border-radius:4px; padding:20px 22px; display:flex; flex-direction:column; gap:9px; transform:rotate(-2deg)">
+              <div style="width:90px; height:9px; background:#2A6E52; border-radius:2px"></div>
+              <div style="width:70%; height:6px; background:#E5E5E2; border-radius:2px"></div>
+              <div style="height:1px; background:#EDEDEA; margin:4px 0"></div>
+              <div style="display:flex; flex-direction:column; gap:5px">
+                <div style="display:flex; gap:8px; align-items:center; background:rgba(30,158,106,.12); outline:1px solid rgba(30,158,106,.55); border-radius:3px; padding:4px 6px"><div style="width:56%; height:6px; background:#D9D9D5; border-radius:2px"></div><span style="font:500 9px 'IBM Plex Mono',monospace; color:#1D1D1F">182</span></div>
+                <div style="display:flex; gap:8px; align-items:center; background:rgba(30,158,106,.12); outline:1px solid rgba(30,158,106,.55); border-radius:3px; padding:4px 6px"><div style="width:42%; height:6px; background:#D9D9D5; border-radius:2px"></div><span style="font:500 9px 'IBM Plex Mono',monospace; color:#1D1D1F">48</span></div>
+                <div style="display:flex; gap:8px; align-items:center; background:rgba(199,129,27,.14); outline:1px solid rgba(199,129,27,.6); border-radius:3px; padding:4px 6px"><div style="width:50%; height:6px; background:#D9D9D5; border-radius:2px"></div><span style="font:500 9px 'IBM Plex Mono',monospace; color:#1D1D1F">98</span></div>
+              </div>
+              <div style="width:84%; height:5px; background:#F0F0EE; border-radius:2px"></div>
+              <div style="width:62%; height:5px; background:#F0F0EE; border-radius:2px"></div>
+            </div>
+            <!-- corner brackets -->
+            <span style="position:absolute; top:14px; left:14px; width:26px; height:26px; border-top:2.5px solid #4FD6A6; border-left:2.5px solid #4FD6A6; border-radius:6px 0 0 0"></span>
+            <span style="position:absolute; top:14px; right:14px; width:26px; height:26px; border-top:2.5px solid #4FD6A6; border-right:2.5px solid #4FD6A6; border-radius:0 6px 0 0"></span>
+            <span style="position:absolute; bottom:14px; left:14px; width:26px; height:26px; border-bottom:2.5px solid #4FD6A6; border-left:2.5px solid #4FD6A6; border-radius:0 0 0 6px"></span>
+            <span style="position:absolute; bottom:14px; right:14px; width:26px; height:26px; border-bottom:2.5px solid #4FD6A6; border-right:2.5px solid #4FD6A6; border-radius:0 0 6px 0"></span>
+            <!-- live extraction toast -->
+            <div style="position:absolute; left:14px; right:14px; bottom:14px; background:rgba(17,17,18,.85); backdrop-filter:blur(10px); border-radius:14px; padding:11px 14px; display:flex; align-items:center; gap:9px">
+              <span style="width:6px; height:6px; border-radius:50%; background:#4FD6A6; animation:hmdPulse 1.2s infinite"></span>
+              <span style="font-size:12px; font-weight:500">Reading… 5 values found</span>
+              <span style="margin-left:auto; font:400 9px 'IBM Plex Mono',monospace; color:#C7811B">1 low conf</span>
+            </div>
+          </div>
+          <!-- controls -->
+          <div style="display:flex; align-items:center; justify-content:center; gap:36px; padding:18px 0 0">
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#98989D">gallery</span>
+            <span style="width:62px; height:62px; border-radius:50%; border:3.5px solid #F5F5F4; display:grid; place-items:center"><span style="width:48px; height:48px; border-radius:50%; background:#F5F5F4"></span></span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#4FD6A6">auto ✓</span>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ============ 2d · DOSE / DISPENSER ============ -->
+    <div id="2d" data-screen-label="Mobile Dose" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">2d</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Dose reminder — notification + detail</span></span>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" title="" hint-size="390px,844px">
+        <div style="display:flex; flex-direction:column; gap:14px; padding:10px 18px 40px; background:#EFEFED; min-height:100%; box-sizing:border-box">
+          <!-- notification -->
+          <div style="background:rgba(255,255,255,.94); backdrop-filter:blur(14px); border-radius:18px; padding:13px 15px; display:flex; gap:11px; box-shadow:0 4px 18px rgba(0,0,0,.10); margin-top:6px">
+            <span style="width:34px; height:34px; border-radius:9px; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:15px; font-weight:600">H</span>
+            <div style="display:flex; flex-direction:column; gap:1px; min-width:0">
+              <div style="display:flex; align-items:center; gap:6px"><span style="font-size:12.5px; font-weight:600">Missed dose</span><span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">2h ago</span></div>
+              <span style="font-size:12px; color:#6E6E73; line-height:1.4">Lisinopril 10 mg was due 08:00. Dispenser hasn't seen a pickup.</span>
+            </div>
+          </div>
+          <!-- detail card -->
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px; display:flex; flex-direction:column; gap:13px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06)">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="width:38px; height:38px; border-radius:11px; background:#F4F4F2; display:grid; place-items:center; font-size:17px">◌</span>
+              <div style="display:flex; flex-direction:column; gap:1px">
+                <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Lisinopril 10 mg</span>
+                <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">1×/day morning · tray 1 · morning wedge</span>
+              </div>
+              <span style="margin-left:auto; font:500 9.5px 'IBM Plex Mono',monospace; color:#D64545">MISSED 08:00</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px; border-top:1px solid #F4F4F2; padding-top:12px">
+              <div style="display:flex; justify-content:space-between; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B"><span>dispenser</span><span style="color:#1E9E6A">online · kitchen</span></div>
+              <div style="display:flex; justify-content:space-between; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B"><span>tray 1 wedges</span><span style="color:#C7811B">2 left — refill Sun soon</span></div>
+              <div style="display:flex; justify-content:space-between; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B"><span>last taken</span><span style="color:#1D1D1F">yesterday 08:01</span></div>
+              <div style="display:flex; justify-content:space-between; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B"><span>30-day adherence</span><span style="color:#1D1D1F">93%</span></div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px">
+              <span style="text-align:center; font-size:13.5px; font-weight:600; color:#fff; background:#1D1D1F; border-radius:18px; padding:12px 0">I took it — log now</span>
+              <span style="text-align:center; font-size:13px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:18px; padding:11px 0">Dispense now</span>
+              <span style="text-align:center; font-size:13px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:18px; padding:11px 0">Skip today — add reason</span>
+            </div>
+          </div>
+          <!-- BP context nudge -->
+          <div style="background:#FFFFFF; border-radius:16px; padding:13px 16px; display:flex; flex-direction:column; gap:6px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 6px 20px rgba(94,92,230,.10)">
+            <div style="display:flex; align-items:center; gap:7px">
+              <span style="font:500 8.5px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:16px; padding:2px 7px">✦ AI</span>
+              <span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2">why this matters</span>
+            </div>
+            <span style="font-size:12px; line-height:1.5; color:#6E6E73">On days a morning dose slips past noon, your evening BP runs <strong style="color:#1D1D1F">+6 mmHg</strong> on average (11 occurrences).</span>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const G = { bg: '#DDF2E8', fg: '#0F8A63', mark: '✓' };
+    const R = { bg: '#F8DEDE', fg: '#D64545', mark: '✕' };
+    const A = { bg: '#FBF3E4', fg: '#C7811B', mark: '~' };
+    return {
+      mQueue: [
+        { icon: '⌗', iconBg: '#EFEFFC', iconFg: '#5E5CE6', title: 'BP monitor photo', meta: 'AI read 132/84 · conf 0.76', state: 'CONFIRM', stateColor: '#C7811B', btn: 'Confirm value', btnBg: '#1D1D1F', border: '1px solid #F3E3C8' },
+        { icon: '◌', iconBg: '#F4F4F2', iconFg: '#1D1D1F', title: 'Oura backfill — 3 days', meta: '412 obs · auto-mapped · conf 0.99', state: 'READY', stateColor: '#1E9E6A', btn: 'Approve all', btnBg: '#0F8A63', border: '1px solid transparent' },
+        { icon: '⇄', iconBg: '#F4F4F2', iconFg: '#1D1D1F', title: 'HR conflict 07:00–08:00', meta: 'Watch 61 vs Oura 63 · priority: Watch', state: 'DECIDE', stateColor: '#C7811B', btn: 'Use Watch', btnBg: '#0F8A63', border: '1px solid transparent' },
+      ],
+      mEvidence: [
+        { icon: '⌚', title: 'Resting HR · 7 days', value: '62 bpm' },
+        { icon: '☾', title: 'Sleep · 3 short nights', value: '6h 12m' },
+        { icon: '⚡', title: 'Evening walks', value: '2 of 7' },
+      ],
+      mHub: [
+        { icon: '♥', iconBg: '#FFEBEE', iconFg: '#FF375F', name: 'Vitals', sub: 'BP 128/82 · HR 54', badge: 'watch', badgeFg: '#C7811B', badgeBg: '#FBF3E4' },
+        { icon: '⚗', iconBg: '#FBF6E4', iconFg: '#C7811B', name: 'Labs', sub: 'HbA1c 5.8 · draw Jul 18', badge: false },
+        { icon: '◌', iconBg: '#E7F4EF', iconFg: '#0F8A63', name: 'Medications', sub: '2 of 4 taken · refill B', badge: '1', badgeFg: '#D64545', badgeBg: '#FBEFEF' },
+        { icon: '☑', iconBg: '#E7F4EF', iconFg: '#0F8A63', name: 'Review queue', sub: 'approve before it enters', badge: '5', badgeFg: '#C7811B', badgeBg: '#FBF3E4' },
+        { icon: '⊞', iconBg: '#F4F4F2', iconFg: '#1D1D1F', name: 'Devices', sub: '6 paired · 1 reconnect', badge: false },
+        { icon: '☰', iconBg: '#F4F4F2', iconFg: '#1D1D1F', name: 'Timeline', sub: '4 years, in order', badge: false },
+        { icon: '▤', iconBg: '#F4F4F2', iconFg: '#1D1D1F', name: 'Documents', sub: '312 · 1 new in inbox', badge: false },
+        { icon: '✉', iconBg: '#EFEFFC', iconFg: '#5E5CE6', name: 'Assistant', sub: 'ask your record', badge: false },
+        { icon: '♡', iconBg: '#F3E8FB', iconFg: '#8E44AD', name: 'Care circle', sub: 'Ma · Rohan', badge: '⚠', badgeFg: '#C7811B', badgeBg: '#FBF3E4' },
+        { icon: '⌂', iconBg: '#F4F4F2', iconFg: '#1D1D1F', name: 'Vault & privacy', sub: 'history · sharing · export', badge: false },
+      ],
+      mWeek: [G, G, A, G, G, R, A],
+      mLedger: [
+        { dot: '#C7811B', what: 'Narrative summary', meta: 'Anthropic · de-identified · your key', when: 'Jul 1' },
+        { dot: '#30C98A', what: 'Share — Dr. Rao', meta: 'Q2 labs + BP · expires Jul 22', when: 'Jul 1' },
+        { dot: '#30C98A', what: 'Oura token exchange', meta: 'auth only · no health data', when: 'Jul 12' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

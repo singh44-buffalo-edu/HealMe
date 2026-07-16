@@ -40,8 +40,16 @@ Not a certified medical device. Not medical advice. Human-in-the-loop for all AI
 /scripts        seed.py, smoke_test.py, helpers
 /infra          docker-compose.yml (Medplum full stack)
 /data           local runtime data (gitignored): inbox/ watched folder
+/personal-health-record-system 2/project/design_handoff_healmedaily/   design handoff (canonical UI reference)
 CLAUDE.md  FHIR-MAPPING.md  Makefile  .env  .env.example
 ```
+
+### Design system (adopted 2026-07-15 from the Claude-design handoff)
+The `.dc.html` files in the handoff folder above are the **canonical UI reference** (its `README.md` = token tables, `HealMeDaily Design System v2.dc.html` = component catalog). Frontend implementation:
+- **Tokens**: `frontend/src/theme.css` (CSS vars) + `frontend/src/tokens.ts` (`T`, `mono()` for JS/SVG) + `frontend/src/theme.ts` (Mantine theme: `hmdGreen/hmdIndigo/hmdRed/hmdAmber` scales). IBM Plex Mono is bundled via `@fontsource/ibm-plex-mono` — never load fonts from a CDN (privacy promise: nothing leaves the device).
+- **Primitives**: `frontend/src/components/ds.tsx` — DsCard, PageHeader, Eyebrow, StatusDot, AIPill, Chip, VaultChip, BoundaryRow, SegmentedPills, FilterChips, PillButton, ConfidenceBar, Heatstrip, Sparkline, StatusStrip, TableRow, DateBadge. Extend here, don't fork styles in pages.
+- **Non-negotiable rules**: three data classes stay unmistakable — measured = ink, live device = green + `hmdPulse` dot, AI-derived = indigo + `✦ AI` pill + confidence (never render AI output unlabeled; never use indigo on non-AI content). Cards are borderless on soft shadow (hairline dividers inside only). Status color lives on values/dots, never floods a card. Numbers/units/timestamps/codes = IBM Plex Mono. Metric hues (incl. canonical `T.metric.mood`/`T.metric.energy`) color data only, never chrome. VaultChip ("On this device") on every surface; cloud boundaries always amber + named recipient (BoundaryRow).
+- Design screens with no backend yet (live CGM tile, dispenser trays, AI forecasts, caretaker/access-control, assistant chat, mobile) are **deliberately not faked** — build the backend first, then adopt the corresponding `.dc.html`.
 
 ## 3. FHIR resource map
 

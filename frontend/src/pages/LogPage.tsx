@@ -1,21 +1,22 @@
-import {
-  Button,
-  Card,
-  Group,
-  NumberInput,
-  SimpleGrid,
-  Slider,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from '@mantine/core';
+import { NumberInput, Slider, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
 import type { Observation } from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react';
+import {
+  IconHeartbeat,
+  IconMessageQuestion,
+  IconMoodSmile,
+  IconMoon,
+  IconScale,
+  IconStethoscope,
+  type Icon,
+} from '@tabler/icons-react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useState } from 'react';
+import { DsCard, PageHeader, PillButton } from '../components/ds';
 import { CS_OBS, IDENT, LOINC, OBS_CATEGORY, UCUM, getPatient } from '../fhir';
+import { T, mono } from '../tokens';
 
 const QUICK_IDENT = `${IDENT}/quick-observation`;
 
@@ -27,20 +28,26 @@ function nowLocalInput(): string {
 
 export function LogPage() {
   return (
-    <Stack>
-      <Title order={2}>Quick add</Title>
-      <Text c="dimmed" size="sm">
-        Everything saves straight into your FHIR record with the time you choose — backdating is fine.
-      </Text>
-      <SimpleGrid cols={{ base: 1, md: 2 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Quick add"
+        subtitle="Everything saves straight into your FHIR record with the time you choose — backdating is fine."
+      />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))',
+          gap: 16,
+        }}
+      >
         <WeightCard />
         <SleepCard />
         <MoodEnergyCard />
         <SymptomCard />
         <VitalsCard />
         <RxQuestionCard />
-      </SimpleGrid>
-    </Stack>
+      </div>
+    </div>
   );
 }
 
@@ -62,25 +69,103 @@ function toIso(local: string): string {
   return new Date(local).toISOString();
 }
 
-function CardShell(props: { title: string; children: React.ReactNode }) {
+// ---------------------------------------------------------------------------
+// Presentation shell — capture-tile card language (Ingestion Suite 1a, manual entry)
+// ---------------------------------------------------------------------------
+
+const inputStyles = {
+  input: {
+    background: T.band,
+    border: 'none',
+    borderRadius: 12,
+    minHeight: 40,
+    height: 40,
+    fontSize: 13.5,
+    color: T.ink,
+  } as CSSProperties,
+};
+
+/** Numbers / timestamps render in IBM Plex Mono. */
+const monoInputStyles = {
+  input: { ...inputStyles.input, fontFamily: T.mono } as CSSProperties,
+};
+
+function FieldLabel({ children }: { children: ReactNode }) {
+  return <span style={{ ...mono(10, 500, T.quaternary), letterSpacing: '.04em' }}>{children}</span>;
+}
+
+function Field(props: { label: string; children: ReactNode }) {
   return (
-    <Card withBorder>
-      <Title order={5} mb="sm">
-        {props.title}
-      </Title>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <FieldLabel>{props.label}</FieldLabel>
       {props.children}
-    </Card>
+    </div>
+  );
+}
+
+function CardShell(props: { icon: Icon; title: string; sub: string; children: ReactNode }) {
+  const IconCmp = props.icon;
+  return (
+    <DsCard padding={20} gap={14}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 10,
+            background: T.band,
+            color: T.ink,
+            display: 'grid',
+            placeItems: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <IconCmp size={16} stroke={1.7} />
+        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: '-.01em' }}>
+            {props.title}
+          </span>
+          <span style={mono(10, 400, T.tertiary)}>{props.sub}</span>
+        </div>
+      </div>
+      <div style={{ height: 1, background: T.chip }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
+        {props.children}
+      </div>
+    </DsCard>
+  );
+}
+
+function SaveButton(props: {
+  busy: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <PillButton
+      variant="primary"
+      size={12.5}
+      onClick={props.onClick}
+      disabled={props.busy || props.disabled}
+      style={{ alignSelf: 'flex-start', marginTop: 'auto' }}
+    >
+      {props.busy ? 'Saving…' : props.children}
+    </PillButton>
   );
 }
 
 function WhenInput(props: { value: string; onChange: (v: string) => void }) {
   return (
-    <TextInput
-      label="When"
-      type="datetime-local"
-      value={props.value}
-      onChange={(e) => props.onChange(e.currentTarget.value)}
-    />
+    <Field label="When">
+      <TextInput
+        type="datetime-local"
+        value={props.value}
+        onChange={(e) => props.onChange(e.currentTarget.value)}
+        styles={monoInputStyles}
+      />
+    </Field>
   );
 }
 
@@ -90,9 +175,9 @@ function useSubmit(save: () => Promise<void>, label: string) {
     setBusy(true);
     try {
       await save();
-      notifications.show({ color: 'teal', message: `${label} saved` });
+      notifications.show({ color: 'hmdGreen', message: `${label} saved` });
     } catch (err) {
-      notifications.show({ color: 'red', title: `Could not save ${label.toLowerCase()}`, message: normalizeErrorString(err) });
+      notifications.show({ color: 'hmdRed', title: `Could not save ${label.toLowerCase()}`, message: normalizeErrorString(err) });
     } finally {
       setBusy(false);
     }
@@ -122,14 +207,22 @@ function WeightCard() {
   }, 'Weight');
 
   return (
-    <CardShell title="Weight">
-      <Stack gap="xs">
-        <NumberInput label="Weight (kg)" value={kg} onChange={setKg} decimalScale={1} min={1} max={400} />
-        <WhenInput value={when} onChange={setWhen} />
-        <Button onClick={submit} loading={busy} disabled={!kg}>
-          Save weight
-        </Button>
-      </Stack>
+    <CardShell icon={IconScale} title="Weight" sub="kg · backdatable">
+      <Field label="Weight (kg)">
+        <NumberInput
+          value={kg}
+          onChange={setKg}
+          decimalScale={1}
+          min={1}
+          max={400}
+          hideControls
+          styles={monoInputStyles}
+        />
+      </Field>
+      <WhenInput value={when} onChange={setWhen} />
+      <SaveButton onClick={submit} busy={busy} disabled={!kg}>
+        Save weight
+      </SaveButton>
     </CardShell>
   );
 }
@@ -156,14 +249,22 @@ function SleepCard() {
   }, 'Sleep');
 
   return (
-    <CardShell title="Sleep">
-      <Stack gap="xs">
-        <NumberInput label="Hours slept" value={hours} onChange={setHours} decimalScale={1} min={0} max={24} />
-        <WhenInput value={when} onChange={setWhen} />
-        <Button onClick={submit} loading={busy} disabled={!hours}>
-          Save sleep
-        </Button>
-      </Stack>
+    <CardShell icon={IconMoon} title="Sleep" sub="hours slept · backdatable">
+      <Field label="Hours slept">
+        <NumberInput
+          value={hours}
+          onChange={setHours}
+          decimalScale={1}
+          min={0}
+          max={24}
+          hideControls
+          styles={monoInputStyles}
+        />
+      </Field>
+      <WhenInput value={when} onChange={setWhen} />
+      <SaveButton onClick={submit} busy={busy} disabled={!hours}>
+        Save sleep
+      </SaveButton>
     </CardShell>
   );
 }
@@ -193,18 +294,26 @@ function MoodEnergyCard() {
   }, 'Mood & energy');
 
   return (
-    <CardShell title="Mood & energy">
-      <Stack gap="xs">
-        <Text size="sm">Mood: {mood}/10</Text>
-        <Slider min={1} max={10} value={mood} onChange={setMood} />
-        <Text size="sm">Energy: {energy}/10</Text>
-        <Slider min={1} max={10} value={energy} onChange={setEnergy} />
-        <WhenInput value={when} onChange={setWhen} />
-        <Button onClick={submit} loading={busy}>
-          Save mood & energy
-        </Button>
-      </Stack>
+    <CardShell icon={IconMoodSmile} title="Mood & energy" sub="mood + energy · 1–10">
+      <SliderRow label="Mood" value={mood} onChange={setMood} />
+      <SliderRow label="Energy" value={energy} onChange={setEnergy} />
+      <WhenInput value={when} onChange={setWhen} />
+      <SaveButton onClick={submit} busy={busy}>
+        Save mood &amp; energy
+      </SaveButton>
     </CardShell>
+  );
+}
+
+function SliderRow(props: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 500 }}>{props.label}</span>
+        <span style={mono(12, 500, T.ink)}>{props.value}/10</span>
+      </div>
+      <Slider min={1} max={10} value={props.value} onChange={props.onChange} size="sm" />
+    </div>
   );
 }
 
@@ -296,26 +405,27 @@ function VitalsCard() {
   }, 'Vitals');
 
   return (
-    <CardShell title="Vitals (BP · HR · temp · SpO2 · glucose)">
-      <Stack gap="xs">
-        <SimpleGrid cols={2}>
-          {VITALS.map((field) => (
+    <CardShell icon={IconHeartbeat} title="Vitals" sub="BP · HR · temp · SpO2 · glucose">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        {VITALS.map((field) => (
+          <Field key={field.key} label={field.label}>
             <NumberInput
-              key={field.key}
-              label={field.label}
               value={values[field.key] ?? ''}
               onChange={(value) => setValues((prev) => ({ ...prev, [field.key]: value }))}
               min={field.min}
               max={field.max}
               decimalScale={'decimals' in field ? field.decimals : 0}
+              hideControls
+              placeholder={`${field.min}–${field.max}`}
+              styles={monoInputStyles}
             />
-          ))}
-        </SimpleGrid>
-        <WhenInput value={when} onChange={setWhen} />
-        <Button onClick={submit} loading={busy}>
-          Save vitals
-        </Button>
-      </Stack>
+          </Field>
+        ))}
+      </div>
+      <WhenInput value={when} onChange={setWhen} />
+      <SaveButton onClick={submit} busy={busy}>
+        Save vitals
+      </SaveButton>
     </CardShell>
   );
 }
@@ -343,22 +453,22 @@ function RxQuestionCard() {
   }, 'Question for your clinician');
 
   return (
-    <CardShell title="Question for your clinician">
-      <Stack gap="xs">
-        <Text size="xs" c="dimmed">
-          Jot it down now — it lands in the clinician summary so you remember to raise it at the
-          appointment.
-        </Text>
+    <CardShell icon={IconMessageQuestion} title="Question for your clinician" sub="free text · saved with today's time">
+      <span style={{ fontSize: 12, lineHeight: 1.5, color: T.secondary }}>
+        Jot it down now — it lands in the clinician summary so you remember to raise it at the
+        appointment.
+      </span>
+      <Field label="What do you want to ask?">
         <TextInput
-          label="What do you want to ask?"
           placeholder="e.g. is the morning nausea expected to fade?"
           value={text}
           onChange={(e) => setText(e.currentTarget.value)}
+          styles={inputStyles}
         />
-        <Button onClick={submit} loading={busy} disabled={!text.trim()}>
-          Save question
-        </Button>
-      </Stack>
+      </Field>
+      <SaveButton onClick={submit} busy={busy} disabled={!text.trim()}>
+        Save question
+      </SaveButton>
     </CardShell>
   );
 }
@@ -384,21 +494,19 @@ function SymptomCard() {
   }, 'Symptom');
 
   return (
-    <CardShell title="Symptom / side effect">
-      <Stack gap="xs">
+    <CardShell icon={IconStethoscope} title="Symptom / side effect" sub="free text · backdatable">
+      <Field label="What happened?">
         <TextInput
-          label="What happened?"
           placeholder="e.g. mild headache after lunch"
           value={text}
           onChange={(e) => setText(e.currentTarget.value)}
+          styles={inputStyles}
         />
-        <WhenInput value={when} onChange={setWhen} />
-        <Group>
-          <Button onClick={submit} loading={busy} disabled={!text.trim()}>
-            Save symptom
-          </Button>
-        </Group>
-      </Stack>
+      </Field>
+      <WhenInput value={when} onChange={setWhen} />
+      <SaveButton onClick={submit} busy={busy} disabled={!text.trim()}>
+        Save symptom
+      </SaveButton>
     </CardShell>
   );
 }

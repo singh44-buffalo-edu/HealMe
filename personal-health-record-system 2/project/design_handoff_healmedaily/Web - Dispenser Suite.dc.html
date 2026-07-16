@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+  @keyframes hmdBreathe { 0%,100%{box-shadow:0 0 0 0 rgba(79,214,166,.35)} 50%{box-shadow:0 0 0 14px rgba(79,214,166,0)} }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:48px; padding:56px; align-items:flex-start">
+
+  <header style="display:flex; flex-direction:column; gap:8px">
+    <div style="display:flex; align-items:center; gap:12px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">HealMeDaily · Dispenser suite — <a href="#5a">5a</a> hub &amp; adherence · <a href="#5b">5b</a> load cartridges · <a href="#5c">5c</a> the dispense moment</span>
+    </div>
+    <p style="margin:0; max-width:700px; font-size:14px; line-height:1.6; color:#6E6E73">The dispenser is a lidded cylinder: 8 colour-rimmed trays stacked on a central spindle, each tray split into 7 pie wedges holding one dose. At dose time the spindle rotates, today's wedge opens, and the pills fall through the cone funnel to the base tray, which sits on a load cell. Three surfaces: the hub that turns dose events into honest adherence observations, camera-verified pill checks, and the dispense moment itself.</p>
+  </header>
+
+  <!-- ═══════════════ 5a · HUB & ADHERENCE ═══════════════ -->
+  <div id="5a" data-screen-label="Dispenser hub" style="display:flex; flex-direction:column; gap:12px">
+    <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">5a</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Dispenser hub — the machine, and what its events prove</span></span>
+    <div style="width:1440px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); padding:32px 36px; box-sizing:border-box; display:flex; flex-direction:column; gap:18px">
+
+      <!-- header row -->
+      <div style="display:flex; align-items:center; gap:14px">
+        <div style="display:flex; flex-direction:column; gap:2px">
+          <span style="font-size:22px; font-weight:600; letter-spacing:-.02em">Pi dispenser · kitchen</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">Medplum Agent → Bot med-events · never leaves the LAN · uptime 43 days</span>
+        </div>
+        <span style="display:flex; align-items:center; gap:6px; margin-left:6px"><span style="width:7px; height:7px; border-radius:50%; background:#1E9E6A; animation:hmdPulse 2s infinite"></span><span style="font:500 10px 'IBM Plex Mono',monospace; color:#1E9E6A">ONLINE</span></span>
+        <div style="margin-left:auto; display:flex; gap:8px">
+          <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:18px; padding:9px 18px; font-family:inherit">⟳ Load cartridges</button>
+          <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:18px; padding:9px 16px; font-family:inherit; box-shadow:0 1px 2px rgba(0,0,0,.05)">Test dispense</button>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1.15fr 1fr; gap:16px; align-items:start">
+
+        <!-- LEFT: machine -->
+        <div style="display:flex; flex-direction:column; gap:14px">
+          <!-- device card -->
+          <div style="background:#1D1D1F; border-radius:20px; padding:24px 26px; display:flex; flex-direction:column; gap:18px; color:#F5F5F4">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="font:500 9.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; color:#98989D">TRAY STACK · 8 ON THE SPINDLE · LID SEALED</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#98989D">next dispense <span style="color:#4FD6A6">19:00 · tray 2 rotates · wedge drops via funnel</span></span>
+            </div>
+            <!-- spindle stack, side view -->
+            <div style="display:flex; gap:20px; align-items:stretch">
+              <div style="flex:1; display:flex; flex-direction:column; gap:5px">
+                <sc-for list="{{ bays }}" as="b" hint-placeholder-count="5">
+                  <div style="background:#111112; border:{{ b.border }}; border-radius:12px; padding:9px 14px; display:grid; grid-template-columns:auto auto 1fr auto auto; gap:12px; align-items:center; box-sizing:border-box">
+                    <span style="width:24px; height:24px; border-radius:50%; border:2.5px solid {{ b.letterColor }}; color:{{ b.letterColor }}; display:grid; place-items:center; font:600 11px 'IBM Plex Mono',monospace; box-sizing:border-box">{{ b.letter }}</span>
+                    <span style="font-size:12.5px; font-weight:600; letter-spacing:-.01em; color:{{ b.nameColor }}; min-width:76px">{{ b.med }}</span>
+                    <div style="display:flex; gap:3px; align-items:center">
+                      <sc-for list="{{ b.wedges }}" as="wd" hint-placeholder-count="7">
+                        <span style="width:14px; height:14px; border-radius:4px; background:{{ wd }}"></span>
+                      </sc-for>
+                      <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#636366; margin-left:6px">{{ b.dose }}</span>
+                    </div>
+                    <span style="font:500 12px 'IBM Plex Mono',monospace; color:{{ b.countColor }}">{{ b.count }}</span>
+                    <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:{{ b.stateColor }}; min-width:74px; text-align:right">{{ b.state }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <!-- funnel + base, schematic -->
+              <div style="width:150px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px; background:#111112; border-radius:14px; padding:14px 10px">
+                <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#636366; text-align:center">wedge opens ↓</span>
+                <svg viewBox="0 0 100 110" style="width:88px; display:block">
+                  <path d="M14,6 L86,6 L58,52 L58,72 L42,72 L42,52 Z" fill="none" stroke="#4FD6A6" stroke-width="2" stroke-linejoin="round" opacity=".8"></path>
+                  <circle cx="50" cy="30" r="3.5" fill="#F5F5F1"></circle>
+                  <circle cx="46" cy="44" r="3.5" fill="#FBF3D9"></circle>
+                  <path d="M22,84 Q50,74 78,84 L74,102 Q50,110 26,102 Z" fill="none" stroke="#98989D" stroke-width="2" stroke-linejoin="round"></path>
+                </svg>
+                <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#636366; text-align:center">funnel → base tray<br>⚖ load cell under it</span>
+              </div>
+            </div>
+            <!-- sensors -->
+            <div style="display:flex; gap:10px; border-top:1px solid rgba(255,255,255,.08); padding-top:14px">
+              <sc-for list="{{ sensors }}" as="s" hint-placeholder-count="4">
+                <span style="display:flex; align-items:center; gap:7px; background:rgba(255,255,255,.06); border-radius:16px; padding:6px 13px"><span style="width:5px; height:5px; border-radius:50%; background:{{ s.dot }}"></span><span style="font:400 10px 'IBM Plex Mono',monospace; color:#D1D1D6">{{ s.name }}</span><span style="font:400 9px 'IBM Plex Mono',monospace; color:#636366">{{ s.val }}</span></span>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- dose event log with verification -->
+          <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+            <div style="display:flex; align-items:center; padding:16px 22px 10px">
+              <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Dose events — how each one was verified</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">MedicationAdministration + method</span>
+            </div>
+            <sc-for list="{{ doseLog }}" as="d" hint-placeholder-count="5">
+              <div style="display:grid; grid-template-columns:auto 1fr auto auto; gap:14px; align-items:center; padding:11px 22px; border-top:1px solid #F4F4F2">
+                <span style="width:8px; height:8px; border-radius:50%; background:{{ d.dot }}"></span>
+                <div style="display:flex; flex-direction:column; gap:1px">
+                  <span style="font-size:13px; font-weight:500; letter-spacing:-.01em">{{ d.what }}</span>
+                  <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">{{ d.detail }}</span>
+                </div>
+                <span style="display:flex; align-items:center; gap:6px; background:{{ d.verifyBg }}; border-radius:14px; padding:4px 11px"><span style="font-size:10px">{{ d.verifyIcon }}</span><span style="font:500 9.5px 'IBM Plex Mono',monospace; color:{{ d.verifyFg }}">{{ d.verify }}</span></span>
+                <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ d.when }}</span>
+              </div>
+            </sc-for>
+            <div style="display:flex; align-items:center; gap:9px; padding:12px 22px; background:#FAFAF9; border-top:1px solid #F4F4F2">
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">verification hierarchy: <span style="color:#0F8A63">⚖ weight-verified</span> &gt; <span style="color:#5E5CE6">⌗ camera-seen</span> &gt; <span style="color:#C7811B">✎ self-reported</span> — each dose observation carries its proof</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: adherence observations -->
+        <div style="display:flex; flex-direction:column; gap:14px">
+
+          <!-- 12-week heatmap -->
+          <div style="background:#FFFFFF; border-radius:18px; padding:20px 22px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Adherence — 12 weeks</span>
+              <span style="display:flex; align-items:baseline; gap:4px; margin-left:auto"><span style="font:500 20px 'IBM Plex Mono',monospace; letter-spacing:-.02em; color:#1E9E6A">96%</span><span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">▴2 vs prior</span></span>
+            </div>
+            <div style="display:flex; gap:8px">
+              <div style="display:flex; flex-direction:column; gap:3px; justify-content:space-between; padding:1px 0">
+                <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#AEAEB2">M</span>
+                <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#AEAEB2">W</span>
+                <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:#AEAEB2">S</span>
+              </div>
+              <div style="display:flex; gap:3px; flex:1">
+                <sc-for list="{{ heatWeeks }}" as="w" hint-placeholder-count="12">
+                  <div style="display:flex; flex-direction:column; gap:3px; flex:1">
+                    <sc-for list="{{ w.days }}" as="c" hint-placeholder-count="7">
+                      <span style="aspect-ratio:1; border-radius:4px; background:{{ c }}"></span>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex; gap:12px; font:400 9px 'IBM Plex Mono',monospace; color:#86868B; align-items:center">
+              <span>APR</span><span style="margin-left:auto"><span style="color:#0F8A63">▮</span> all taken</span><span><span style="color:#9BD9BF">▮</span> late</span><span><span style="color:#E5B9B9">▮</span> partial</span><span><span style="color:#D64545">▮</span> missed</span><span>JUL</span>
+            </div>
+          </div>
+
+          <!-- timeliness distribution -->
+          <div style="background:#FFFFFF; border-radius:18px; padding:20px 22px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Timeliness — not just <em>if</em>, but <em>when</em></span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">180 doses · 90D</span>
+            </div>
+            <div style="display:flex; align-items:flex-end; gap:10px; height:96px">
+              <sc-for list="{{ timeliness }}" as="t" hint-placeholder-count="4">
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; height:100%; justify-content:flex-end">
+                  <span style="font:500 11px 'IBM Plex Mono',monospace; color:{{ t.fg }}">{{ t.pct }}</span>
+                  <div style="width:100%; border-radius:8px 8px 3px 3px; background:{{ t.bg }}; height:{{ t.h }}"></div>
+                  <span style="font:400 9px 'IBM Plex Mono',monospace; color:#86868B; text-align:center; line-height:1.3">{{ t.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; background:#FAFAF9; border-radius:12px; padding:9px 13px">
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">median delay <strong style="color:#1D1D1F">+4 min</strong> · worst window: <strong style="color:#C7811B">Sat mornings</strong> (median +52 min)</span>
+            </div>
+          </div>
+
+          <!-- timing → outcome AI card -->
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:11px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 8px 28px rgba(94,92,230,.10)">
+            <div style="display:flex; align-items:center; gap:8px">
+              <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:3px 8px">✦ TIMING → OUTCOME</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">local · conf 0.81</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+              <div style="border:1px solid #F0F0EE; border-radius:12px; padding:11px 13px; display:flex; flex-direction:column; gap:2px">
+                <span style="font:400 9px 'IBM Plex Mono',monospace; color:#86868B">metformin on time</span>
+                <span style="font:500 16px 'IBM Plex Mono',monospace; color:#1E9E6A">104 <span style="font-size:9px; color:#86868B">avg next-AM glucose</span></span>
+              </div>
+              <div style="border:1px solid #F3E3C8; background:#FDF9F1; border-radius:12px; padding:11px 13px; display:flex; flex-direction:column; gap:2px">
+                <span style="font:400 9px 'IBM Plex Mono',monospace; color:#C7811B">&gt;2h late or missed</span>
+                <span style="font:500 16px 'IBM Plex Mono',monospace; color:#C7811B">113 <span style="font-size:9px; color:#86868B">avg next-AM glucose</span></span>
+              </div>
+            </div>
+            <span style="font-size:12.5px; line-height:1.55; color:#6E6E73">Your evening metformin timing shows up in the next morning's numbers — <strong style="color:#1D1D1F">+9 mg/dL</strong> when late. 22 late/missed evenings analyzed. Correlation, not proof.</span>
+            <a href="#method" style="font-size:12px; font-weight:500; color:#5E5CE6">Method → 180 paired observations</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ 5b · LOAD CARTRIDGES ═══════════════ -->
+  <div id="5b" data-screen-label="Load cartridges" style="display:flex; flex-direction:column; gap:12px">
+    <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">5b</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Verify pills — camera checks every pill before a tray goes back on the spindle (full flow: <a href="Web - Cartridge Filling.dc.html">Filling station</a>)</span></span>
+    <div style="width:1440px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); padding:32px 36px 36px; box-sizing:border-box; display:flex; flex-direction:column; gap:20px">
+
+      <!-- flow header -->
+      <div style="display:flex; align-items:center; gap:16px">
+        <span style="font-size:13px; font-weight:500; color:#6E6E73">← Dispenser</span>
+        <div style="display:flex; flex-direction:column; gap:1px">
+          <span style="font-size:18px; font-weight:600; letter-spacing:-.015em">Refill tray 1 · morning — Lisinopril 10 mg</span>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">8 left · new bottle scanned from pharmacy label · lot LP-2481 · exp 03/2028</span>
+        </div>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:0">
+          <sc-for list="{{ loadSteps }}" as="ls" hint-placeholder-count="4">
+            <div style="display:flex; align-items:center">
+              <span style="display:flex; align-items:center; gap:7px">
+                <span style="width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font:500 10.5px 'IBM Plex Mono',monospace; background:{{ ls.bg }}; color:{{ ls.fg }}; border:{{ ls.border }}; box-sizing:border-box">{{ ls.mark }}</span>
+                <span style="font-size:12px; font-weight:{{ ls.weight }}; color:{{ ls.color }}">{{ ls.label }}</span>
+              </span>
+              <sc-if value="{{ ls.line }}" hint-placeholder-val="{{ true }}">
+                <span style="width:32px; height:1.5px; background:{{ ls.lineColor }}; margin:0 10px"></span>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:16px; align-items:stretch">
+
+        <!-- camera verification view -->
+        <div style="background:#111112; border-radius:20px; padding:22px 24px; display:flex; flex-direction:column; gap:14px; color:#F5F5F4; position:relative; overflow:hidden">
+          <div style="display:flex; align-items:center; gap:9px">
+            <span style="font:500 9.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; color:#98989D">BAY CAMERA · LIVE</span>
+            <span style="width:5px; height:5px; border-radius:50%; background:#4FD6A6; animation:hmdPulse 1.2s infinite"></span>
+            <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#4FD6A6">⌂ pill vision runs on the Pi</span>
+          </div>
+          <!-- tray with pills -->
+          <div style="flex:1; background:linear-gradient(160deg,#232324,#1A1A1B); border-radius:16px; position:relative; min-height:280px; padding:20px">
+            <sc-for list="{{ pills }}" as="p" hint-placeholder-count="8">
+              <div style="position:absolute; left:{{ p.x }}; top:{{ p.y }}; display:flex; flex-direction:column; align-items:center; gap:4px">
+                <span style="width:34px; height:{{ p.h }}; border-radius:{{ p.r }}; background:{{ p.color }}; border:2px solid {{ p.ring }}; box-sizing:border-box; transform:rotate({{ p.rot }})"></span>
+                <span style="font:500 8px 'IBM Plex Mono',monospace; color:{{ p.tagColor }}; background:rgba(17,17,18,.85); border-radius:8px; padding:2px 6px; white-space:nowrap">{{ p.tag }}</span>
+              </div>
+            </sc-for>
+            <!-- mismatch callout line -->
+            <span style="position:absolute; right:20px; top:18px; font:500 9.5px 'IBM Plex Mono',monospace; color:#E8A13D; background:rgba(232,161,61,.12); border:1px solid rgba(232,161,61,.4); border-radius:10px; padding:5px 10px">1 pill doesn't match ↘</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:14px; font:400 10px 'IBM Plex Mono',monospace; color:#98989D">
+            <span><span style="color:#4FD6A6">◯</span> match: white round · imprint "LUP 10"</span>
+            <span><span style="color:#E8A13D">◯</span> mismatch</span>
+            <span style="margin-left:auto">frame 240ms · model pill-id v3</span>
+          </div>
+        </div>
+
+        <!-- verification panel -->
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <!-- identification result -->
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+            <div style="display:flex; align-items:center; gap:9px">
+              <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Pill identification</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">59 of 60 verified</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <div style="display:grid; grid-template-columns:auto 1fr auto; gap:11px; align-items:center; border:1px solid #F0F0EE; border-radius:12px; padding:10px 13px">
+                <span style="width:22px; height:22px; border-radius:50%; background:#F5F5F1; border:1px solid #E0E0DC"></span>
+                <div style="display:flex; flex-direction:column; gap:1px">
+                  <span style="font-size:12.5px; font-weight:600">Lisinopril 10 mg ✓</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">white · round · "LUP 10" · matches Rx</span>
+                </div>
+                <span style="font:500 10px 'IBM Plex Mono',monospace; color:#1E9E6A">×59 · conf 0.98</span>
+              </div>
+              <div style="display:grid; grid-template-columns:auto 1fr auto; gap:11px; align-items:center; border:1.5px solid #F3E3C8; background:#FDF9F1; border-radius:12px; padding:10px 13px">
+                <span style="width:22px; height:14px; border-radius:7px; background:#F7EFD8; border:1px solid #E0D3A8"></span>
+                <div style="display:flex; flex-direction:column; gap:1px">
+                  <span style="font-size:12.5px; font-weight:600; color:#8A5A13">Unknown oval pill — set aside</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#C7811B">looks like lisinopril <strong>20 mg</strong> ("LUP 20") · wrong strength</span>
+                </div>
+                <span style="font:500 10px 'IBM Plex Mono',monospace; color:#C7811B">×1 · conf 0.91</span>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; background:#FAFAF9; border-radius:11px; padding:9px 12px">
+              <span style="width:6px; height:6px; border-radius:50%; background:#C7811B"></span>
+              <span style="font-size:11.5px; line-height:1.5; color:#6E6E73">The tray won't go back on the spindle with a mismatched pill inside. Remove it — the camera re-checks.</span>
+            </div>
+          </div>
+          <!-- weight count -->
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+            <div style="display:flex; align-items:center; gap:9px">
+              <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Count by weight</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">⚖ 0.01 g load cell</span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:8px">
+              <span style="font:500 26px 'IBM Plex Mono',monospace; letter-spacing:-.02em">59</span>
+              <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">pills · 5.90 g ÷ 0.100 g</span>
+              <span style="margin-left:auto; font:500 11px 'IBM Plex Mono',monospace; color:#1E9E6A">camera agrees ✓</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font:400 10px 'IBM Plex Mono',monospace; color:#86868B">
+              <span>bottle label says 60 · 1 set aside</span><span>lasts until <span style="color:#1D1D1F">Sep 12</span> · refill alert Sep 5</span>
+            </div>
+          </div>
+          <!-- seal -->
+          <div style="display:flex; gap:10px; margin-top:auto">
+            <button onClick="{{ noop }}" style="border:none; cursor:not-allowed; flex:1; font-size:13.5px; font-weight:600; color:#fff; background:#C9C9C5; border-radius:18px; padding:13px 0; font-family:inherit">Return tray 1 to spindle — remove mismatch first</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:18px; padding:13px 20px; font-family:inherit; box-shadow:0 1px 2px rgba(0,0,0,.05)">Pause</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ 5c · DISPENSE MOMENT ═══════════════ -->
+  <div id="5c" data-screen-label="Dispense moment" style="display:flex; flex-direction:column; gap:12px">
+    <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">5c</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">19:00 — two meds dispense together, the machine verifies the pickup</span></span>
+    <div style="width:1440px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); padding:32px 36px 36px; box-sizing:border-box; display:grid; grid-template-columns:1fr 1.15fr; gap:20px; align-items:stretch">
+
+      <!-- dispenser's own screen -->
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">What the dispenser's screen shows · kitchen</span>
+        <div style="flex:1; background:#111112; border-radius:22px; padding:30px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; color:#F5F5F4; text-align:center">
+          <span style="font:400 12px 'IBM Plex Mono',monospace; color:#98989D">19:00 · evening dose</span>
+          <div style="width:120px; height:120px; border-radius:50%; background:#0B2A20; display:grid; place-items:center; animation:hmdBreathe 2.4s infinite">
+            <span style="font-size:44px">◌</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <span style="font-size:24px; font-weight:600; letter-spacing:-.02em">Tray ready, Arun</span>
+            <span style="font-size:14px; color:#98989D; line-height:1.5">Metformin 500 · Vitamin D<br><span style="font:400 11px 'IBM Plex Mono',monospace; color:#4FD6A6">take with dinner · 2 pills</span></span>
+          </div>
+          <div style="display:flex; gap:14px; align-items:center">
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#636366">chimed once · will re-chime 19:15</span>
+          </div>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#636366">⚖ tray weight 0.62 g · waiting for pickup…</span>
+        </div>
+        <!-- physical states strip -->
+        <div style="display:flex; gap:8px">
+          <sc-for list="{{ trayStates }}" as="t" hint-placeholder-count="4">
+            <div style="flex:1; background:{{ t.bg }}; border-radius:13px; padding:10px 12px; display:flex; flex-direction:column; gap:3px; border:{{ t.border }}; box-sizing:border-box">
+              <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.06em; color:{{ t.labelColor }}">{{ t.label }}</span>
+              <span style="font-size:11.5px; font-weight:500; color:{{ t.textColor }}; line-height:1.35">{{ t.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- app side -->
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">What the app shows — live dose card + escalation you configured</span>
+        <!-- live dose card -->
+        <div style="background:#FFFFFF; border-radius:20px; padding:22px 26px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); border:1.5px solid #CFE5DC">
+          <div style="display:flex; align-items:center; gap:10px">
+            <span style="width:38px; height:38px; border-radius:12px; background:#E7F4EF; color:#0F8A63; display:grid; place-items:center; font-size:16px">⊕</span>
+            <div style="display:flex; flex-direction:column; gap:1px">
+              <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Evening dose dispensed — waiting on you</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">19:00:04 · tray filled · pickup verifies automatically by weight</span>
+            </div>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:6px"><span style="width:7px; height:7px; border-radius:50%; background:#0F8A63; animation:hmdPulse 1.6s infinite"></span><span style="font:500 10px 'IBM Plex Mono',monospace; color:#0F8A63">LIVE</span></span>
+          </div>
+          <!-- the two meds -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+            <div style="border:1px solid #F0F0EE; border-radius:14px; padding:13px 16px; display:flex; align-items:center; gap:11px">
+              <span style="width:20px; height:20px; border-radius:50%; background:#F5F5F1; border:1px solid #E0E0DC"></span>
+              <div style="display:flex; flex-direction:column; gap:1px">
+                <span style="font-size:13px; font-weight:600">Metformin 500 mg</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">tray 2 · today's wedge · with food</span>
+              </div>
+              <span style="margin-left:auto; font:500 9.5px 'IBM Plex Mono',monospace; color:#1E9E6A">IN TRAY</span>
+            </div>
+            <div style="border:1px solid #F0F0EE; border-radius:14px; padding:13px 16px; display:flex; align-items:center; gap:11px">
+              <span style="width:18px; height:18px; border-radius:50%; background:#FBF3D9; border:1px solid #E8D9A0"></span>
+              <div style="display:flex; flex-direction:column; gap:1px">
+                <span style="font-size:13px; font-weight:600">Vitamin D 2000 IU</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">tray 2 · same wedge — <span style="color:#5E5CE6">✦ better with your biggest meal</span></span>
+              </div>
+              <span style="margin-left:auto; font:500 9.5px 'IBM Plex Mono',monospace; color:#1E9E6A">IN TRAY</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:18px; padding:9px 18px; font-family:inherit">Taken — log both</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:18px; padding:9px 16px; font-family:inherit">Snooze 30 min</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:18px; padding:9px 16px; font-family:inherit">Skip — add reason</button>
+            <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2; align-self:center">or just pick it up — ⚖ logs it for you</span>
+          </div>
+        </div>
+
+        <!-- escalation timeline -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 24px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; align-items:center; gap:10px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">If the tray stays full — your escalation ladder</span>
+            <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">you set these rules · change anytime</span>
+          </div>
+          <div style="display:flex; align-items:flex-start; gap:0">
+            <sc-for list="{{ escalation }}" as="e" hint-placeholder-count="5">
+              <div style="flex:1; display:flex; flex-direction:column; gap:7px; position:relative">
+                <div style="display:flex; align-items:center">
+                  <span style="width:13px; height:13px; border-radius:50%; background:{{ e.dotBg }}; border:2.5px solid {{ e.dotRing }}; box-sizing:border-box; z-index:1"></span>
+                  <sc-if value="{{ e.line }}" hint-placeholder-val="{{ true }}">
+                    <span style="flex:1; height:2px; background:{{ e.lineColor }}"></span>
+                  </sc-if>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:2px; padding-right:14px">
+                  <span style="font:500 10px 'IBM Plex Mono',monospace; color:{{ e.timeColor }}">{{ e.time }}</span>
+                  <span style="font-size:12px; font-weight:600; letter-spacing:-.01em; color:{{ e.titleColor }}">{{ e.title }}</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.45">{{ e.detail }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- what gets recorded -->
+        <div style="background:#FAFAF9; border-radius:16px; padding:14px 20px; display:flex; align-items:center; gap:12px">
+          <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.6">pickup at 19:07 → logged as dispensed 19:00 · taken 19:07, <strong style="color:#1D1D1F">⚖ weight-verified · +7 min</strong> · timeliness feeds the adherence charts above · nothing leaves the house</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const F = '#0F8A63', L = '#9BD9BF', P = '#E5B9B9', M = '#D64545', E = '#F0F0EE';
+    const wk = (arr) => ({ days: arr });
+    return {
+      noop: () => {},
+      bays: (() => {
+        const F = '#4FD6A6', E = '#2A2A2C', L = '#E8A13D';
+        return [
+          { letter: '1', letterColor: '#6FB3FF', med: 'Morning', dose: 'metformin + lisinopril · 08:00', count: '5 wedges', countColor: '#F5F5F4', state: 'SEALED ✓', stateColor: '#4FD6A6', wedges: [F,F,F,F,F,E,E], border: '1px solid transparent', nameColor: '#F5F5F4' },
+          { letter: '2', letterColor: '#E8891B', med: 'Evening', dose: 'metformin + vit D · 19:00', count: '2 wedges', countColor: '#E8A13D', state: 'LOW — refill', stateColor: '#E8A13D', wedges: [L,L,E,E,E,E,E], border: '1.5px solid rgba(232,137,27,.5)', nameColor: '#F5F5F4' },
+          { letter: '3', letterColor: '#BF5AF2', med: 'Night', dose: 'unassigned', count: '—', countColor: '#636366', state: 'SPARE', stateColor: '#636366', wedges: [E,E,E,E,E,E,E], border: '1px dashed #3A3A3C', nameColor: '#98989D' },
+          { letter: '4', letterColor: '#00C2CE', med: 'Travel', dose: 'fill before a trip', count: '—', countColor: '#636366', state: 'SPARE', stateColor: '#636366', wedges: [E,E,E,E,E,E,E], border: '1px dashed #3A3A3C', nameColor: '#98989D' },
+          { letter: '5–8', letterColor: '#636366', med: 'Empty', dose: 'bottom of the spindle', count: '—', countColor: '#636366', state: '', stateColor: '#636366', wedges: [E,E,E,E,E,E,E], border: '1px dashed #3A3A3C', nameColor: '#98989D' },
+        ];
+      })(),
+      sensors: [
+        { name: '⚖ tray load cell', val: '±0.01 g · ok', dot: '#4FD6A6' },
+        { name: '⌗ lid camera', val: 'pill-id v3 · ⌂', dot: '#4FD6A6' },
+        { name: '♪ chime + LED ring', val: 'vol 60%', dot: '#4FD6A6' },
+        { name: '⇄ Medplum Agent', val: 'LAN · 12 ms', dot: '#4FD6A6' },
+      ],
+      doseLog: [
+        { dot: '#1E9E6A', what: 'Metformin 500 — morning', detail: 'dispensed 08:00 · picked up 08:02', verify: 'WEIGHT', verifyIcon: '⚖', verifyBg: '#E7F4EF', verifyFg: '#0F8A63', when: 'today' },
+        { dot: '#D64545', what: 'Lisinopril 10 — morning', detail: 'wedge dropped 08:00 · base tray untouched · closed 10:00', verify: 'MISSED', verifyIcon: '⚖', verifyBg: '#FBEFEF', verifyFg: '#D64545', when: 'today' },
+        { dot: '#1E9E6A', what: 'Vitamin D — evening', detail: 'not in dispenser that day · you logged it', verify: 'SELF', verifyIcon: '✎', verifyBg: '#FBF3E4', verifyFg: '#C7811B', when: 'Jul 14' },
+        { dot: '#1E9E6A', what: 'Evening pair — metformin + vit D', detail: 'dispensed 19:00 · picked up 19:07 · +7 min', verify: 'WEIGHT', verifyIcon: '⚖', verifyBg: '#E7F4EF', verifyFg: '#0F8A63', when: 'Jul 14' },
+        { dot: '#1E9E6A', what: 'Morning pair', detail: 'travel mode · pouch scanned on return', verify: 'CAMERA', verifyIcon: '⌗', verifyBg: '#EFEFFC', verifyFg: '#5E5CE6', when: 'Jul 12' },
+      ],
+      heatWeeks: [
+        wk([F,F,F,L,F,F,F]), wk([F,F,M,F,F,L,F]), wk([F,F,F,F,P,F,F]), wk([F,L,F,F,F,F,F]),
+        wk([F,F,F,F,F,M,L]), wk([F,F,L,F,F,F,F]), wk([F,F,F,F,F,F,F]), wk([P,F,F,L,F,F,F]),
+        wk([F,F,F,F,F,F,F]), wk([F,L,F,F,F,L,F]), wk([F,F,F,F,M,F,F]), wk([F,F,L,F,F,E,E]),
+      ],
+      timeliness: [
+        { label: 'on time ±15m', pct: '78%', h: '100%', bg: '#0F8A63', fg: '#0F8A63' },
+        { label: '15–60 min late', pct: '13%', h: '34%', bg: '#9BD9BF', fg: '#1E9E6A' },
+        { label: '1–3 h late', pct: '5%', h: '16%', bg: '#E8C989', fg: '#C7811B' },
+        { label: 'missed', pct: '4%', h: '13%', bg: '#E5B9B9', fg: '#D64545' },
+      ],
+      loadSteps: [
+        { label: 'Lift tray', mark: '✓', bg: '#0F8A63', fg: '#fff', border: '1.5px solid transparent', weight: 500, color: '#86868B', line: true, lineColor: '#0F8A63' },
+        { label: 'Verify pills', mark: '2', bg: '#1D1D1F', fg: '#fff', border: '1.5px solid transparent', weight: 600, color: '#1D1D1F', line: true, lineColor: '#D9D9D5' },
+        { label: 'Count', mark: '3', bg: '#FFFFFF', fg: '#AEAEB2', border: '1.5px solid #D9D9D5', weight: 500, color: '#86868B', line: true, lineColor: '#D9D9D5' },
+        { label: 'Seal', mark: '4', bg: '#FFFFFF', fg: '#AEAEB2', border: '1.5px solid #D9D9D5', weight: 500, color: '#86868B', line: false, lineColor: '#D9D9D5' },
+      ],
+      pills: [
+        { x: '8%', y: '14%', h: '34px', r: '50%', color: '#F5F5F1', ring: '#4FD6A6', rot: '0deg', tag: 'LUP 10 ✓', tagColor: '#4FD6A6' },
+        { x: '26%', y: '30%', h: '34px', r: '50%', color: '#F5F5F1', ring: '#4FD6A6', rot: '0deg', tag: 'LUP 10 ✓', tagColor: '#4FD6A6' },
+        { x: '44%', y: '12%', h: '34px', r: '50%', color: '#F5F5F1', ring: '#4FD6A6', rot: '0deg', tag: 'LUP 10 ✓', tagColor: '#4FD6A6' },
+        { x: '13%', y: '56%', h: '34px', r: '50%', color: '#F5F5F1', ring: '#4FD6A6', rot: '0deg', tag: 'LUP 10 ✓', tagColor: '#4FD6A6' },
+        { x: '36%', y: '62%', h: '34px', r: '50%', color: '#F5F5F1', ring: '#4FD6A6', rot: '0deg', tag: 'LUP 10 ✓', tagColor: '#4FD6A6' },
+        { x: '58%', y: '42%', h: '34px', r: '50%', color: '#F5F5F1', ring: '#4FD6A6', rot: '0deg', tag: 'LUP 10 ✓', tagColor: '#4FD6A6' },
+        { x: '76%', y: '20%', h: '34px', r: '50%', color: '#F5F5F1', ring: '#4FD6A6', rot: '0deg', tag: 'LUP 10 ✓', tagColor: '#4FD6A6' },
+        { x: '72%', y: '62%', h: '20px', r: '10px', color: '#F7EFD8', ring: '#E8A13D', rot: '-14deg', tag: 'LUP 20 ✕ wrong strength', tagColor: '#E8A13D' },
+      ],
+      trayStates: [
+        { label: 'T−5 MIN', text: 'LED ring warms up, soft white', bg: '#FFFFFF', border: '1px solid #F0F0EE', labelColor: '#AEAEB2', textColor: '#6E6E73' },
+        { label: 'T+0 · NOW', text: 'Tray fills · chime · ring breathes green', bg: '#E7F4EF', border: '1.5px solid #0F8A63', labelColor: '#0F8A63', textColor: '#1D1D1F' },
+        { label: 'PICKUP', text: '⚖ weight → 0 g logs both meds', bg: '#FFFFFF', border: '1px solid #F0F0EE', labelColor: '#AEAEB2', textColor: '#6E6E73' },
+        { label: 'NO PICKUP 2H', text: 'Base tray closes · logged missed — pills never sit out', bg: '#FFFFFF', border: '1px solid #F0F0EE', labelColor: '#AEAEB2', textColor: '#6E6E73' },
+      ],
+      escalation: [
+        { time: 'T+0', title: 'Chime + ring', dotBg: '#0F8A63', dotRing: '#0F8A63', line: true, lineColor: '#0F8A63', timeColor: '#0F8A63', titleColor: '#1D1D1F', detail: 'dispenser only · gentle' },
+        { time: 'T+15', title: 'Re-chime + phone', dotBg: '#0F8A63', dotRing: '#0F8A63', line: true, lineColor: '#D9D9D5', timeColor: '#0F8A63', titleColor: '#1D1D1F', detail: 'push to your watch & phone' },
+        { time: 'T+45', title: 'Ask, don\u2019t nag', dotBg: '#FFFFFF', dotRing: '#C7811B', line: true, lineColor: '#D9D9D5', timeColor: '#C7811B', titleColor: '#1D1D1F', detail: '"Skip tonight? Tell me why" — a reason is data too' },
+        { time: 'T+2h', title: 'Tray retracts', dotBg: '#FFFFFF', dotRing: '#C7811B', line: true, lineColor: '#D9D9D5', timeColor: '#C7811B', titleColor: '#1D1D1F', detail: 'logged missed · glucose watch tightens overnight' },
+        { time: 'Never', title: 'No family alert', dotBg: '#FFFFFF', dotRing: '#D9D9D5', line: false, lineColor: '#D9D9D5', timeColor: '#AEAEB2', titleColor: '#86868B', detail: 'your rules: alerts stay yours · (Ma\u2019s ladder differs)' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

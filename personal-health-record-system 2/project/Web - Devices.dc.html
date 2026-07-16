@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Devices hub" style="display:grid; grid-template-columns:232px 1fr; min-height:100vh; min-width:1280px">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="background:#FFFFFF; border-right:1px solid #E8E8E5; padding:24px 14px; display:flex; flex-direction:column; gap:24px; position:sticky; top:0; height:100vh; box-sizing:border-box">
+    <div style="display:flex; align-items:center; gap:10px; padding:0 10px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font-size:15px; font-weight:600; letter-spacing:-.015em">HealMeDaily</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 12px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+    </div>
+    <nav style="display:flex; flex-direction:column; gap:2px">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="13">
+        <a href="#nav" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:12px; font-size:13.5px; font-weight:{{ item.weight }}; color:{{ item.color }}; background:{{ item.bg }}">
+          <span style="width:18px; text-align:center; font-size:13px">{{ item.icon }}</span>{{ item.label }}
+          <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:10px; padding:2px 7px">{{ item.badge }}</span>
+          </sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px; padding:0 10px">
+      <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">128,443 records · backup 03:00</span>
+      <span style="font-size:12px; color:#86868B">Arun Verma · <a href="#settings">Settings</a></span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main style="padding:32px 40px 64px; display:flex; flex-direction:column; gap:20px; max-width:1180px; box-sizing:border-box; width:100%">
+
+    <!-- top bar -->
+    <div style="display:flex; align-items:flex-start; gap:16px">
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:26px; font-weight:600; letter-spacing:-.02em">Devices</span>
+        <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">6 paired · 5 healthy · all data lands locally</span>
+      </div>
+      <button onClick="{{ noop }}" style="margin-left:auto; border:none; cursor:pointer; display:flex; align-items:center; gap:7px; background:#0F8A63; color:#fff; border-radius:20px; padding:9px 18px; font-size:13px; font-weight:600; font-family:inherit">＋ Pair a device</button>
+    </div>
+
+    <!-- fleet health strip -->
+    <div style="background:#FFFFFF; border-radius:18px; padding:14px 22px; display:flex; align-items:center; gap:22px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:#0F8A63; animation:hmdPulse 1.6s infinite"></span><span style="font-size:13px; font-weight:500">1 streaming live</span></span>
+      <span style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:#1E9E6A"></span><span style="font-size:13px; font-weight:500">4 synced</span></span>
+      <span style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:#C7811B"></span><span style="font-size:13px; font-weight:500">1 needs attention</span></span>
+      <span style="margin-left:auto; font:400 11px 'IBM Plex Mono',monospace; color:#AEAEB2">last fleet check 09:44 · BLE scan on</span>
+    </div>
+
+    <!-- device grid + detail -->
+    <div style="display:grid; grid-template-columns:1fr 1.35fr; gap:16px; align-items:start">
+
+      <!-- roster -->
+      <div style="display:flex; flex-direction:column; gap:10px">
+        <sc-for list="{{ devices }}" as="d" hint-placeholder-count="6">
+          <div style="background:#FFFFFF; border-radius:16px; padding:15px 18px; display:grid; grid-template-columns:auto 1fr auto; gap:13px; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); border:{{ d.border }}; cursor:pointer">
+            <span style="width:36px; height:36px; border-radius:11px; background:#F4F4F2; display:grid; place-items:center; font-size:16px">{{ d.icon }}</span>
+            <div style="display:flex; flex-direction:column; gap:2px; min-width:0">
+              <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ d.name }}</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">{{ d.meta }}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px">
+              <span style="display:flex; align-items:center; gap:5px"><span style="width:6px; height:6px; border-radius:50%; background:{{ d.dot }}; animation:{{ d.dotAnim }}"></span><span style="font:500 9.5px 'IBM Plex Mono',monospace; color:{{ d.dot }}">{{ d.status }}</span></span>
+              <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ d.sync }}</span>
+            </div>
+          </div>
+        </sc-for>
+        <div style="border:1px dashed #D9D9D5; border-radius:16px; padding:14px 18px; display:flex; align-items:center; gap:10px; color:#6E6E73">
+          <span style="font-size:14px; color:#0F8A63">＋</span>
+          <span style="font-size:12.5px; font-weight:500">Pair new — BLE scan finds nearby devices</span>
+        </div>
+      </div>
+
+      <!-- detail: Libre 3 (selected) -->
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div style="background:#062E22; border-radius:18px; padding:22px 24px; display:flex; flex-direction:column; gap:16px; color:#F2FBF7">
+          <div style="display:flex; align-items:center; gap:12px">
+            <div style="display:flex; flex-direction:column; gap:2px">
+              <span style="font-size:17px; font-weight:600; letter-spacing:-.015em">Libre 3 CGM</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#5E9781">Abbott · NFC pair · BLE stream · fw 2.31</span>
+            </div>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:6px; font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#4FD6A6"><span style="width:6px; height:6px; border-radius:50%; background:#4FD6A6; animation:hmdPulse 1.6s infinite"></span>LIVE · 5 MIN</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:6px">
+            <span style="font:500 40px 'IBM Plex Mono',monospace; letter-spacing:-.02em">104</span>
+            <span style="font:400 13px 'IBM Plex Mono',monospace; color:#8FC9B4">mg/dL</span>
+            <span style="font:500 14px 'IBM Plex Mono',monospace; color:#4FD6A6">→ steady</span>
+            <span style="margin-left:auto; font:400 10.5px 'IBM Plex Mono',monospace; color:#5E9781">last reading 09:42</span>
+          </div>
+          <svg viewBox="0 0 560 80" style="width:100%; height:80px; display:block">
+            <rect x="0" y="22" width="560" height="34" rx="5" fill="rgba(79,214,166,.10)"></rect>
+            <text x="8" y="35" font-family="IBM Plex Mono" font-size="9" fill="#5E9781">70–140 TARGET</text>
+            <polyline points="0,44 40,40 80,46 120,52 160,45 200,36 240,30 280,34 320,40 360,38 400,35 440,37 480,40 520,38 560,36" fill="none" stroke="#4FD6A6" stroke-width="2" stroke-linecap="round"></polyline>
+            <circle cx="560" cy="36" r="3.4" fill="#4FD6A6"></circle>
+          </svg>
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; border-top:1px solid rgba(255,255,255,.08); padding-top:14px">
+            <div style="display:flex; flex-direction:column; gap:3px"><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#5E9781">TIME IN RANGE 24H</span><span style="font:500 16px 'IBM Plex Mono',monospace">94%</span></div>
+            <div style="display:flex; flex-direction:column; gap:3px"><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#5E9781">SENSOR</span><span style="font:500 16px 'IBM Plex Mono',monospace">day 9/14</span></div>
+            <div style="display:flex; flex-direction:column; gap:3px"><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#5E9781">SIGNAL</span><span style="font:500 16px 'IBM Plex Mono',monospace">strong</span></div>
+            <div style="display:flex; flex-direction:column; gap:3px"><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#5E9781">GAPS 24H</span><span style="font:500 16px 'IBM Plex Mono',monospace">0</span></div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#062E22; background:#4FD6A6; border-radius:18px; padding:7px 16px; font-family:inherit">Calibrate</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#F2FBF7; background:rgba(255,255,255,.10); border-radius:18px; padding:7px 16px; font-family:inherit">Sensor change guide</button>
+            <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#5E9781">change due Jul 19</span>
+          </div>
+        </div>
+
+        <!-- device metrics table -->
+        <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+          <div style="display:flex; align-items:center; padding:16px 22px 10px">
+            <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Device metrics</span>
+            <span style="margin-left:10px; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">FHIR DeviceMetric · calibration state</span>
+            <a href="#history" style="margin-left:auto; font-size:12px; font-weight:500">Calibration log →</a>
+          </div>
+          <sc-for list="{{ deviceMetrics }}" as="dm" hint-placeholder-count="3">
+            <div style="display:grid; grid-template-columns:1fr auto auto auto; gap:16px; align-items:center; padding:11px 22px; border-top:1px solid #F4F4F2">
+              <div style="display:flex; align-items:center; gap:9px">
+                <span style="width:7px; height:7px; border-radius:50%; background:{{ dm.accent }}"></span>
+                <span style="font-size:13px; font-weight:500; letter-spacing:-.01em">{{ dm.name }}</span>
+              </div>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">{{ dm.freq }}</span>
+              <span style="font:500 10px 'IBM Plex Mono',monospace; color:{{ dm.calColor }}">{{ dm.cal }}</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ dm.last }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- ingest pipeline -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; align-items:center">
+            <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Ingest pipeline</span>
+            <span style="margin-left:10px; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">Agent → Bot cgm-ingest · local</span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:5px"><span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span><span style="font:500 10px 'IBM Plex Mono',monospace; color:#1E9E6A">HEALTHY</span></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0">
+            <sc-for list="{{ pipeline }}" as="p" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:0; flex:{{ p.flex }}">
+                <div style="display:flex; flex-direction:column; gap:3px; background:#F4F4F2; border-radius:12px; padding:9px 14px; flex:1">
+                  <span style="font-size:12px; font-weight:600; letter-spacing:-.01em">{{ p.stage }}</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">{{ p.detail }}</span>
+                </div>
+                <sc-if value="{{ p.arrow }}" hint-placeholder-val="{{ true }}">
+                  <span style="padding:0 8px; color:#AEAEB2; font-size:12px">→</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">288 readings today · 0 dropped · dedup on device time · provenance stamped per observation</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const active = (label) => label === 'Devices';
+    return {
+      noop: () => {},
+      nav: [
+        { icon: '◈', label: 'Dashboard' },
+        { icon: '♥', label: 'Vitals' },
+        { icon: '⚗', label: 'Labs' },
+        { icon: '⊞', label: 'Devices' },
+        { icon: '✦', label: 'AI Insights', badge: '3' },
+        { icon: '☰', label: 'Timeline' },
+        { icon: '⌸', label: 'Explorer' },
+        { icon: '▤', label: 'Documents' },
+        { icon: '◌', label: 'Medications' },
+        { icon: '☾', label: 'Sleep & Activity' },
+        { icon: '✎', label: 'Journal' },
+        { icon: '✉', label: 'Assistant' },
+        { icon: '⇄', label: 'Connections' },
+      ].map((n) => ({
+        ...n,
+        weight: active(n.label) ? 600 : 500,
+        color: active(n.label) ? '#1D1D1F' : '#6E6E73',
+        bg: active(n.label) ? '#F0F0EE' : 'transparent',
+        badge: n.badge || false,
+      })),
+      devices: [
+        { icon: '◉', name: 'Libre 3 CGM', meta: 'Abbott · NFC + BLE stream', dot: '#0F8A63', dotAnim: 'hmdPulse 1.6s infinite', status: 'LIVE', sync: '5 min cadence', border: '1.5px solid #0F8A63' },
+        { icon: '⌚', name: 'Apple Watch S10', meta: 'via HealthKit · 14 data types', dot: '#1E9E6A', dotAnim: 'none', status: 'SYNCED', sync: '12 min ago', border: '1px solid transparent' },
+        { icon: '⚖', name: 'Withings Body+', meta: 'OAuth · weight, body comp', dot: '#1E9E6A', dotAnim: 'none', status: 'SYNCED', sync: 'today 06:58', border: '1px solid transparent' },
+        { icon: '◍', name: 'Withings BPM Connect', meta: 'OAuth · BP, pulse', dot: '#1E9E6A', dotAnim: 'none', status: 'SYNCED', sync: 'today 07:05', border: '1px solid transparent' },
+        { icon: '◌', name: 'Oura Ring Gen 3', meta: 'OAuth · sleep, HRV, temp', dot: '#C7811B', dotAnim: 'none', status: 'AUTH EXPIRED', sync: '3 days ago', border: '1px solid #F3E3C8' },
+        { icon: '⊕', name: 'Pi pill dispenser', meta: 'Medplum Agent · LAN', dot: '#1E9E6A', dotAnim: 'none', status: 'ONLINE', sync: 'dose 08:02', border: '1px solid transparent' },
+      ],
+      deviceMetrics: [
+        { name: 'Glucose (interstitial)', accent: '#0F8A63', freq: 'every 5 min', cal: 'CALIBRATED · Jul 6', calColor: '#1E9E6A', last: '09:42' },
+        { name: 'Sensor temperature', accent: '#64D2FF', freq: 'every 5 min', cal: 'FACTORY', calColor: '#86868B', last: '09:42' },
+        { name: 'Signal quality', accent: '#AEAEB2', freq: 'continuous', cal: 'N/A', calColor: '#AEAEB2', last: '09:42' },
+      ],
+      pipeline: [
+        { stage: 'BLE → Agent', detail: 'Libre 3 · LAN gateway', arrow: true, flex: '1.1' },
+        { stage: 'Bot cgm-ingest', detail: 'validate · dedup', arrow: true, flex: '1.1' },
+        { stage: 'FHIR Observation', detail: 'LOINC 99504-3', arrow: true, flex: '1.1' },
+        { stage: 'Your record', detail: '⌂ on device', arrow: false, flex: '1' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

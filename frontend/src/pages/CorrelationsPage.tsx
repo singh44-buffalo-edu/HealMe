@@ -1,6 +1,7 @@
-import { Alert, Card, Group, Loader, Select, Stack, Switch, Text, Title } from '@mantine/core';
+import { Loader, Select, Switch } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import { useMedplum } from '@medplum/react';
+import { IconInfoCircle } from '@tabler/icons-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
   CartesianGrid,
@@ -11,16 +12,53 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Chip, ConfidenceBar, DsCard, Eyebrow, PageHeader, StatusDot } from '../components/ds';
+import { T, mono } from '../tokens';
 
 /**
  * Correlation explorer: pick any two tracked metrics, see the scatter and a
  * Pearson coefficient, optionally with X leading Y by one day. Associations
  * only — the mandatory framing label is rendered on the page (spec SR-6).
+ *
+ * Everything on this page is computed locally (plain statistics) — no AI
+ * content, so no indigo/✦ treatment appears here.
  */
 
 interface SeriesMap {
   [key: string]: { label: string; byDate: Map<string, number> };
 }
+
+/** Strength word → neutral ink-scale color (measured/computed data class). */
+const STRENGTH_COLOR: Record<string, string> = {
+  negligible: T.quaternary,
+  weak: T.tertiary,
+  moderate: T.secondary,
+  strong: T.ink,
+};
+
+/** Metric accent for data-viz only (dots, strength bar) — fallback brand green. */
+function accentFor(key: string | null, label: string | undefined): string {
+  const s = `${key ?? ''} ${label ?? ''}`.toLowerCase();
+  if (/sleep/.test(s)) return T.metric.sleep;
+  if (/mood/.test(s)) return T.metric.mood;
+  if (/energy/.test(s)) return T.metric.energy;
+  if (/heart|pulse|\bhr\b/.test(s)) return T.metric.heart;
+  if (/glucose/.test(s)) return T.metric.glucose;
+  if (/weight|\bbmi\b|body mass/.test(s)) return T.metric.weight;
+  if (/blood.pressure|systolic|diastolic|\bbp\b/.test(s)) return T.metric.bp;
+  if (/step|walk|exercise|activity|workout/.test(s)) return T.metric.activity;
+  if (/respir|breath|spo2|oxygen/.test(s)) return T.metric.respiratory;
+  return T.green;
+}
+
+const selectStyles = {
+  label: {
+    ...mono(10, 500, T.quaternary),
+    textTransform: 'uppercase' as const,
+    letterSpacing: '.12em',
+    marginBottom: 6,
+  },
+};
 
 export function CorrelationsPage() {
   const medplum = useMedplum();
@@ -83,85 +121,235 @@ export function CorrelationsPage() {
 
   if (error) {
     return (
-      <Alert color="red" title="Could not load metrics">
-        {error}
-      </Alert>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <PageHeader title="Correlations" subtitle="pair any two metrics · Pearson r · computed locally" />
+        <DsCard padding="18px 22px" gap={6}>
+          <span style={{ fontSize: 14.5, fontWeight: 600, letterSpacing: '-.01em' }}>
+            Could not load metrics
+          </span>
+          <span style={mono(11.5, 400, T.outOfRange)}>{error}</span>
+        </DsCard>
+      </div>
     );
   }
-  if (!seriesMap) return <Loader />;
+  if (!seriesMap) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '96px 0' }}>
+        <Loader />
+      </div>
+    );
+  }
 
   const options = Object.entries(seriesMap)
     .map(([value, s]) => ({ value, label: `${s.label} (${s.byDate.size}d)` }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const xSeries = xKey ? seriesMap[xKey] : undefined;
+  const ySeries = yKey ? seriesMap[yKey] : undefined;
+  const accent = accentFor(xKey, xSeries?.label);
+  const hasResult = !!result && result.points.length >= 3;
+  const strength = hasResult
+    ? Math.abs(result.r) < 0.2
+      ? 'negligible'
+      : Math.abs(result.r) < 0.5
+        ? 'weak'
+        : Math.abs(result.r) < 0.8
+          ? 'moderate'
+          : 'strong'
+    : undefined;
+
   return (
-    <Stack>
-      <Title order={2}>Correlations</Title>
-      <Alert color="gray" variant="light">
-        Association, not causation — and not medical advice. Patterns here are prompts for a
-        conversation with your clinician, nothing more.
-      </Alert>
-      <Card withBorder>
-        <Group align="flex-end" mb="sm">
-          <Select label="X metric" data={options} value={xKey} onChange={setXKey} searchable w={260} />
-          <Select label="Y metric" data={options} value={yKey} onChange={setYKey} searchable w={260} />
-          <Switch
-            label="X today vs Y tomorrow (1-day lag)"
-            checked={lag}
-            onChange={(e) => setLag(e.currentTarget.checked)}
-          />
-        </Group>
-        {!result || result.points.length < 3 ? (
-          <Text c="dimmed">
-            Not enough overlapping days for these two metrics — log both for a few days.
-          </Text>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Correlations"
+        subtitle={`${options.length} metrics with ≥3 days · 365-day window · computed locally — no AI`}
+      />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* SR-6 mandatory framing — association, not causation */}
+        <DsCard padding="14px 22px" gap={0} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <IconInfoCircle size={16} stroke={1.7} color={T.tertiary} style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 13, lineHeight: 1.55, color: T.secondary }}>
+            <strong style={{ fontWeight: 600, color: T.ink }}>Association, not causation</strong> — and not
+            medical advice. Patterns here are prompts for a conversation with your clinician, nothing more.
+          </span>
+        </DsCard>
+
+        {/* Metric pickers + lag toggle */}
+        <DsCard padding="18px 22px" gap={0}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
+            <Select
+              label="X metric"
+              data={options}
+              value={xKey}
+              onChange={setXKey}
+              searchable
+              w={260}
+              styles={selectStyles}
+            />
+            <Select
+              label="Y metric"
+              data={options}
+              value={yKey}
+              onChange={setYKey}
+              searchable
+              w={260}
+              styles={selectStyles}
+            />
+            <Switch
+              label="X today vs Y tomorrow (1-day lag)"
+              checked={lag}
+              onChange={(e) => setLag(e.currentTarget.checked)}
+              styles={{
+                root: { paddingBottom: 8 },
+                label: { fontSize: 12.5, fontWeight: 500, color: T.secondary },
+              }}
+            />
+          </div>
+        </DsCard>
+
+        {/* Result — local statistical insight card */}
+        {!hasResult || !result || !strength ? (
+          <DsCard padding="30px 24px" gap={0} style={{ alignItems: 'center' }}>
+            <span style={{ ...mono(12, 400, T.quaternary), textAlign: 'center' }}>
+              Not enough overlapping days for these two metrics — log both for a few days.
+            </span>
+          </DsCard>
         ) : (
-          <>
-            <Text size="sm" mb="xs">
-              {result.points.length} paired days · Pearson r = <b>{result.r.toFixed(2)}</b>{' '}
-              <Text span c="dimmed">
-                ({Math.abs(result.r) < 0.2 ? 'negligible' : Math.abs(result.r) < 0.5 ? 'weak' : Math.abs(result.r) < 0.8 ? 'moderate' : 'strong'}{' '}
-                association)
-              </Text>
-            </Text>
+          <DsCard padding="22px 26px" gap={16}>
+            {/* header row: strength tag + provenance meta */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span
+                style={{
+                  ...mono(10, 500, STRENGTH_COLOR[strength]),
+                  letterSpacing: '.08em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {strength}
+              </span>
+              <span style={{ marginLeft: 'auto', ...mono(10, 400, T.quaternary) }}>
+                local · statistical · {result.points.length} paired days
+              </span>
+            </div>
+
+            {/* headline: the pair under test */}
+            <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-.015em', lineHeight: 1.35 }}>
+              {xSeries?.label} × {ySeries?.label}
+              {lag ? (
+                <span style={{ ...mono(11, 400, T.quaternary), marginLeft: 10 }}>X today vs Y tomorrow</span>
+              ) : null}
+            </span>
+
+            {/* big r value + strength bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+                <Eyebrow color={T.quaternary}>Pearson r</Eyebrow>
+                <span style={mono(30, 500, T.ink)}>{result.r.toFixed(2)}</span>
+              </div>
+              <div style={{ flex: 1 }}>
+                <ConfidenceBar
+                  value={Math.abs(result.r)}
+                  color={accent}
+                  label="|r| strength"
+                  valueLabel={`${strength} · ${Math.abs(result.r).toFixed(2)}`}
+                />
+              </div>
+            </div>
+
+            {/* canonical result line */}
+            <span style={mono(11.5, 400, T.tertiary)}>
+              {result.points.length} paired days · Pearson r ={' '}
+              <span style={mono(11.5, 500, T.ink)}>{result.r.toFixed(2)}</span> ({strength} association)
+            </span>
+
             <ResponsiveContainer width="100%" height={320}>
-              <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" />
+              <ScatterChart margin={{ top: 8, right: 12, bottom: 8, left: 4 }}>
+                <CartesianGrid stroke={T.chip} />
                 <XAxis
                   dataKey="x"
                   name={seriesMap[xKey!]?.label}
-                  fontSize={11}
                   type="number"
                   domain={['auto', 'auto']}
-                  label={{ value: seriesMap[xKey!]?.label, position: 'insideBottom', offset: -4, fontSize: 12 }}
+                  tick={{ fontSize: 10, fill: T.quaternary, fontFamily: T.mono }}
+                  tickLine={false}
+                  axisLine={false}
+                  label={{
+                    value: seriesMap[xKey!]?.label,
+                    position: 'insideBottom',
+                    offset: -4,
+                    fontSize: 10,
+                    fill: T.quaternary,
+                    fontFamily: T.mono,
+                  }}
                 />
                 <YAxis
                   dataKey="y"
                   name={seriesMap[yKey!]?.label}
-                  fontSize={11}
                   type="number"
                   domain={['auto', 'auto']}
-                  label={{ value: seriesMap[yKey!]?.label, angle: -90, position: 'insideLeft', fontSize: 12 }}
+                  tick={{ fontSize: 10, fill: T.quaternary, fontFamily: T.mono }}
+                  tickLine={false}
+                  axisLine={false}
+                  label={{
+                    value: seriesMap[yKey!]?.label,
+                    angle: -90,
+                    position: 'insideLeft',
+                    fontSize: 10,
+                    fill: T.quaternary,
+                    fontFamily: T.mono,
+                  }}
                 />
                 <ChartTooltip
                   content={({ payload }) =>
                     payload?.[0] ? (
-                      <Card withBorder p={6}>
-                        <Text size="xs">
+                      <div
+                        style={{
+                          background: T.card,
+                          borderRadius: 10,
+                          padding: '7px 11px',
+                          boxShadow: T.shadowCard,
+                        }}
+                      >
+                        <span style={mono(10.5, 400, T.ink)}>
                           {(payload[0].payload as { date: string }).date}: x={payload[0].payload.x}, y=
                           {payload[0].payload.y}
-                        </Text>
-                      </Card>
+                        </span>
+                      </div>
                     ) : null
                   }
                 />
-                <Scatter data={result.points} fill="#0ca678" />
+                <Scatter data={result.points} fill={accent} />
               </ScatterChart>
             </ResponsiveContainer>
-          </>
+
+            {/* evidence counts */}
+            <div
+              style={{
+                borderTop: `1px solid ${T.band}`,
+                paddingTop: 14,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              <Eyebrow color={T.quaternary}>Evidence · 2 series</Eyebrow>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Chip>
+                  <StatusDot color={accent} size={7} />
+                  {xSeries?.label} · {xSeries?.byDate.size}d
+                </Chip>
+                <Chip>
+                  <StatusDot color={accentFor(yKey, ySeries?.label)} size={7} />
+                  {ySeries?.label} · {ySeries?.byDate.size}d
+                </Chip>
+                <Chip>paired · {result.points.length}d</Chip>
+              </div>
+            </div>
+          </DsCard>
         )}
-      </Card>
-    </Stack>
+      </div>
+    </div>
   );
 }
 

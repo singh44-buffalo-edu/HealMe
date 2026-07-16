@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div style="max-width:1220px; margin:0 auto; padding:72px 48px 120px; display:flex; flex-direction:column; gap:72px">
+
+  <!-- ============ HEADER ============ -->
+  <header style="display:flex; flex-direction:column; gap:18px">
+    <div style="display:flex; align-items:center; gap:12px">
+      <div style="width:36px; height:36px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:16px; font-weight:600">H</div>
+      <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">HealMeDaily · Design System v2</span>
+    </div>
+    <h1 style="margin:0; font-size:52px; line-height:1.05; font-weight:600; letter-spacing:-.028em">Health, engineered quietly.<br>Stored only with you.</h1>
+    <p style="margin:0; max-width:640px; font-size:16px; line-height:1.6; color:#6E6E73; letter-spacing:-.01em">
+      Apple's restraint. Dyson's engineered precision. One health-positive green on near-white surfaces, borderless cards on soft shadow, tight system type — mono only where a number must be trusted. Three data classes stay unmistakable: <strong style="color:#1D1D1F">measured</strong>, <strong style="color:#0F8A63">live</strong>, <strong style="color:#5E5CE6">AI-derived</strong>. One promise carried in the UI itself: <strong style="color:#1D1D1F">everything on your device</strong>.
+    </p>
+  </header>
+
+  <!-- ============ 00 PRIVACY / ON-DEVICE ============ -->
+  <section style="display:flex; flex-direction:column; gap:20px">
+    <h2 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-.02em">00 · Yours, on device <span style="font-size:14px; font-weight:400; color:#86868B; letter-spacing:0">— the private-vault language, present on every surface</span></h2>
+    <div style="display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:20px; align-items:stretch">
+      <div style="background:#1D1D1F; border-radius:20px; padding:28px; display:flex; flex-direction:column; gap:16px; color:#F5F5F4">
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,.08); display:grid; place-items:center; font-size:15px">⌂</span>
+          <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; color:#98989D">SELF-HOSTED · SINGLE PATIENT</span>
+        </div>
+        <span style="font-size:22px; font-weight:600; letter-spacing:-.02em; line-height:1.25">Your record never leaves your hardware.</span>
+        <p style="margin:0; font-size:13px; line-height:1.6; color:#98989D">Medplum runs on your own machine. One Patient, one AccessPolicy, zero tenants. AI is opt-in per feature — and labeled whenever it has seen your data.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:auto">
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#D1D1D6; background:rgba(255,255,255,.08); border-radius:20px; padding:4px 10px">⌂ on device</span>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#D1D1D6; background:rgba(255,255,255,.08); border-radius:20px; padding:4px 10px">⇩ export anytime</span>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#D1D1D6; background:rgba(255,255,255,.08); border-radius:20px; padding:4px 10px">◫ FHIR R4 bundle</span>
+        </div>
+      </div>
+      <div style="background:#FFFFFF; border-radius:20px; padding:24px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">VaultChip · new custom</span>
+        <div style="display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:20px; padding:6px 12px; align-self:flex-start">
+          <span style="width:7px; height:7px; border-radius:50%; background:#1E9E6A"></span>
+          <span style="font:500 11px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#AEAEB2">· 4y 2m of history</span>
+        </div>
+        <p style="margin:0; font-size:12.5px; line-height:1.6; color:#6E6E73">A quiet header chip on every screen states where the data lives. Tap → storage detail: record counts, disk use, last local backup, export.</p>
+        <div style="display:flex; flex-direction:column; gap:6px; font:400 11px 'IBM Plex Mono',monospace; color:#86868B; border-top:1px solid #F0F0EE; padding-top:12px">
+          <div style="display:flex; justify-content:space-between"><span>observations</span><span style="color:#1D1D1F">128,443</span></div>
+          <div style="display:flex; justify-content:space-between"><span>documents</span><span style="color:#1D1D1F">312</span></div>
+          <div style="display:flex; justify-content:space-between"><span>last local backup</span><span style="color:#1E9E6A">today 03:00</span></div>
+        </div>
+      </div>
+      <div style="background:#FFFFFF; border-radius:20px; padding:24px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">DataBoundaryNotice · new custom</span>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="display:flex; align-items:center; gap:8px; border:1px solid #F0F0EE; border-radius:12px; padding:10px 12px">
+            <span style="width:7px;height:7px;border-radius:50%;background:#1E9E6A"></span>
+            <span style="font-size:12.5px; font-weight:500">Local AI · Ollama + Tesseract</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">stays home</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; border:1px solid #F0F0EE; border-radius:12px; padding:10px 12px">
+            <span style="width:7px;height:7px;border-radius:50%;background:#C7811B"></span>
+            <span style="font-size:12.5px; font-weight:500">Cloud AI · Anthropic</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#C7811B; margin-left:auto">leaves device</span>
+          </div>
+        </div>
+        <p style="margin:0; font-size:12.5px; line-height:1.6; color:#6E6E73">Before any feature sends data off-device, this notice names the recipient and exactly which resources go. Green = local, amber = leaves the device. Never silent.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 01 COLOR ============ -->
+  <section style="display:flex; flex-direction:column; gap:20px">
+    <h2 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-.02em">01 · Color</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px">
+      <div style="background:#FBFBFA; border-radius:20px; padding:26px; display:flex; flex-direction:column; gap:16px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">Light · default</span>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px">
+          <sc-for list="{{ lightSwatches }}" as="sw" hint-placeholder-count="8">
+            <div style="display:flex; flex-direction:column; gap:6px">
+              <div style="height:48px; border-radius:12px; border:1px solid rgba(0,0,0,.05); background:{{ sw.hex }}"></div>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#6E6E73">{{ sw.name }}</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ sw.hex }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#161617; border-radius:20px; padding:26px; display:flex; flex-direction:column; gap:16px">
+        <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">Dark · true black base</span>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px">
+          <sc-for list="{{ darkSwatches }}" as="sw" hint-placeholder-count="8">
+            <div style="display:flex; flex-direction:column; gap:6px">
+              <div style="height:48px; border-radius:12
+px; border:1px solid rgba(255,255,255,.07); background:{{ sw.hex }}"></div>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#98989D">{{ sw.name }}</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#636366">{{ sw.hex }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="background:#FFFFFF; border-radius:20px; padding:26px; display:flex; flex-direction:column; gap:16px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">Status &amp; data-class language — one vocabulary everywhere</span>
+      <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:center">
+        <div style="display:flex; align-items:center; gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#1E9E6A"></span><span style="font-size:13px;font-weight:500">In range</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#AEAEB2">#1E9E6A</span></div>
+        <div style="display:flex; align-items:center; gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#C7811B"></span><span style="font-size:13px;font-weight:500">Watch</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#AEAEB2">#C7811B</span></div>
+        <div style="display:flex; align-items:center; gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#D64545"></span><span style="font-size:13px;font-weight:500">Out of range</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#AEAEB2">#D64545</span></div>
+        <div style="display:flex; align-items:center; gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#5E5CE6"></span><span style="font-size:13px;font-weight:500">AI-derived</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#AEAEB2">#5E5CE6</span></div>
+        <div style="display:flex; align-items:center; gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:#0F8A63;animation:hmdPulse 2s infinite"></span><span style="font-size:13px;font-weight:500">Live device</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#AEAEB2">#0F8A63 · pulse</span></div>
+      </div>
+      <p style="margin:0; font-size:13px; line-height:1.6; color:#6E6E73">Population reference ranges are a whisper-gray band; AI-learned "normal for me" is a dashed indigo band. Status color appears only on the value and dot — never floods a card. Neutral is the default state of health.</p>
+    </div>
+    <!-- metric accents -->
+    <div style="background:#FFFFFF; border-radius:20px; padding:26px; display:flex; flex-direction:column; gap:16px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">Metric accents — bright, one hue per body system, used on lines · dots · rings only</span>
+      <div style="display:grid; grid-template-columns:repeat(8,1fr); gap:12px">
+        <sc-for list="{{ accentSwatches }}" as="sw" hint-placeholder-count="8">
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <div style="height:48px; border-radius:12px; background:{{ sw.hex }}; display:grid; place-items:center; color:#fff; font-size:16px">{{ sw.icon }}</div>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#6E6E73">{{ sw.name }}</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ sw.hex }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center">
+        <span style="display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:20px; padding:6px 14px"><span style="width:8px;height:8px;border-radius:50%;background:#FF375F"></span><span style="font:500 12px 'IBM Plex Mono',monospace">62 bpm</span></span>
+        <span style="display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:20px; padding:6px 14px"><span style="width:8px;height:8px;border-radius:50%;background:#00B7C3"></span><span style="font:500 12px 'IBM Plex Mono',monospace">7h 42m</span></span>
+        <span style="display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:20px; padding:6px 14px"><span style="width:8px;height:8px;border-radius:50%;background:#FF9500"></span><span style="font:500 12px 'IBM Plex Mono',monospace">9,214 steps</span></span>
+        <span style="display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:20px; padding:6px 14px"><span style="width:8px;height:8px;border-radius:50%;background:#0A84FF"></span><span style="font:500 12px 'IBM Plex Mono',monospace">118/76</span></span>
+        <span style="font-size:12.5px; color:#6E6E73">Bright accents identify the metric; status green/amber/red still judges it. Surfaces stay near-white — color lives in the data, never the chrome.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 TYPE ============ -->
+  <section style="display:flex; flex-direction:column; gap:20px">
+    <h2 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-.02em">02 · Typography</h2>
+    <div style="background:#FFFFFF; border-radius:20px; padding:32px; display:grid; grid-template-columns:1fr 320px; gap:36px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <div style="display:flex; flex-direction:column; gap:20px">
+        <div style="font-size:38px; font-weight:600; letter-spacing:-.028em; line-height:1.1">SF Pro Display — quiet, tight, confident.</div>
+        <div style="font-size:17px; font-weight:600; letter-spacing:-.015em">SF Pro Text 600 — card titles, controls</div>
+        <div style="font-size:14.5px; line-height:1.6; color:#6E6E73">SF Pro Text 400 — body, descriptions. System stack falls back gracefully on Android/web (Roboto, Segoe).</div>
+        <div style="font:500 30px 'IBM Plex Mono',monospace; letter-spacing:-.02em">98 <span style="font-size:14px;color:#86868B">mg/dL</span>&ensp;62 <span style="font-size:14px;color:#86868B">bpm</span>&ensp;118/76</div>
+        <div style="font:400 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">IBM Plex Mono — measurements, units, timestamps, codes only</div>
+      </div>
+      <div style="border-left:1px solid #EBEBE8; padding-left:32px; display:flex; flex-direction:column; gap:9px; font:400 12px/1.5 'IBM Plex Mono',monospace; color:#86868B">
+        <span>display — 38/42 · 600 · −2.8%</span>
+        <span>h1 — 26/32 · 600 · −2%</span>
+        <span>h2 — 17/24 · 600 · −1.5%</span>
+        <span>body — 14.5/23 · 400</span>
+        <span>label — 12/16 · 500</span>
+        <span>metric-lg — 30 mono 500</span>
+        <span>metric-sm — 15 mono 500</span>
+        <span>micro — 10.5 mono caps .12em</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 COMPONENTS ============ -->
+  <section style="display:flex; flex-direction:column; gap:20px">
+    <h2 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-.02em">03 · Components <span style="font-size:14px; font-weight:400; color:#86868B; letter-spacing:0">— tagged: extends @medplum/react · or new custom</span></h2>
+    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; align-items:start">
+
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">MetricCard · new custom</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; justify-content:space-between; align-items:baseline">
+            <span style="font-size:13px; font-weight:500; color:#6E6E73">Resting heart rate</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">7D</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:6px">
+            <span style="font:500 30px 'IBM Plex Mono',monospace; letter-spacing:-.02em">54</span>
+            <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">bpm</span>
+            <span style="display:flex; align-items:center; gap:5px; margin-left:auto"><span style="width:7px;height:7px;border-radius:50%;background:#1E9E6A"></span><span style="font:500 11px 'IBM Plex Mono',monospace; color:#1E9E6A">▾3</span></span>
+          </div>
+          <svg viewBox="0 0 200 36" style="width:100%; height:36px; display:block">
+            <rect x="0" y="10" width="200" height="16" rx="3" fill="#F4F4F2"></rect>
+            <polyline points="0,22 25,20 50,24 75,18 100,21 125,15 150,17 175,13 200,14" fill="none" stroke="#FF375F" stroke-width="1.7" stroke-linecap="round"></polyline>
+            <circle cx="200" cy="14" r="2.6" fill="#FF375F"></circle>
+          </svg>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">Apple Watch · 2h ago · ⌂</span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">LiveReadingTile · new custom · useSubscription</span>
+        <div style="background:#062E22; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px; color:#F2FBF7">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <span style="font-size:13px; font-weight:500; color:#8FC9B4">Glucose</span>
+            <span style="display:flex; align-items:center; gap:6px; font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#4FD6A6"><span style="width:6px;height:6px;border-radius:50%;background:#4FD6A6;animation:hmdPulse 1.6s infinite"></span>LIVE</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:6px">
+            <span style="font:500 34px 'IBM Plex Mono',monospace; letter-spacing:-.02em">104</span>
+            <span style="font:400 12px 'IBM Plex Mono',monospace; color:#8FC9B4">mg/dL</span>
+            <span style="font:500 13px 'IBM Plex Mono',monospace; color:#4FD6A6; margin-left:auto">→ steady</span>
+          </div>
+          <svg viewBox="0 0 200 34" style="width:100%; height:34px; display:block">
+            <rect x="0" y="8" width="200" height="18" rx="3" fill="rgba(79,214,166,.10)"></rect>
+            <polyline points="0,20 20,18 40,22 60,25 80,21 100,16 120,14 140,17 160,19 180,18 200,17" fill="none" stroke="#4FD6A6" stroke-width="1.7" stroke-linecap="round"></polyline>
+            <circle cx="200" cy="17" r="3" fill="#4FD6A6"></circle>
+          </svg>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#5E9781">Libre 3 · 5 min · 09:42</span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">AIScoreCard · new custom · RiskAssessment</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 8px 28px rgba(94,92,230,.10)">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <span style="font-size:13px; font-weight:500; color:#6E6E73">Metabolic health index</span>
+            <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:3px 8px">✦ AI</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:6px">
+            <span style="font:500 30px 'IBM Plex Mono',monospace; letter-spacing:-.02em; color:#4B49C8">72</span>
+            <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">/100</span>
+            <span style="font:500 11px 'IBM Plex Mono',monospace; color:#1E9E6A; margin-left:auto">▴4 mo</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:5px">
+            <div style="display:flex; justify-content:space-between; font:400 10px 'IBM Plex Mono',monospace; color:#86868B"><span>confidence</span><span>high · 0.87</span></div>
+            <div style="height:3px; background:#F0F0EE; border-radius:2px"><div style="width:87%; height:100%; background:#5E5CE6; border-radius:2px"></div></div>
+          </div>
+          <a href="#why" style="font-size:12.5px; font-weight:500; color:#5E5CE6">Why this score → 6 sources</a>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; grid-column:span 2">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">TrendChart · new custom — reference band + personal baseline + AI forecast</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:22px 24px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">HbA1c <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">%</span></span>
+            <div style="display:flex; gap:2px; background:#F0F0EE; border-radius:20px; padding:2px">
+              <span style="font:500 11px 'IBM Plex Mono',monospace; padding:4px 12px; border-radius:16px; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,.08)">1Y</span>
+              <span style="font:500 11px 'IBM Plex Mono',monospace; padding:4px 12px; color:#86868B">3Y</span>
+              <span style="font:500 11px 'IBM Plex Mono',monospace; padding:4px 12px; color:#86868B">ALL</span>
+            </div>
+          </div>
+          <svg viewBox="0 0 560 120" style="width:100%; height:120px; display:block">
+            <rect x="0" y="52" width="560" height="30" rx="4" fill="#F4F4F2"></rect>
+            <text x="8" y="66" font-family="IBM Plex Mono" font-size="9" fill="#AEAEB2">REF 4.0–5.6</text>
+            <rect x="0" y="40" width="560" height="22" rx="4" fill="none" stroke="#5E5CE6" stroke-dasharray="3 4" stroke-width="1" opacity=".45"></rect>
+            <text x="8" y="35" font-family="IBM Plex Mono" font-size="9" fill="#5E5CE6">NORMAL FOR ME</text>
+            <polyline points="0,30 80,32 160,38 240,36 320,44 400,50 440,54" fill="none" stroke="#1D1D1F" stroke-width="2" stroke-linecap="round"></polyline>
+            <path d="M440,54 L560,60 L560,72 L440,58 Z" fill="#5E5CE6" opacity=".12"></path>
+            <path d="M440,54 L560,66" stroke="#5E5CE6" stroke-width="1.5" stroke-dasharray="4 4" fill="none"></path>
+            <circle cx="440" cy="54" r="3" fill="#1D1D1F"></circle>
+            <text x="448" y="46" font-family="IBM Plex Mono" font-size="10" fill="#4B49C8">✦ 5.4 BY OCT</text>
+          </svg>
+          <div style="display:flex; gap:16px; font:400 10px 'IBM Plex Mono',monospace; color:#86868B">
+            <span style="color:#1D1D1F">— measured</span><span>▬ population ref</span><span style="color:#5E5CE6">┄ personal baseline</span><span style="color:#5E5CE6">▨ AI forecast ±CI</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">ProvenanceChip · new custom</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; flex-wrap:wrap; gap:6px">
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:4px 10px">⌚ Apple Watch</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:4px 10px">◉ Libre 3</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:4px 10px">⚖ Withings</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:4px 10px">⊕ Pi dispenser</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:4px 10px">✎ manual</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:4px 10px">✦ derived</span>
+          </div>
+          <p style="margin:0; font-size:12.5px; line-height:1.55; color:#6E6E73">Every data point carries its source, pill-shaped and quiet. Tap → Provenance / Device detail. Derived is always indigo.</p>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; grid-column:span 2">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">MedScheduleRow · extends ResourceTable · + Pi dispenser state</span>
+        <div style="background:#FFFFFF; border-radius:18px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:grid; grid-template-columns:1fr auto auto auto; gap:18px; align-items:center; padding:16px 22px; border-bottom:1px solid #F0F0EE">
+            <div style="display:flex; flex-direction:column; gap:3px">
+              <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Metformin 500 mg</span>
+              <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">2×/day · with meals · trays 1+2 · 5 wedges left</span>
+            </div>
+            <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">next 13:00</span>
+            <span style="display:flex; align-items:center; gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#1E9E6A"></span><span style="font:500 11px 'IBM Plex Mono',monospace; color:#1E9E6A">08:02 dispensed</span></span>
+            <span style="font-size:13px; font-weight:500; color:#0F8A63">Log</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr auto auto auto; gap:18px; align-items:center; padding:16px 22px">
+            <div style="display:flex; flex-direction:column; gap:3px">
+              <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Lisinopril 10 mg</span>
+              <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">1×/day · morning · tray 1 · <span style="color:#C7811B">2 wedges — refill</span></span>
+            </div>
+            <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">next 08:00</span>
+            <span style="display:flex; align-items:center; gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#D64545"></span><span style="font:500 11px 'IBM Plex Mono',monospace; color:#D64545">missed 08:00</span></span>
+            <span style="font-size:13px; font-weight:500; color:#0F8A63">Log</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">AnomalyCard · new custom · DetectedIssue</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 8px 28px rgba(94,92,230,.10)">
+          <div style="display:flex; gap:8px; align-items:center">
+            <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:3px 8px">✦ FLAG</span>
+            <span style="font:500 10px 'IBM Plex Mono',monospace; color:#C7811B">MODERATE</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">07:10</span>
+          </div>
+          <span style="font-size:13.5px; line-height:1.45; font-weight:500; letter-spacing:-.01em">Resting HR up 8% over 7 days vs. your baseline.</span>
+          <svg viewBox="0 0 200 28" style="width:100%; height:28px"><polyline points="0,20 30,21 60,19 90,18 120,15 150,12 180,9 200,8" fill="none" stroke="#C7811B" stroke-width="1.7" stroke-linecap="round"></polyline></svg>
+          <div style="display:flex; gap:8px; align-items:center">
+            <span style="font-size:12.5px; font-weight:500; color:#fff; background:#1D1D1F; border-radius:20px; padding:6px 14px">Track</span>
+            <span style="font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:6px 14px">Dismiss</span>
+            <a href="#evidence" style="font-size:12.5px; font-weight:500; color:#5E5CE6; margin-left:auto">Evidence →</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">DocumentCard · extends AttachmentDisplay</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:16px; display:flex; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="width:64px; height:84px; background:#F4F4F2; border-radius:10px; display:grid; place-items:center; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">PDF</div>
+          <div style="display:flex; flex-direction:column; gap:4px; min-width:0">
+            <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">Lipid panel — Quest</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">Mar 12 2026 · scanned</span>
+            <span style="display:flex; align-items:center; gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#1E9E6A"></span><span style="font:500 10px 'IBM Plex Mono',monospace; color:#1E9E6A">6 obs extracted</span></span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">v2 · reviewed</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">DeviceRosterCard · new custom · Device + DeviceMetric</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Libre 3 CGM</span>
+            <span style="display:flex; align-items:center; gap:5px; font:500 10px 'IBM Plex Mono',monospace; color:#1E9E6A"><span style="width:6px;height:6px;border-radius:50%;background:#1E9E6A;animation:hmdPulse 2s infinite"></span>CONNECTED</span>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font:400 11px 'IBM Plex Mono',monospace; color:#86868B">
+            <span>sensor 9/14 d</span><span>signal strong</span>
+            <span>fw 2.31</span><span>sync 5 min</span>
+          </div>
+          <div style="height:3px; background:#F0F0EE; border-radius:2px"><div style="width:64%; height:100%; background:#1D1D1F; border-radius:2px"></div></div>
+          <div style="display:flex; gap:8px">
+            <span style="font-size:12.5px; font-weight:500; color:#fff; background:#1D1D1F; border-radius:20px; padding:6px 14px">Calibrate</span>
+            <span style="font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:6px 14px">Details</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; grid-column:span 3">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">ReconciliationCard · new custom — conflict resolution</span>
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px 22px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <span style="font-size:13.5px; font-weight:500; letter-spacing:-.01em">Two sources reported heart rate for 07:00–08:00</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+            <div style="border:1.5px solid #0F8A63; border-radius:14px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; background:#FAFDFC">
+              <span style="font:400 11px 'IBM Plex Mono',monospace; color:#6E6E73">⌚ Apple Watch</span>
+              <span style="font:500 16px 'IBM Plex Mono',monospace">61 bpm</span>
+              <span style="font:500 10px 'IBM Plex Mono',monospace; color:#0F8A63">PRIORITY ✓</span>
+            </div>
+            <div style="border:1px solid #F0F0EE; border-radius:14px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center">
+              <span style="font:400 11px 'IBM Plex Mono',monospace; color:#6E6E73">◌ Oura</span>
+              <span style="font:500 16px 'IBM Plex Mono',monospace">63 bpm</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">kept, hidden</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <span style="font-size:12.5px; font-weight:500; color:#fff; background:#0F8A63; border-radius:20px; padding:6px 16px">Use Watch for HR</span>
+            <span style="font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:6px 16px">Keep both</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 04 INTEGRATIONS ============ -->
+  <section style="display:flex; flex-direction:column; gap:20px">
+    <h2 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-.02em">04 · Integrations <span style="font-size:14px; font-weight:400; color:#86868B; letter-spacing:0">— the Connections hub: tabbed catalog of every ingestion path</span></h2>
+    <div style="background:#FFFFFF; border-radius:20px; padding:26px; display:flex; flex-direction:column; gap:20px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <!-- tabs -->
+      <div style="display:flex; gap:2px; background:#F0F0EE; border-radius:22px; padding:3px; align-self:flex-start">
+        <span style="font-size:12.5px; font-weight:500; padding:7px 16px; border-radius:18px; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,.08)">Devices</span>
+        <span style="font-size:12.5px; font-weight:500; padding:7px 16px; color:#86868B">Platform hubs</span>
+        <span style="font-size:12.5px; font-weight:500; padding:7px 16px; color:#86868B">Services</span>
+        <span style="font-size:12.5px; font-weight:500; padding:7px 16px; color:#86868B">Providers &amp; labs</span>
+        <span style="font-size:12.5px; font-weight:500; padding:7px 16px; color:#86868B">Files &amp; inbox</span>
+      </div>
+      <!-- connected sources grid -->
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px">
+        <sc-for list="{{ integrations }}" as="ig" hint-placeholder-count="6">
+          <div style="border:1px solid #F0F0EE; border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; gap:10px">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="width:34px; height:34px; border-radius:10px; background:#F4F4F2; display:grid; place-items:center; font-size:15px">{{ ig.icon }}</span>
+              <div style="display:flex; flex-direction:column">
+                <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ ig.name }}</span>
+                <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ ig.kind }}</span>
+              </div>
+              <span style="display:flex; align-items:center; gap:5px; margin-left:auto"><span style="width:6px;height:6px;border-radius:50%;background:{{ ig.dotColor }}"></span><span style="font:500 9.5px 'IBM Plex Mono',monospace; color:{{ ig.dotColor }}">{{ ig.status }}</span></span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">
+              <span>{{ ig.lastSync }}</span><span>{{ ig.records }}</span>
+            </div>
+            <span style="font-size:12px; font-weight:500; color:{{ ig.actionColor }}">{{ ig.action }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <!-- add-more row -->
+      <div style="border-top:1px solid #F0F0EE; padding-top:18px; display:flex; flex-direction:column; gap:12px">
+        <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">Add a source — the same catalog feeds the universal “Add data” sheet</span>
+        <div style="display:flex; flex-wrap:wrap; gap:8px">
+          <sc-for list="{{ catalog }}" as="c" hint-placeholder-count="10">
+            <span style="display:flex; align-items:center; gap:7px; border:1px dashed #D9D9D5; border-radius:20px; padding:7px 14px; font-size:12.5px; font-weight:500; color:#6E6E73">{{ c }} <span style="color:#0F8A63">＋</span></span>
+          </sc-for>
+        </div>
+        <p style="margin:0; font-size:12.5px; line-height:1.6; color:#6E6E73">Five ingestion families, one mental model: <strong>Devices</strong> (BLE / NFC pairing wizard), <strong>Platform hubs</strong> (HealthKit, Health Connect, Google Fit), <strong>Services</strong> (OAuth wearables), <strong>Providers &amp; labs</strong> (SMART-on-FHIR), <strong>Files &amp; inbox</strong> (scan, CSV, email-in, drag-and-drop). Every connector shows scopes before it connects, and lands its data in the review queue — nothing enters the record unapproved.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 DARK ============ -->
+  <section style="display:flex; flex-direction:column; gap:20px">
+    <h2 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-.02em">05 · Dark mode <span style="font-size:14px; font-weight:400; color:#86868B; letter-spacing:0">— same components, true-black calm</span></h2>
+    <div style="background:#161617; border-radius:20px; padding:26px; display:grid; grid-template-columns:repeat(3,1fr); gap:16px">
+      <div style="background:#1F1F21; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px">
+        <div style="display:flex; justify-content:space-between"><span style="font-size:13px; font-weight:500; color:#98989D">Resting heart rate</span><span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#636366">7D</span></div>
+        <div style="display:flex; align-items:baseline; gap:6px"><span style="font:500 30px 'IBM Plex Mono',monospace; color:#F5F5F4; letter-spacing:-.02em">54</span><span style="font:400 12px 'IBM Plex Mono',monospace; color:#98989D">bpm</span><span style="display:flex; align-items:center; gap:5px; margin-left:auto"><span style="width:7px;height:7px;border-radius:50%;background:#30C98A"></span><span style="font:500 11px 'IBM Plex Mono',monospace; color:#30C98A">▾3</span></span></div>
+        <svg viewBox="0 0 200 36" style="width:100%; height:36px"><rect x="0" y="10" width="200" height="16" rx="3" fill="#2A2A2C"></rect><polyline points="0,22 25,20 50,24 75,18 100,21 125,15 150,17 175,13 200,14" fill="none" stroke="#FF375F" stroke-width="1.7" stroke-linecap="round"></polyline><circle cx="200" cy="14" r="2.6" fill="#FF375F"></circle></svg>
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#636366">Apple Watch · 2h ago · ⌂</span>
+      </div>
+      <div style="background:#1F1F21; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px">
+        <div style="display:flex; justify-content:space-between; align-items:center"><span style="font-size:13px; font-weight:500; color:#98989D">Metabolic health index</span><span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#8B89F2; background:rgba(94,92,230,.16); border-radius:20px; padding:3px 8px">✦ AI</span></div>
+        <div style="display:flex; align-items:baseline; gap:6px"><span style="font:500 30px 'IBM Plex Mono',monospace; color:#A3A1F5; letter-spacing:-.02em">72</span><span style="font:400 12px 'IBM Plex Mono',monospace; color:#98989D">/100</span></div>
+        <div style="height:3px; background:#2A2A2C; border-radius:2px"><div style="width:87%; height:100%; background:#8B89F2; border-radius:2px"></div></div>
+        <span style="font:400 10px 'IBM Plex Mono',monospace; color:#98989D">confidence high · 0.87</span>
+      </div>
+      <div style="background:#0B2A20; border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px">
+        <div style="display:flex; justify-content:space-between; align-items:center"><span style="font-size:13px; font-weight:500; color:#8FC9B4">Glucose</span><span style="display:flex; align-items:center; gap:6px; font:500 10px 'IBM Plex Mono',monospace; color:#4FD6A6"><span style="width:6px;height:6px;border-radius:50%;background:#4FD6A6;animation:hmdPulse 1.6s infinite"></span>LIVE</span></div>
+        <div style="display:flex; align-items:baseline; gap:6px"><span style="font:500 34px 'IBM Plex Mono',monospace; color:#F2FBF7; letter-spacing:-.02em">104</span><span style="font:400 12px 'IBM Plex Mono',monospace; color:#8FC9B4">mg/dL</span></div>
+        <span style="font:400 10px 'IBM Plex Mono',monospace; color:#5E9781">Libre 3 · 5 min · 09:42</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 PERSONA + THEME NOTES ============ -->
+  <section style="display:grid; grid-template-columns:1fr 1fr; gap:20px">
+    <div style="background:#FFFFFF; border-radius:20px; padding:24px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">Sample persona (all screens)</span>
+      <span style="font-size:17px; font-weight:600; letter-spacing:-.015em">Arun Verma, 34 — the only patient</span>
+      <p style="margin:0; font-size:13px; line-height:1.65; color:#6E6E73">Prediabetes (HbA1c 5.8) + stage-1 hypertension, both improving. Meds: metformin 500mg ×2, lisinopril 10mg, vitamin D. Devices: Apple Watch, Libre 3 CGM, Withings scale &amp; BP cuff, Oura ring, Raspberry Pi dispenser. 4 years of history.</p>
+    </div>
+    <div style="background:#FFFFFF; border-radius:20px; padding:24px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">Mantine theming notes</span>
+      <p style="margin:0; font-size:13px; line-height:1.65; color:#6E6E73">Maps to a Mantine theme: <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px">primaryColor: health-green (#0F8A63)</span>, custom <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px">colors.indigoAI / .status</span>, system font stack + <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px">fontFamilyMonospace: IBM Plex Mono</span>, radius 14–20, pill buttons, hairline-free cards on soft shadow. @medplum/react inherits via MantineProvider.</p>
+    </div>
+  </section>
+
+</div></x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      lightSwatches: [
+        { name: 'canvas', hex: '#EFEFED' },
+        { name: 'card', hex: '#FFFFFF' },
+        { name: 'ink', hex: '#1D1D1F' },
+        { name: 'secondary', hex: '#6E6E73' },
+        { name: 'health green', hex: '#0F8A63' },
+        { name: 'indigo / AI', hex: '#5E5CE6' },
+        { name: 'band', hex: '#F4F4F2' },
+        { name: 'chip', hex: '#F0F0EE' },
+      ],
+      darkSwatches: [
+        { name: 'canvas', hex: '#161617' },
+        { name: 'card', hex: '#1F1F21' },
+        { name: 'ink', hex: '#F5F5F4' },
+        { name: 'secondary', hex: '#98989D' },
+        { name: 'health green', hex: '#30C98A' },
+        { name: 'indigo / AI', hex: '#8B89F2' },
+        { name: 'band', hex: '#2A2A2C' },
+        { name: 'live deep', hex: '#0B2A20' },
+      ],
+      integrations: [
+        { icon: '⌚', name: 'Apple Watch', kind: 'BLE · via HealthKit', status: 'SYNCED', dotColor: '#1E9E6A', lastSync: '12 min ago', records: '84,211 obs', action: 'Sync now', actionColor: '#0F8A63' },
+        { icon: '◉', name: 'Libre 3 CGM', kind: 'NFC + BLE stream', status: 'LIVE', dotColor: '#0F8A63', lastSync: 'streaming · 5 min', records: '31,880 obs', action: 'Calibrate', actionColor: '#0F8A63' },
+        { icon: '⚖', name: 'Withings scale + BP', kind: 'OAuth service', status: 'SYNCED', dotColor: '#1E9E6A', lastSync: 'today 07:02', records: '2,412 obs', action: 'Sync now', actionColor: '#0F8A63' },
+        { icon: '◌', name: 'Oura Ring Gen 3', kind: 'OAuth service', status: 'AUTH EXPIRED', dotColor: '#C7811B', lastSync: '3 days ago', records: '9,304 obs', action: 'Reconnect →', actionColor: '#C7811B' },
+        { icon: '⊕', name: 'Pi pill dispenser', kind: 'Medplum Agent · LAN', status: 'ONLINE', dotColor: '#1E9E6A', lastSync: 'dose 08:02', records: '1,096 events', action: 'Open dispenser', actionColor: '#0F8A63' },
+        { icon: '♥', name: 'Apple HealthKit', kind: 'platform hub · iOS', status: 'BACKGROUND', dotColor: '#1E9E6A', lastSync: 'continuous', records: '14 data types', action: 'Permissions', actionColor: '#0F8A63' },
+      ],
+      accentSwatches: [
+        { name: 'heart', hex: '#FF375F', icon: '♥' },
+        { name: 'glucose', hex: '#0F8A63', icon: '◉' },
+        { name: 'sleep', hex: '#00B7C3', icon: '☾' },
+        { name: 'activity', hex: '#FF9500', icon: '⚡' },
+        { name: 'blood pressure', hex: '#0A84FF', icon: '◍' },
+        { name: 'weight / body', hex: '#BF5AF2', icon: '⚖' },
+        { name: 'respiratory', hex: '#64D2FF', icon: '≈' },
+        { name: 'labs', hex: '#E8B10E', icon: '⚗' },
+      ],
+      catalog: ['Health Connect', 'Google Fit', 'Whoop', 'Garmin', 'Fitbit', 'Dexcom', 'Omron BP', 'SMART-on-FHIR portal', 'Apple Health Records', '23andMe file', 'Email-to-inbox', 'CSV import', 'BLE device…'],
+    };
+  }
+}
+</script>
+</body>
+</html>

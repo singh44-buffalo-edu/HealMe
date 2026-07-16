@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+  @keyframes hmdSlideUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes hmdSpin { to { transform:rotate(360deg) } }
+</style>
+</helmet>
+
+<div data-screen-label="Scan flow prototype" style="min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:40px 24px 80px; box-sizing:border-box; gap:24px">
+
+  <!-- header -->
+  <div style="width:100%; max-width:960px; display:flex; align-items:center; gap:14px">
+    <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+    <div style="display:flex; flex-direction:column; gap:1px">
+      <span style="font-size:17px; font-weight:600; letter-spacing:-.015em">Scan &amp; confirm — interactive prototype</span>
+      <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">click through the real flow · nothing enters the record unapproved</span>
+    </div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:8px; background:#FFFFFF; border-radius:20px; padding:6px 13px; box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace">Local OCR · stays home</span>
+    </div>
+  </div>
+
+  <!-- stepper -->
+  <div style="width:100%; max-width:960px; display:flex; align-items:center; gap:0">
+    <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+      <div style="display:flex; align-items:center; flex:{{ s.flex }}">
+        <button onClick="{{ s.go }}" style="border:none; cursor:pointer; display:flex; align-items:center; gap:8px; background:transparent; font-family:inherit; padding:0">
+          <span style="width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font:500 11px 'IBM Plex Mono',monospace; background:{{ s.circleBg }}; color:{{ s.circleFg }}; border:{{ s.circleBorder }}; box-sizing:border-box">{{ s.mark }}</span>
+          <span style="font-size:12.5px; font-weight:{{ s.weight }}; color:{{ s.labelColor }}">{{ s.label }}</span>
+        </button>
+        <sc-if value="{{ s.line }}" hint-placeholder-val="{{ true }}">
+          <span style="flex:1; height:1.5px; background:{{ s.lineColor }}; margin:0 14px"></span>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- stage -->
+  <div style="width:100%; max-width:960px; min-height:560px; display:flex; flex-direction:column">
+
+    <!-- STEP 0: capture -->
+    <sc-if value="{{ isCapture }}" hint-placeholder-val="{{ true }}">
+      <div style="background:#1C1C1E; border-radius:22px; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; padding:48px; animation:hmdSlideUp .3s ease">
+        <div style="width:340px; background:#F8F8F6; border-radius:6px; padding:26px 28px; display:flex; flex-direction:column; gap:11px; transform:rotate(-1.5deg); box-shadow:0 16px 48px rgba(0,0,0,.4)">
+          <div style="width:110px; height:11px; background:#2A6E52; border-radius:3px"></div>
+          <div style="width:70%; height:7px; background:#E5E5E2; border-radius:2px"></div>
+          <div style="height:1px; background:#EDEDEA; margin:4px 0"></div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <div style="display:flex; gap:10px; align-items:center; padding:5px 7px"><div style="width:58%; height:7px; background:#D9D9D5; border-radius:2px"></div><span style="font:500 10px 'IBM Plex Mono',monospace">182</span></div>
+            <div style="display:flex; gap:10px; align-items:center; padding:5px 7px"><div style="width:44%; height:7px; background:#D9D9D5; border-radius:2px"></div><span style="font:500 10px 'IBM Plex Mono',monospace">48</span></div>
+            <div style="display:flex; gap:10px; align-items:center; padding:5px 7px"><div style="width:50%; height:7px; background:#D9D9D5; border-radius:2px"></div><span style="font:500 10px 'IBM Plex Mono',monospace">112</span></div>
+            <div style="display:flex; gap:10px; align-items:center; padding:5px 7px"><div style="width:54%; height:7px; background:#D9D9D5; border-radius:2px"></div><span style="font:500 10px 'IBM Plex Mono',monospace">5.8</span></div>
+          </div>
+          <div style="width:82%; height:6px; background:#F0F0EE; border-radius:2px"></div>
+          <div style="width:60%; height:6px; background:#F0F0EE; border-radius:2px"></div>
+        </div>
+        <span style="font:400 11px 'IBM Plex Mono',monospace; color:#98989D">Quest lab report · 2 pages · positioned in frame</span>
+        <button onClick="{{ startScan }}" style="border:none; cursor:pointer; font-size:14px; font-weight:600; color:#062E22; background:#4FD6A6; border-radius:22px; padding:13px 32px; font-family:inherit">◉ Capture &amp; extract</button>
+      </div>
+    </sc-if>
+
+    <!-- STEP 1: extracting -->
+    <sc-if value="{{ isExtracting }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF; border-radius:22px; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:48px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); animation:hmdSlideUp .3s ease">
+        <span style="width:44px; height:44px; border-radius:50%; border:3px solid #E7F4EF; border-top-color:#0F8A63; animation:hmdSpin 1s linear infinite"></span>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:5px">
+          <span style="font-size:16px; font-weight:600; letter-spacing:-.015em">{{ extractLabel }}</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">Tesseract on this machine · nothing uploaded</span>
+        </div>
+        <div style="width:280px; height:4px; background:#F0F0EE; border-radius:2px"><div style="height:100%; border-radius:2px; background:#0F8A63; width:{{ extractPct }}; transition:width .4s ease"></div></div>
+      </div>
+    </sc-if>
+
+    <!-- STEP 2: confirm -->
+    <sc-if value="{{ isConfirm }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF; border-radius:22px; flex:1; display:flex; flex-direction:column; gap:4px; padding:26px 30px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); animation:hmdSlideUp .3s ease">
+        <div style="display:flex; align-items:center; gap:10px; padding-bottom:14px">
+          <span style="font-size:16px; font-weight:600; letter-spacing:-.015em">{{ confirmTitle }}</span>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">Quest · Mar 12 2026</span>
+          <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:{{ flaggedColor }}">{{ flaggedLabel }}</span>
+        </div>
+        <sc-for list="{{ fields }}" as="f" hint-placeholder-count="6">
+          <div style="display:grid; grid-template-columns:1.4fr auto 1fr auto auto; gap:16px; align-items:center; padding:11px 4px; border-top:1px solid #F4F4F2; background:{{ f.rowBg }}; border-radius:8px">
+            <div style="display:flex; flex-direction:column; gap:1px; padding-left:8px">
+              <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ f.name }}</span>
+              <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">LOINC {{ f.loinc }}</span>
+            </div>
+            <span style="display:flex; align-items:baseline; gap:4px; background:#F4F4F2; border-radius:10px; padding:6px 12px"><span style="font:500 14px 'IBM Plex Mono',monospace; color:{{ f.valColor }}">{{ f.value }}</span><span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">{{ f.unit }}</span></span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">ref {{ f.ref }} · conf {{ f.conf }}</span>
+            <span style="display:flex; align-items:center; gap:5px"><span style="width:7px; height:7px; border-radius:50%; background:{{ f.dot }}"></span><span style="font:500 9.5px 'IBM Plex Mono',monospace; color:{{ f.dot }}">{{ f.state }}</span></span>
+            <sc-if value="{{ f.needsFix }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ confirmUnit }}" style="border:none; cursor:pointer; font-size:11.5px; font-weight:500; color:#fff; background:#1D1D1F; border-radius:14px; padding:6px 13px; font-family:inherit; white-space:nowrap">Confirm mg/dL</button>
+            </sc-if>
+            <sc-if value="{{ f.fixed }}" hint-placeholder-val="{{ false }}">
+              <span style="font:500 10px 'IBM Plex Mono',monospace; color:#1E9E6A; white-space:nowrap">✓ confirmed</span>
+            </sc-if>
+            <sc-if value="{{ f.plain }}" hint-placeholder-val="{{ true }}">
+              <span style="width:90px"></span>
+            </sc-if>
+          </div>
+        </sc-for>
+        <div style="display:flex; align-items:center; gap:10px; border-top:1px solid #F4F4F2; padding-top:18px; margin-top:10px">
+          <button onClick="{{ approve }}" style="border:none; cursor:{{ approveCursor }}; font-size:13.5px; font-weight:600; color:#fff; background:{{ approveBg }}; border-radius:20px; padding:11px 24px; font-family:inherit">Approve 6 observations</button>
+          <button onClick="{{ reset }}" style="border:none; cursor:pointer; font-size:13px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:11px 18px; font-family:inherit">Rescan</button>
+          <span style="margin-left:auto; font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ approveHint }}</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- STEP 3: done -->
+    <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF; border-radius:22px; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:48px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); animation:hmdSlideUp .3s ease">
+        <span style="width:56px; height:56px; border-radius:50%; background:#E7F4EF; color:#0F8A63; display:grid; place-items:center; font-size:24px">✓</span>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:5px">
+          <span style="font-size:19px; font-weight:600; letter-spacing:-.015em">In your record.</span>
+          <span style="font-size:13px; color:#6E6E73">6 observations filed with full provenance. The original PDF is kept forever.</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px; background:#FAFAF9; border-radius:14px; padding:14px 20px; font:400 11px 'IBM Plex Mono',monospace; color:#86868B; min-width:340px">
+          <div style="display:flex; justify-content:space-between"><span>resource</span><span style="color:#1D1D1F">6 × Observation · FHIR R4</span></div>
+          <div style="display:flex; justify-content:space-between"><span>provenance</span><span style="color:#1D1D1F">▤ scan · Tesseract · you approved</span></div>
+          <div style="display:flex; justify-content:space-between"><span>document</span><span style="color:#1D1D1F">lipid-panel-quest.pdf · v1</span></div>
+          <div style="display:flex; justify-content:space-between"><span>left this device</span><span style="color:#1E9E6A">nothing ⌂</span></div>
+        </div>
+        <button onClick="{{ reset }}" style="border:none; cursor:pointer; font-size:13px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:10px 22px; font-family:inherit">↺ Run the flow again</button>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { step: 0, pct: 0, unitFixed: false };
+
+  startScan = () => {
+    this.setState({ step: 1, pct: 8 });
+    const tick = () => {
+      this.setState((s) => {
+        if (s.step !== 1) return s;
+        const pct = Math.min(100, s.pct + 18 + Math.random() * 14);
+        if (pct >= 100) { setTimeout(() => this.setState({ step: 2 }), 350); return { ...s, pct: 100 }; }
+        setTimeout(tick, 380);
+        return { ...s, pct };
+      });
+    };
+    setTimeout(tick, 380);
+  };
+
+  renderVals() {
+    const { step, pct, unitFixed } = this.state;
+    const goTo = (n) => () => { if (n === 0) this.setState({ step: 0, pct: 0, unitFixed: false }); else if (n <= step) this.setState({ step: n }); };
+    const stepDefs = ['Capture', 'Extract', 'Confirm', 'Filed'];
+    return {
+      isCapture: step === 0,
+      isExtracting: step === 1,
+      isConfirm: step === 2,
+      isDone: step === 3,
+      startScan: this.startScan,
+      reset: () => this.setState({ step: 0, pct: 0, unitFixed: false }),
+      confirmUnit: () => this.setState({ unitFixed: true }),
+      approve: () => { if (unitFixed) this.setState({ step: 3 }); },
+      approveBg: unitFixed ? '#0F8A63' : '#C9C9C5',
+      approveCursor: unitFixed ? 'pointer' : 'not-allowed',
+      approveHint: unitFixed ? 'ready — lands in your record with provenance' : 'confirm the flagged unit first',
+      flaggedLabel: unitFixed ? 'all clear ✓' : '1 needs a look',
+      flaggedColor: unitFixed ? '#1E9E6A' : '#C7811B',
+      confirmTitle: '6 observations extracted',
+      extractPct: Math.round(pct) + '%',
+      extractLabel: pct < 40 ? 'Reading the page…' : pct < 75 ? 'Matching LOINC codes…' : 'Checking reference ranges…',
+      steps: stepDefs.map((label, i) => ({
+        label,
+        go: goTo(i),
+        mark: i < step ? '✓' : String(i + 1),
+        circleBg: i < step ? '#0F8A63' : i === step ? '#1D1D1F' : '#FFFFFF',
+        circleFg: i <= step ? '#fff' : '#AEAEB2',
+        circleBorder: i > step ? '1.5px solid #D9D9D5' : '1.5px solid transparent',
+        weight: i === step ? 600 : 500,
+        labelColor: i === step ? '#1D1D1F' : '#86868B',
+        line: i < 3,
+        lineColor: i < step ? '#0F8A63' : '#D9D9D5',
+        flex: i < 3 ? '1' : '0',
+      })),
+      fields: [
+        { name: 'Total cholesterol', loinc: '2093-3', value: '182', unit: 'mg/dL', ref: '< 200', conf: '0.98', valColor: '#1D1D1F', dot: '#1E9E6A', state: 'IN RANGE', rowBg: 'transparent', needsFix: false, fixed: false, plain: true },
+        { name: 'HDL cholesterol', loinc: '2085-9', value: '48', unit: 'mg/dL', ref: '> 40', conf: '0.97', valColor: '#1D1D1F', dot: '#1E9E6A', state: 'IN RANGE', rowBg: 'transparent', needsFix: false, fixed: false, plain: true },
+        { name: 'LDL (calculated)', loinc: '13457-7', value: '112', unit: 'mg/dL', ref: '< 100', conf: '0.95', valColor: '#C7811B', dot: '#C7811B', state: 'ABOVE REF', rowBg: 'transparent', needsFix: false, fixed: false, plain: true },
+        { name: 'Triglycerides', loinc: '2571-8', value: '138', unit: 'mg/dL', ref: '< 150', conf: '0.93', valColor: '#1D1D1F', dot: '#1E9E6A', state: 'IN RANGE', rowBg: 'transparent', needsFix: false, fixed: false, plain: true },
+        { name: 'HbA1c', loinc: '4548-4', value: '5.8', unit: '%', ref: '4.0–5.6', conf: '0.99', valColor: '#C7811B', dot: '#C7811B', state: 'ABOVE REF', rowBg: 'transparent', needsFix: false, fixed: false, plain: true },
+        { name: 'Fasting glucose', loinc: '1558-6', value: '98', unit: 'mg/dL', ref: '70–99', conf: '0.88', valColor: '#1D1D1F', dot: unitFixed ? '#1E9E6A' : '#C7811B', state: unitFixed ? 'CONFIRMED' : 'CHECK UNIT', rowBg: unitFixed ? 'transparent' : '#FDF9F1', needsFix: !unitFixed, fixed: unitFixed, plain: false },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+/* HealMeDaily design tokens — source: design_handoff_healmedaily (Design System v2) */
+
+:root {
+  /* surfaces */
+  --hmd-canvas: #efefed;
+  --hmd-card: #ffffff;
+  --hmd-band: #f4f4f2;
+  --hmd-chip: #f0f0ee;
+  --hmd-hairline: #e8e8e5;
+  --hmd-hairline-soft: #f4f4f2;
+
+  /* text */
+  --hmd-ink: #1d1d1f;
+  --hmd-secondary: #6e6e73;
+  --hmd-tertiary: #86868b;
+  --hmd-quaternary: #aeaeb2;
+  --hmd-disabled: #c9c9c5;
+
+  /* brand + status */
+  --hmd-green: #0f8a63;
+  --hmd-green-hover: #0a6b4c;
+  --hmd-in-range: #1e9e6a;
+  --hmd-watch: #c7811b;
+  --hmd-out-of-range: #d64545;
+
+  /* AI class */
+  --hmd-ai: #5e5ce6;
+  --hmd-ai-deep: #4b49c8;
+  --hmd-ai-bg: #efeffc;
+  --hmd-ai-border: #deddf9;
+
+  /* live deep-green tile */
+  --hmd-live-bg: #062e22;
+  --hmd-live-text: #f2fbf7;
+  --hmd-live-accent: #4fd6a6;
+  --hmd-live-muted: #8fc9b4;
+  --hmd-live-muted-2: #5e9781;
+
+  /* metric accents — data viz only (lines, dots, rings), never chrome */
+  --hmd-metric-heart: #ff375f;
+  --hmd-metric-glucose: #0f8a63;
+  --hmd-metric-sleep: #00b7c3;
+  --hmd-metric-activity: #ff9500;
+  --hmd-metric-bp: #0a84ff;
+  --hmd-metric-bp-dia: #7cbbff;
+  --hmd-metric-weight: #bf5af2;
+  --hmd-metric-respiratory: #64d2ff;
+  --hmd-metric-labs: #e8b10e;
+
+  /* type */
+  --hmd-font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --hmd-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* elevation */
+  --hmd-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.05);
+  --hmd-shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.05), 0 12px 36px rgba(0, 0, 0, 0.08);
+  --hmd-shadow-ai: 0 1px 2px rgba(94, 92, 230, 0.06), 0 8px 28px rgba(94, 92, 230, 0.1);
+  --hmd-shadow-segment: 0 1px 3px rgba(0, 0, 0, 0.08);
+
+  /* shape */
+  --hmd-radius-card: 18px;
+  --hmd-radius-inner: 12px;
+  --hmd-radius-pill: 20px;
+}
+
+body {
+  margin: 0;
+  background: var(--hmd-canvas);
+  font-family: var(--hmd-font-ui);
+  color: var(--hmd-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--hmd-green);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--hmd-green-hover);
+}
+
+/* live-device pulse — live status dots only */
+@keyframes hmdPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* panel entry */
+@keyframes hmdEnter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

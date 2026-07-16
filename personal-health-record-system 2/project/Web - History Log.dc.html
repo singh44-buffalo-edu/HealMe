@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="History log" style="display:grid; grid-template-columns:232px 1fr; min-height:100vh; min-width:1280px">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="background:#FFFFFF; border-right:1px solid #E8E8E5; padding:24px 14px; display:flex; flex-direction:column; gap:24px; position:sticky; top:0; height:100vh; box-sizing:border-box">
+    <div style="display:flex; align-items:center; gap:10px; padding:0 10px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font-size:15px; font-weight:600; letter-spacing:-.015em">HealMeDaily</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 12px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+    </div>
+    <nav style="display:flex; flex-direction:column; gap:2px">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="13">
+        <a href="#nav" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:12px; font-size:13.5px; font-weight:{{ item.weight }}; color:{{ item.color }}; background:{{ item.bg }}">
+          <span style="width:18px; text-align:center; font-size:13px">{{ item.icon }}</span>{{ item.label }}
+          <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:10px; padding:2px 7px">{{ item.badge }}</span>
+          </sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px; padding:0 10px">
+      <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">128,443 records · backup 03:00</span>
+      <span style="font-size:12px; color:#86868B">Arun Verma · <a href="#settings">Settings</a></span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main style="padding:32px 40px 64px; display:flex; flex-direction:column; gap:18px; max-width:1180px; box-sizing:border-box; width:100%">
+
+    <!-- top bar -->
+    <div style="display:flex; align-items:flex-start; gap:16px">
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:26px; font-weight:600; letter-spacing:-.02em">History</span>
+        <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">every question asked, file uploaded, and value changed — nothing happens off the books</span>
+      </div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:8px; background:#FFFFFF; border-radius:20px; padding:9px 16px; width:240px; box-shadow:0 1px 2px rgba(0,0,0,.04)">
+        <span style="color:#AEAEB2; font-size:13px">⌕</span>
+        <span style="font-size:13px; color:#AEAEB2">Search history…</span>
+      </div>
+    </div>
+
+    <!-- filter chips -->
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <sc-for list="{{ filters }}" as="f" hint-placeholder-count="6">
+        <button onClick="{{ f.pick }}" style="border:none; cursor:pointer; display:flex; align-items:center; gap:7px; border-radius:20px; padding:7px 15px; font-size:12.5px; font-weight:500; color:{{ f.fg }}; background:{{ f.bg }}; box-shadow:{{ f.shadow }}; font-family:inherit">{{ f.label }} <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:{{ f.countColor }}">{{ f.count }}</span></button>
+      </sc-for>
+    </div>
+
+    <!-- log + control rail -->
+    <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:16px; align-items:start">
+
+      <!-- log list -->
+      <div style="display:flex; flex-direction:column; gap:0">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column">
+            <div style="display:flex; align-items:center; gap:12px; padding:14px 0 8px">
+              <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.1em; text-transform:uppercase; color:#86868B">{{ g.label }}</span>
+              <span style="flex:1; height:1px; background:#E4E4E1"></span>
+            </div>
+            <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+              <div style="background:#FFFFFF; border-radius:14px; padding:13px 18px; display:grid; grid-template-columns:auto 1fr auto; gap:13px; align-items:center; margin-bottom:8px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.04); border:{{ it.border }}">
+                <span style="width:32px; height:32px; border-radius:10px; background:{{ it.iconBg }}; color:{{ it.iconFg }}; display:grid; place-items:center; font-size:14px">{{ it.icon }}</span>
+                <div style="display:flex; flex-direction:column; gap:2px; min-width:0">
+                  <div style="display:flex; align-items:center; gap:8px">
+                    <span style="font-size:13px; font-weight:600; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ it.title }}</span>
+                    <sc-if value="{{ it.tag }}" hint-placeholder-val="{{ false }}">
+                      <span style="font:500 8.5px 'IBM Plex Mono',monospace; letter-spacing:.06em; color:{{ it.tagFg }}; background:{{ it.tagBg }}; border-radius:16px; padding:2px 7px; white-space:nowrap">{{ it.tag }}</span>
+                    </sc-if>
+                  </div>
+                  <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ it.meta }}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px">
+                  <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ it.when }}</span>
+                  <span style="display:flex; gap:6px">
+                    <span style="font-size:11.5px; font-weight:500; color:#0F8A63; cursor:pointer">{{ it.a1 }}</span>
+                    <sc-if value="{{ it.a2 }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:11.5px; font-weight:500; color:#D64545; cursor:pointer">{{ it.a2 }}</span>
+                    </sc-if>
+                  </span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- control rail: edit + remove -->
+      <div style="display:flex; flex-direction:column; gap:12px; position:sticky; top:24px">
+        <!-- edit panel -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); border:1.5px solid #CFE5DC">
+          <div style="display:flex; align-items:center; gap:9px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Editing — Fasting glucose</span>
+            <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">Mar 12 2026</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px">
+            <div style="display:flex; align-items:baseline; gap:5px; border:1px solid #E8E8E5; border-radius:12px; padding:9px 14px; background:#FAFAF9">
+              <span style="font:500 16px 'IBM Plex Mono',monospace">98</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">mg/dL</span>
+            </div>
+            <span style="font:400 11px 'IBM Plex Mono',monospace; color:#AEAEB2">was 89 — typo from scan</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:5px; border-top:1px solid #F4F4F2; padding-top:11px">
+            <span style="font:500 9.5px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#AEAEB2">VERSION HISTORY · NOTHING IS LOST</span>
+            <div style="display:flex; justify-content:space-between; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B"><span>v2 · you · correction</span><span style="color:#1D1D1F">98 mg/dL · now</span></div>
+            <div style="display:flex; justify-content:space-between; font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2"><span>v1 · scan · Tesseract</span><span>89 mg/dL · Mar 12</span></div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:16px; padding:8px 16px; font-family:inherit">Save as v2</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:8px 14px; font-family:inherit">Cancel</button>
+          </div>
+        </div>
+
+        <!-- remove panel -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:11px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); border:1.5px solid #F3D6D6">
+          <div style="display:flex; align-items:center; gap:9px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em; color:#D64545">Remove — AI Q&A session</span>
+            <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">Jul 12 · 3 questions</span>
+          </div>
+          <p style="margin:0; font-size:12px; line-height:1.6; color:#6E6E73">Deletes the questions, answers, and the assistant's retrieval trace from this device. The observations it read are untouched.</p>
+          <div style="display:flex; flex-direction:column; gap:5px; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">
+            <div style="display:flex; justify-content:space-between"><span>what's deleted</span><span style="color:#1D1D1F">chat + trace · permanent</span></div>
+            <div style="display:flex; justify-content:space-between"><span>audit note kept</span><span style="color:#1D1D1F">"session removed by you"</span></div>
+            <div style="display:flex; justify-content:space-between"><span>from backups</span><span style="color:#1D1D1F">purged on next cycle</span></div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:600; color:#fff; background:#D64545; border-radius:16px; padding:8px 16px; font-family:inherit">Delete permanently</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:8px 14px; font-family:inherit">Keep</button>
+          </div>
+        </div>
+
+        <!-- rules card -->
+        <div style="background:#FAFAF9; border-radius:16px; padding:14px 18px; display:flex; flex-direction:column; gap:7px">
+          <span style="font:500 9.5px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#AEAEB2">How edits &amp; deletes work</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.65">· measured values → edited as new versions, originals kept<br>· documents → removable; extracted values ask separately<br>· AI chats &amp; traces → fully deletable, audit stub remains<br>· device streams → hide or exclude, raw stays exportable</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { filter: 0 };
+  renderVals() {
+    const active = (label) => label === 'Timeline';
+    const filterDefs = [
+      { label: 'All', count: '1,204' },
+      { label: '✦ AI Q&A', count: '46' },
+      { label: 'Uploads', count: '312' },
+      { label: 'Labs', count: '84' },
+      { label: 'Edits', count: '19' },
+      { label: 'Deletions', count: '3' },
+    ];
+    const sel = this.state.filter;
+    return {
+      noop: () => {},
+      filters: filterDefs.map((f, i) => ({
+        ...f,
+        pick: () => this.setState({ filter: i }),
+        fg: i === sel ? '#fff' : '#6E6E73',
+        bg: i === sel ? '#1D1D1F' : '#FFFFFF',
+        countColor: i === sel ? '#D1D1D6' : '#AEAEB2',
+        shadow: i === sel ? 'none' : '0 1px 2px rgba(0,0,0,.05)',
+      })),
+      nav: [
+        { icon: '◈', label: 'Dashboard' },
+        { icon: '♥', label: 'Vitals' },
+        { icon: '⚗', label: 'Labs' },
+        { icon: '⊞', label: 'Devices' },
+        { icon: '✦', label: 'AI Insights', badge: '3' },
+        { icon: '☰', label: 'Timeline' },
+        { icon: '⌸', label: 'Explorer' },
+        { icon: '▤', label: 'Documents' },
+        { icon: '◌', label: 'Medications' },
+        { icon: '☾', label: 'Sleep & Activity' },
+        { icon: '✎', label: 'Journal' },
+        { icon: '✉', label: 'Assistant' },
+        { icon: '⇄', label: 'Connections' },
+      ].map((n) => ({
+        ...n,
+        weight: active(n.label) ? 600 : 500,
+        color: active(n.label) ? '#1D1D1F' : '#6E6E73',
+        bg: active(n.label) ? '#F0F0EE' : 'transparent',
+        badge: n.badge || false,
+      })),
+      groups: [
+        {
+          label: 'This week',
+          items: [
+            { icon: '✦', iconBg: '#EFEFFC', iconFg: '#5E5CE6', title: '"How has my BP changed since lisinopril?"', meta: 'Assistant · local Ollama · read 214 obs · answer cited 3 sources', when: 'Jul 15 09:12', tag: '✦ AI Q&A', tagFg: '#5E5CE6', tagBg: '#EFEFFC', a1: 'View', a2: 'Delete', border: '1px solid transparent' },
+            { icon: '▤', iconBg: '#F4F4F2', iconFg: '#1D1D1F', title: 'cardiology-referral.pdf uploaded', meta: 'email-to-inbox · 1 page · not yet extracted', when: 'Jul 15 08:30', tag: false, a1: 'Open', a2: 'Remove', border: '1px solid transparent' },
+            { icon: '✎', iconBg: '#E7F4EF', iconFg: '#0F8A63', title: 'Fasting glucose corrected 89 → 98', meta: 'your edit · scan misread · v2 created, v1 kept', when: 'Jul 14 17:02', tag: 'EDIT', tagFg: '#0F8A63', tagBg: '#E7F4EF', a1: 'History', a2: false, border: '1.5px solid #CFE5DC' },
+            { icon: '✦', iconBg: '#EFEFFC', iconFg: '#5E5CE6', title: '"What should I ask Dr. Rao?" · 3 questions', meta: 'Assistant · local · session traced', when: 'Jul 12 20:44', tag: '✦ AI Q&A', tagFg: '#5E5CE6', tagBg: '#EFEFFC', a1: 'View', a2: 'Delete', border: '1.5px solid #F3D6D6' },
+          ],
+        },
+        {
+          label: 'Earlier',
+          items: [
+            { icon: '⚗', iconBg: '#FBF6E4', iconFg: '#C7811B', title: 'Lipid panel + A1c approved into record', meta: 'scan → 6 observations · you reviewed · Quest Mar 12', when: 'Jul 14 16:40', tag: 'LABS', tagFg: '#C7811B', tagBg: '#FBF6E4', a1: 'Open', a2: false, border: '1px solid transparent' },
+            { icon: '⇪', iconBg: '#F4F4F2', iconFg: '#1D1D1F', title: 'legacy-scale-2019-21.csv → 90 observations', meta: 'upload · mapping confirmed by you', when: 'Jul 9 14:11', tag: false, a1: 'Open', a2: 'Remove', border: '1px solid transparent' },
+            { icon: '☁', iconBg: '#FDF9F1', iconFg: '#C7811B', title: 'Narrative summary generated — 90-day digest', meta: 'cloud · your Anthropic key · de-identified · in boundary ledger', when: 'Jul 1 10:05', tag: '☁ CLOUD', tagFg: '#C7811B', tagBg: '#FDF9F1', a1: 'View', a2: 'Delete', border: '1px solid transparent' },
+            { icon: '⌦', iconBg: '#FBEFEF', iconFg: '#D64545', title: 'Journal entry deleted by you', meta: 'audit stub kept · purged from backups Jul 3', when: 'Jun 30', tag: 'DELETED', tagFg: '#D64545', tagBg: '#FBEFEF', a1: 'Audit', a2: false, border: '1px solid transparent' },
+          ],
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

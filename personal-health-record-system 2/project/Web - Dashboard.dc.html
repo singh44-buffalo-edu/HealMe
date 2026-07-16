@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Web Dashboard" style="display:grid; grid-template-columns:232px 1fr; min-height:100vh; min-width:1280px">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="background:#FFFFFF; border-right:1px solid #E8E8E5; padding:24px 14px; display:flex; flex-direction:column; gap:24px; position:sticky; top:0; height:100vh; box-sizing:border-box">
+    <div style="display:flex; align-items:center; gap:10px; padding:0 10px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font-size:15px; font-weight:600; letter-spacing:-.015em">HealMeDaily</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 12px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+    </div>
+
+    <nav style="display:flex; flex-direction:column; gap:2px">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="12">
+        <a href="#nav" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:12px; font-size:13.5px; font-weight:{{ item.weight }}; color:{{ item.color }}; background:{{ item.bg }}">
+          <span style="width:18px; text-align:center; font-size:13px">{{ item.icon }}</span>{{ item.label }}
+          <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:10px; padding:2px 7px">{{ item.badge }}</span>
+          </sc-if>
+        </a>
+      </sc-for>
+    </nav>
+
+    <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px; padding:0 10px">
+      <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">128,443 records · backup 03:00</span>
+      <span style="font-size:12px; color:#86868B">Arun Verma · <a href="#settings">Settings</a></span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main style="padding:32px 40px 64px; display:flex; flex-direction:column; gap:24px; max-width:1180px; box-sizing:border-box; width:100%">
+
+    <!-- top bar -->
+    <div style="display:flex; align-items:center; gap:16px">
+      <div style="display:flex; flex-direction:column; gap:2px">
+        <span style="font-size:26px; font-weight:600; letter-spacing:-.02em">Good morning, Arun</span>
+        <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">Tue Jul 14 2026 · all systems steady</span>
+      </div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:10px">
+        <div style="display:flex; align-items:center; gap:8px; background:#FFFFFF; border-radius:20px; padding:9px 16px; width:260px; box-shadow:0 1px 2px rgba(0,0,0,.04)">
+          <span style="color:#AEAEB2; font-size:13px">⌕</span>
+          <span style="font-size:13px; color:#AEAEB2">Search everything…</span>
+          <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#D1D1CE">⌘K</span>
+        </div>
+        <button onClick="{{ noop }}" style="border:none; cursor:pointer; display:flex; align-items:center; gap:7px; background:#0F8A63; color:#fff; border-radius:20px; padding:9px 18px; font-size:13px; font-weight:600; font-family:inherit">＋ Add data</button>
+      </div>
+    </div>
+
+    <!-- status strip -->
+    <div style="background:#FFFFFF; border-radius:18px; padding:16px 22px; display:flex; align-items:center; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="width:10px; height:10px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font-size:14px; font-weight:500; letter-spacing:-.01em">You're okay right now — 11 of 12 tracked metrics in range.</span>
+      <span style="font:400 11.5px 'IBM Plex Mono',monospace; color:#C7811B">1 watch: morning BP</span>
+      <a href="#insights" style="margin-left:auto; font-size:12.5px; font-weight:500; color:#5E5CE6">✦ 3 open insights →</a>
+    </div>
+
+    <!-- metric grid -->
+    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px">
+      <!-- live glucose -->
+      <div style="background:#062E22; border-radius:18px; padding:18px; display:flex; flex-direction:column; gap:10px; color:#F2FBF7">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <span style="font-size:12.5px; font-weight:500; color:#8FC9B4">Glucose</span>
+          <span style="display:flex; align-items:center; gap:5px; font:500 9.5px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#4FD6A6"><span style="width:6px;height:6px;border-radius:50%;background:#4FD6A6;animation:hmdPulse 1.6s infinite"></span>LIVE</span>
+        </div>
+        <div style="display:flex; align-items:baseline; gap:5px">
+          <span style="font:500 28px 'IBM Plex Mono',monospace; letter-spacing:-.02em">104</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#8FC9B4">mg/dL</span>
+          <span style="font:500 12px 'IBM Plex Mono',monospace; color:#4FD6A6; margin-left:auto">→</span>
+        </div>
+        <svg viewBox="0 0 200 30" style="width:100%; height:30px; display:block">
+          <rect x="0" y="6" width="200" height="17" rx="3" fill="rgba(79,214,166,.10)"></rect>
+          <polyline points="0,18 20,16 40,20 60,23 80,19 100,14 120,12 140,15 160,17 180,16 200,15" fill="none" stroke="#4FD6A6" stroke-width="1.6" stroke-linecap="round"></polyline>
+          <circle cx="200" cy="15" r="2.8" fill="#4FD6A6"></circle>
+        </svg>
+        <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#5E9781">Libre 3 · 09:42</span>
+      </div>
+      <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="3">
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; justify-content:space-between; align-items:baseline">
+            <span style="font-size:12.5px; font-weight:500; color:#6E6E73">{{ m.label }}</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ m.window }}</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:5px">
+            <span style="font:500 28px 'IBM Plex Mono',monospace; letter-spacing:-.02em">{{ m.value }}</span>
+            <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">{{ m.unit }}</span>
+            <span style="display:flex; align-items:center; gap:4px; margin-left:auto"><span style="width:6px;height:6px;border-radius:50%;background:{{ m.statusColor }}"></span><span style="font:500 10.5px 'IBM Plex Mono',monospace; color:{{ m.statusColor }}">{{ m.delta }}</span></span>
+          </div>
+          <svg viewBox="0 0 200 30" style="width:100%; height:30px; display:block">
+            <rect x="0" y="6" width="200" height="17" rx="3" fill="#F4F4F2"></rect>
+            <polyline points="{{ m.spark }}" fill="none" stroke="{{ m.accent }}" stroke-width="1.6" stroke-linecap="round"></polyline>
+            <circle cx="{{ m.dotX }}" cy="{{ m.dotY }}" r="2.8" fill="{{ m.accent }}"></circle>
+          </svg>
+          <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ m.source }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- focus mode: one line, then everything on demand -->
+    <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#FFFFFF; border-radius:18px; padding:15px 22px; display:flex; align-items:center; gap:16px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <span style="display:flex; align-items:center; gap:9px"><span style="width:8px; height:8px; border-radius:50%; background:#D1D1CE"></span><span style="font-size:13.5px; font-weight:500; letter-spacing:-.01em">Next: Metformin 500 mg · 19:00</span><span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">dispenser ready</span></span>
+        <span style="font:400 11px 'IBM Plex Mono',monospace; color:#D64545">1 missed this morning</span>
+        <a href="#insights" style="font-size:12.5px; font-weight:500; color:#5E5CE6">✦ 3 insights</a>
+        <button onClick="{{ toggleMore }}" style="margin-left:auto; border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:8px 16px; font-family:inherit">Show more — meds · insights · sleep · activity</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+    <!-- middle row: meds + insights -->
+    <div style="display:grid; grid-template-columns:1.25fr 1fr; gap:16px; align-items:start">
+
+      <!-- today's meds -->
+      <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+        <div style="display:flex; align-items:center; padding:18px 22px 12px">
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Today's medications</span>
+          <span style="margin-left:10px; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">2 of 4 taken</span>
+          <a href="#meds" style="margin-left:auto; font-size:12.5px; font-weight:500">All meds →</a>
+        </div>
+        <sc-for list="{{ meds }}" as="med" hint-placeholder-count="4">
+          <div style="display:grid; grid-template-columns:auto 1fr auto auto; gap:14px; align-items:center; padding:12px 22px; border-top:1px solid #F4F4F2">
+            <span style="width:8px; height:8px; border-radius:50%; background:{{ med.dotColor }}"></span>
+            <div style="display:flex; flex-direction:column; gap:1px">
+              <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ med.name }}</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">{{ med.detail }}</span>
+            </div>
+            <span style="font:500 11px 'IBM Plex Mono',monospace; color:{{ med.stateColor }}">{{ med.state }}</span>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12px; font-weight:500; color:{{ med.actionFg }}; background:{{ med.actionBg }}; border-radius:16px; padding:5px 13px; font-family:inherit">{{ med.action }}</button>
+          </div>
+        </sc-for>
+        <div style="display:flex; align-items:center; gap:8px; padding:12px 22px; background:#FAFAF9; border-top:1px solid #F4F4F2">
+          <span style="font-size:12px">⊕</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">Pi dispenser online · tray 1 low — 2 wedges ·</span>
+          <a href="#dispenser" style="font-size:12px; font-weight:500">Dispenser →</a>
+        </div>
+      </div>
+
+      <!-- AI insights -->
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 20px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 8px 28px rgba(94,92,230,.10)">
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:3px 8px">✦ AI</span>
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Open insights</span>
+            <a href="#insights" style="margin-left:auto; font-size:12.5px; font-weight:500; color:#5E5CE6">All →</a>
+          </div>
+          <sc-for list="{{ insights }}" as="ins" hint-placeholder-count="3">
+            <div style="display:flex; flex-direction:column; gap:6px; border-top:1px solid #F4F4F2; padding-top:12px">
+              <div style="display:flex; align-items:center; gap:8px">
+                <span style="font:500 9.5px 'IBM Plex Mono',monospace; color:{{ ins.sevColor }}">{{ ins.severity }}</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2; margin-left:auto">{{ ins.when }}</span>
+              </div>
+              <span style="font-size:13px; line-height:1.45; font-weight:500; letter-spacing:-.01em">{{ ins.text }}</span>
+              <a href="#why" style="font-size:12px; font-weight:500; color:#5E5CE6">{{ ins.link }}</a>
+            </div>
+          </sc-for>
+        </div>
+        <!-- upcoming -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Upcoming</span>
+          <div style="display:flex; align-items:center; gap:12px; border-top:1px solid #F4F4F2; padding-top:10px">
+            <div style="display:flex; flex-direction:column; align-items:center; background:#F4F4F2; border-radius:10px; padding:6px 10px">
+              <span style="font:500 10px 'IBM Plex Mono',monospace; color:#86868B">JUL</span>
+              <span style="font:500 15px 'IBM Plex Mono',monospace">21</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:1px">
+              <span style="font-size:13px; font-weight:500">Dr. Rao — quarterly review</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">09:30 · bring Q2 lab slice</span>
+            </div>
+            <a href="#export" style="margin-left:auto; font-size:12px; font-weight:500">Prep PDF →</a>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; border-top:1px solid #F4F4F2; padding-top:10px">
+            <div style="display:flex; flex-direction:column; align-items:center; background:#F4F4F2; border-radius:10px; padding:6px 10px">
+              <span style="font:500 10px 'IBM Plex Mono',monospace; color:#86868B">JUL</span>
+              <span style="font:500 15px 'IBM Plex Mono',monospace">19</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:1px">
+              <span style="font-size:13px; font-weight:500">Libre sensor change — day 14</span>
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">reminder set · NFC pairing ready</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- bottom row: activity strip + recent -->
+    <div style="display:grid; grid-template-columns:1fr 1.25fr; gap:16px; align-items:start">
+      <!-- sleep & activity -->
+      <div style="background:#FFFFFF; border-radius:18px; padding:18px 20px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <div style="display:flex; align-items:center">
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Last night · today</span>
+          <a href="#activity" style="margin-left:auto; font-size:12.5px; font-weight:500">Activity →</a>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px">
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <span style="display:flex; align-items:center; gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#00B7C3"></span><span style="font-size:11.5px; font-weight:500; color:#6E6E73">Sleep</span></span>
+            <span style="font:500 20px 'IBM Plex Mono',monospace; letter-spacing:-.02em">7h 42m</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">Oura · 88 score</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <span style="display:flex; align-items:center; gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#FF9500"></span><span style="font-size:11.5px; font-weight:500; color:#6E6E73">Steps</span></span>
+            <span style="font:500 20px 'IBM Plex Mono',monospace; letter-spacing:-.02em">9,214</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">Watch · goal 10k</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <span style="display:flex; align-items:center; gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#5E5CE6"></span><span style="font-size:11.5px; font-weight:500; color:#6E6E73">Readiness ✦</span></span>
+            <span style="font:500 20px 'IBM Plex Mono',monospace; letter-spacing:-.02em; color:#4B49C8">81</span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">derived · conf 0.9</span>
+          </div>
+        </div>
+        <!-- sleep stages bar -->
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <div style="display:flex; height:14px; border-radius:7px; overflow:hidden">
+            <span style="width:14%; background:#B7EAEE"></span>
+            <span style="width:22%; background:#00B7C3"></span>
+            <span style="width:10%; background:#006E76"></span>
+            <span style="width:18%; background:#B7EAEE"></span>
+            <span style="width:16%; background:#00B7C3"></span>
+            <span style="width:8%; background:#006E76"></span>
+            <span style="width:12%; background:#B7EAEE"></span>
+          </div>
+          <div style="display:flex; gap:12px; font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">
+            <span><span style="color:#00B7C3">▮</span> light 4h 01m</span>
+            <span><span style="color:#006E76">▮</span> deep 1h 22m</span>
+            <span><span style="color:#B7EAEE">▮</span> REM 2h 19m</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- recent activity feed -->
+      <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+        <div style="display:flex; align-items:center; padding:18px 22px 12px">
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Recent activity</span>
+          <a href="#timeline" style="margin-left:auto; font-size:12.5px; font-weight:500">Timeline →</a>
+        </div>
+        <sc-for list="{{ feed }}" as="ev" hint-placeholder-count="5">
+          <div style="display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; padding:11px 22px; border-top:1px solid #F4F4F2">
+            <span style="width:26px; height:26px; border-radius:8px; background:#F4F4F2; display:grid; place-items:center; font-size:12px">{{ ev.icon }}</span>
+            <div style="display:flex; flex-direction:column; gap:1px">
+              <span style="font-size:13px; font-weight:500; letter-spacing:-.01em">{{ ev.text }}</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ ev.meta }}</span>
+            </div>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ ev.when }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <button onClick="{{ toggleMore }}" style="border:none; cursor:pointer; align-self:center; font-size:12.5px; font-weight:500; color:#86868B; background:transparent; font-family:inherit; padding:4px 12px">Show less ↑</button>
+    </sc-if>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { expanded: false };
+  renderVals() {
+    const active = (label) => label === 'Dashboard';
+    return {
+      noop: () => {},
+      expanded: this.state.expanded,
+      collapsed: !this.state.expanded,
+      toggleMore: () => this.setState((s) => ({ expanded: !s.expanded })),
+      nav: [
+        { icon: '◈', label: 'Dashboard' },
+        { icon: '♥', label: 'Vitals' },
+        { icon: '⚗', label: 'Labs' },
+        { icon: '⊞', label: 'Devices' },
+        { icon: '✦', label: 'AI Insights', badge: '3' },
+        { icon: '☰', label: 'Timeline' },
+        { icon: '⌸', label: 'Explorer' },
+        { icon: '▤', label: 'Documents' },
+        { icon: '◌', label: 'Medications' },
+        { icon: '☾', label: 'Sleep & Activity' },
+        { icon: '✎', label: 'Journal' },
+        { icon: '✉', label: 'Assistant' },
+        { icon: '⇄', label: 'Connections' },
+      ].map((n) => ({
+        ...n,
+        weight: active(n.label) ? 600 : 500,
+        color: active(n.label) ? '#1D1D1F' : '#6E6E73',
+        bg: active(n.label) ? '#F0F0EE' : 'transparent',
+        badge: n.badge || false,
+      })),
+      metrics: [
+        { label: 'Resting heart rate', window: '7D', value: '54', unit: 'bpm', delta: '▾3', statusColor: '#1E9E6A', accent: '#FF375F', spark: '0,18 25,16 50,20 75,14 100,17 125,11 150,13 175,9 200,10', dotX: 200, dotY: 10, source: 'Apple Watch · 2h ago' },
+        { label: 'Blood pressure', window: 'AM', value: '128/82', unit: 'mmHg', delta: 'watch', statusColor: '#C7811B', accent: '#0A84FF', spark: '0,14 33,15 66,12 100,16 133,13 166,15 200,12', dotX: 200, dotY: 12, source: 'Withings · 07:05' },
+        { label: 'Weight', window: '30D', value: '76.2', unit: 'kg', delta: '▾0.8', statusColor: '#1E9E6A', accent: '#BF5AF2', spark: '0,10 30,11 60,12 90,13 120,14 150,15 180,16 200,17', dotX: 200, dotY: 17, source: 'Withings · 06:58' },
+      ],
+      meds: [
+        { name: 'Metformin 500 mg', detail: 'breakfast · tray 1 wedge', dotColor: '#1E9E6A', state: '08:02 dispensed ✓', stateColor: '#1E9E6A', action: 'Taken', actionFg: '#86868B', actionBg: '#F4F4F2' },
+        { name: 'Lisinopril 10 mg', detail: 'morning · tray 1 wedge', dotColor: '#D64545', state: 'missed 08:00', stateColor: '#D64545', action: 'Log now', actionFg: '#fff', actionBg: '#1D1D1F' },
+        { name: 'Metformin 500 mg', detail: 'dinner · tray 2 wedge', dotColor: '#D1D1CE', state: 'next 19:00', stateColor: '#86868B', action: 'Upcoming', actionFg: '#AEAEB2', actionBg: '#FAFAF9' },
+        { name: 'Vitamin D 2000 IU', detail: 'morning · manual', dotColor: '#1E9E6A', state: 'taken 08:10 ✓', stateColor: '#1E9E6A', action: 'Taken', actionFg: '#86868B', actionBg: '#F4F4F2' },
+      ],
+      insights: [
+        { severity: 'MODERATE', sevColor: '#C7811B', when: '07:10', conf: 'high · 0.84', text: 'Resting HR up 8% over 7 days vs. your baseline.', link: 'Evidence → 3 sources' },
+        { severity: 'INFO', sevColor: '#5E5CE6', when: 'yesterday', conf: 'high · 0.91', text: 'Late meals correlate with +12 mg/dL morning glucose (r = 0.62).', link: 'See correlation →' },
+        { severity: 'POSITIVE', sevColor: '#1E9E6A', when: 'Jul 11', conf: 'high · 0.87', text: 'Projected HbA1c 5.4% by Oct if 30-day trend holds.', link: 'Forecast →' },
+      ],
+      feed: [
+        { icon: '◉', text: '288 CGM readings synced', meta: 'Libre 3 → Bot cgm-ingest · ok', when: '09:42' },
+        { icon: '⊕', text: 'Dose dispensed — Metformin 500 mg', meta: 'Pi dispenser · tray 1 wedge · ⚖ verified', when: '08:02' },
+        { icon: '⚖', text: 'Weight + BP measured', meta: 'Withings sync · 2 observations', when: '07:05' },
+        { icon: '▤', text: 'Lipid panel PDF extracted — 6 values', meta: 'review queue → approved by you', when: 'yesterday' },
+        { icon: '☾', text: 'Sleep session imported — 7h 42m', meta: 'Oura → HealthKit → Bot', when: '06:31' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

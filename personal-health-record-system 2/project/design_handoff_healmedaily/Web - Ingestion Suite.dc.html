@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:56px; padding:56px; align-items:flex-start">
+
+  <header style="display:flex; flex-direction:column; gap:8px">
+    <div style="display:flex; align-items:center; gap:12px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">HealMeDaily · Ingestion suite — <a href="#1a">1a</a> capture hub · <a href="#1b">1b</a> scan &amp; confirm · <a href="#1c">1c</a> review queue</span>
+    </div>
+    <p style="margin:0; max-width:680px; font-size:14px; line-height:1.6; color:#6E6E73">Every path into the record — scan, photo, file, device, service, manual — funnels through one review queue. Nothing enters unapproved.</p>
+  </header>
+
+  <!-- ============ 1a · CAPTURE HUB (Add data sheet) ============ -->
+  <div id="1a" data-screen-label="Capture hub" style="display:flex; flex-direction:column; gap:12px">
+    <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">1a</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Capture hub — the universal “Add data” sheet</span></span>
+    <div style="width:1440px; height:900px; border-radius:24px; overflow:hidden; position:relative; background:#DCDCDA; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12)">
+      <!-- dimmed dashboard hint behind -->
+      <div style="position:absolute; inset:0; background:linear-gradient(180deg,#E6E6E4,#D8D8D6); filter:blur(0px)">
+        <div style="position:absolute; left:0; top:0; bottom:0; width:232px; background:#F2F2F0"></div>
+        <div style="position:absolute; left:272px; top:40px; width:900px; height:64px; background:#F5F5F3; border-radius:16px"></div>
+        <div style="position:absolute; left:272px; top:128px; width:280px; height:170px; background:#F5F5F3; border-radius:16px"></div>
+        <div style="position:absolute; left:568px; top:128px; width:280px; height:170px; background:#F5F5F3; border-radius:16px"></div>
+        <div style="position:absolute; left:864px; top:128px; width:280px; height:170px; background:#F5F5F3; border-radius:16px"></div>
+      </div>
+      <div style="position:absolute; inset:0; background:rgba(29,29,31,.32); backdrop-filter:blur(3px)"></div>
+      <!-- sheet -->
+      <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:760px; background:#FFFFFF; border-radius:24px; box-shadow:0 8px 24px rgba(0,0,0,.12), 0 40px 90px rgba(0,0,0,.22); display:flex; flex-direction:column; overflow:hidden">
+        <div style="display:flex; align-items:center; gap:14px; padding:26px 30px 0">
+          <span style="font-size:22px; font-weight:600; letter-spacing:-.02em">Add data</span>
+          <span style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:5px 12px">
+            <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+            <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+          </span>
+          <span style="margin-left:auto; width:30px; height:30px; border-radius:50%; background:#F4F4F2; display:grid; place-items:center; font-size:13px; color:#86868B">✕</span>
+        </div>
+        <div style="padding:18px 30px 0">
+          <div style="display:flex; align-items:center; gap:9px; background:#F4F4F2; border-radius:14px; padding:11px 16px">
+            <span style="color:#AEAEB2; font-size:14px">⌕</span>
+            <span style="font-size:13.5px; color:#AEAEB2">Search sources, metrics, or type a value — “bp 128/82”</span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; padding:20px 30px 4px">
+          <sc-for list="{{ captureTiles }}" as="t" hint-placeholder-count="8">
+            <div style="border:1px solid #F0F0EE; border-radius:16px; padding:16px 15px; display:flex; flex-direction:column; gap:9px; cursor:pointer" style-hover="border-color:#0F8A63; box-shadow:0 4px 16px rgba(15,138,99,.10)">
+              <span style="width:34px; height:34px; border-radius:10px; background:{{ t.iconBg }}; color:{{ t.iconFg }}; display:grid; place-items:center; font-size:15px">{{ t.icon }}</span>
+              <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em; line-height:1.25">{{ t.label }}</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.5">{{ t.sub }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px; padding:14px 30px 0">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#AEAEB2">Recent captures</span>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <span style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 13px; font-size:12px; font-weight:500; color:#6E6E73">▤ Lipid panel scan <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">yesterday</span></span>
+            <span style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 13px; font-size:12px; font-weight:500; color:#6E6E73">✎ Headache note <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">Jul 11</span></span>
+            <span style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 13px; font-size:12px; font-weight:500; color:#6E6E73">⌗ BP monitor photo <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">Jul 10</span></span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; background:#FAFAF9; border-top:1px solid #F0F0EE; padding:14px 30px; margin-top:20px">
+          <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">Everything lands in your review queue first — nothing enters the record unapproved.</span>
+          <a href="#1c" style="margin-left:auto; font-size:12.5px; font-weight:500">Review queue (8) →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 1b · SCAN & CONFIRM ============ -->
+  <div id="1b" data-screen-label="Scan and confirm" style="display:flex; flex-direction:column; gap:12px">
+    <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">1b</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Scan &amp; confirm — OCR extraction with per-field confidence</span></span>
+    <div style="width:1440px; border-radius:24px; overflow:hidden; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); display:flex; flex-direction:column">
+      <!-- takeover top bar -->
+      <div style="display:flex; align-items:center; gap:16px; background:#FFFFFF; border-bottom:1px solid #E8E8E5; padding:16px 28px">
+        <span style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:#6E6E73">← Back</span>
+        <div style="display:flex; flex-direction:column; gap:1px">
+          <span style="font-size:16px; font-weight:600; letter-spacing:-.015em">Scan &amp; confirm — Lipid panel + A1c</span>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">Quest Diagnostics · collected Mar 12 2026 · detected from document</span>
+        </div>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:8px; border:1px solid {{ ocrBorder }}; border-radius:20px; padding:6px 14px; background:{{ ocrBg }}">
+          <span style="width:7px; height:7px; border-radius:50%; background:{{ ocrDot }}"></span>
+          <span style="font-size:12.5px; font-weight:500">{{ ocrLabel }}</span>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:{{ ocrTagColor }}">{{ ocrTag }}</span>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1.15fr; gap:0">
+        <!-- document preview -->
+        <div style="background:#E3E3E1; padding:32px; display:flex; flex-direction:column; gap:14px; align-items:center">
+          <div style="width:480px; background:#FFFFFF; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,.10), 0 16px 40px rgba(0,0,0,.12); padding:34px 36px; display:flex; flex-direction:column; gap:16px; position:relative">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start">
+              <div style="display:flex; flex-direction:column; gap:5px">
+                <div style="width:120px; height:13px; background:#2A6E52; border-radius:3px"></div>
+                <div style="width:88px; height:7px; background:#E5E5E2; border-radius:3px"></div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end">
+                <div style="width:72px; height:7px; background:#E5E5E2; border-radius:3px"></div>
+                <div style="width:96px; height:7px; background:#E5E5E2; border-radius:3px"></div>
+              </div>
+            </div>
+            <div style="height:1px; background:#EDEDEA"></div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <div style="width:60%; height:8px; background:#EDEDEA; border-radius:3px"></div>
+              <div style="width:44%; height:8px; background:#EDEDEA; border-radius:3px"></div>
+            </div>
+            <!-- results table w/ highlight boxes -->
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px">
+              <sc-for list="{{ docRows }}" as="r" hint-placeholder-count="6">
+                <div style="display:grid; grid-template-columns:1.4fr .6fr .5fr .8fr; gap:10px; align-items:center; padding:7px 9px; border-radius:6px; background:{{ r.hlBg }}; outline:{{ r.hlOutline }}">
+                  <div style="height:8px; background:#D9D9D5; border-radius:3px; width:{{ r.nameW }}"></div>
+                  <span style="font:500 11px 'IBM Plex Mono',monospace; color:#1D1D1F">{{ r.val }}</span>
+                  <div style="height:7px; background:#E5E5E2; border-radius:3px"></div>
+                  <div style="height:7px; background:#E5E5E2; border-radius:3px; width:70%"></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px; margin-top:8px">
+              <div style="width:90%; height:7px; background:#F0F0EE; border-radius:3px"></div>
+              <div style="width:82%; height:7px; background:#F0F0EE; border-radius:3px"></div>
+              <div style="width:56%; height:7px; background:#F0F0EE; border-radius:3px"></div>
+            </div>
+            <span style="position:absolute; bottom:12px; right:16px; font:400 9px 'IBM Plex Mono',monospace; color:#C7C7C3">page 1 / 2</span>
+          </div>
+          <div style="display:flex; gap:14px; font:400 10px 'IBM Plex Mono',monospace; color:#86868B; align-items:center">
+            <span><span style="color:#1E9E6A">▮</span> matched region</span>
+            <span><span style="color:#C7811B">▮</span> low confidence — check</span>
+            <span style="margin-left:8px; background:#FFFFFF; border-radius:16px; padding:5px 12px; color:#6E6E73">◧ original scan</span>
+          </div>
+        </div>
+        <!-- extracted fields -->
+        <div style="background:#FFFFFF; padding:26px 30px 24px; display:flex; flex-direction:column; gap:14px">
+          <div style="display:flex; align-items:center; gap:10px">
+            <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">6 observations extracted</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">avg confidence 0.95</span>
+            <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:#C7811B">1 needs a look</span>
+          </div>
+          <div style="display:flex; flex-direction:column">
+            <sc-for list="{{ fields }}" as="f" hint-placeholder-count="6">
+              <div style="display:grid; grid-template-columns:1.5fr .9fr 1fr .9fr auto; gap:14px; align-items:center; padding:12px 4px; border-top:1px solid #F4F4F2">
+                <div style="display:flex; flex-direction:column; gap:2px">
+                  <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ f.name }}</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">LOINC {{ f.loinc }}</span>
+                </div>
+                <div style="display:flex; align-items:baseline; gap:4px; background:#F4F4F2; border-radius:10px; padding:7px 12px; justify-self:start">
+                  <span style="font:500 15px 'IBM Plex Mono',monospace; letter-spacing:-.01em; color:{{ f.valColor }}">{{ f.value }}</span>
+                  <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">{{ f.unit }}</span>
+                </div>
+                <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">ref {{ f.ref }}</span>
+                <div style="display:flex; flex-direction:column; gap:4px">
+                  <div style="display:flex; justify-content:space-between; font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2"><span>conf</span><span style="color:{{ f.confColor }}">{{ f.conf }}</span></div>
+                  <div style="height:3px; background:#F0F0EE; border-radius:2px"><div style="height:100%; border-radius:2px; background:{{ f.confColor }}; width:{{ f.confW }}"></div></div>
+                </div>
+                <span style="display:flex; align-items:center; gap:5px"><span style="width:7px; height:7px; border-radius:50%; background:{{ f.dot }}"></span><span style="font:500 10px 'IBM Plex Mono',monospace; color:{{ f.dot }}">{{ f.state }}</span></span>
+              </div>
+            </sc-for>
+          </div>
+          <!-- flagged field detail -->
+          <div style="border:1px solid #F3E3C8; background:#FDF9F1; border-radius:14px; padding:14px 18px; display:flex; align-items:center; gap:12px">
+            <span style="width:7px; height:7px; border-radius:50%; background:#C7811B"></span>
+            <span style="font-size:12.5px; line-height:1.5; color:#6E6E73"><strong style="color:#1D1D1F">Fasting glucose — check the unit.</strong> The scan reads “98” but the unit region was smudged. Confirm mg/dL, or tap the highlight to re-crop.</span>
+            <span style="margin-left:auto; font-size:12px; font-weight:500; color:#fff; background:#1D1D1F; border-radius:16px; padding:6px 14px; white-space:nowrap">Confirm mg/dL</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; border-top:1px solid #F4F4F2; padding-top:16px">
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13px; font-weight:600; color:#fff; background:#0F8A63; border-radius:20px; padding:10px 22px; font-family:inherit">Approve 6 observations</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:20px; padding:10px 18px; font-family:inherit">Save draft</button>
+            <span style="margin-left:auto; font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">→ lands in review queue · original PDF kept · v1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 1c · REVIEW QUEUE ============ -->
+  <div id="1c" data-screen-label="Review queue" style="display:flex; flex-direction:column; gap:12px">
+    <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">1c</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Review queue — the gate into the record</span></span>
+    <div style="width:1440px; border-radius:24px; overflow:hidden; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); display:grid; grid-template-columns:232px 1fr">
+      <!-- sidebar -->
+      <aside style="background:#FFFFFF; border-right:1px solid #E8E8E5; padding:24px 14px; display:flex; flex-direction:column; gap:24px; box-sizing:border-box">
+        <div style="display:flex; align-items:center; gap:10px; padding:0 10px">
+          <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.015em">HealMeDaily</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 12px">
+          <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+          <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+        </div>
+        <nav style="display:flex; flex-direction:column; gap:2px">
+          <sc-for list="{{ nav }}" as="item" hint-placeholder-count="13">
+            <a href="#nav" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:12px; font-size:13.5px; font-weight:{{ item.weight }}; color:{{ item.color }}; background:{{ item.bg }}">
+              <span style="width:18px; text-align:center; font-size:13px">{{ item.icon }}</span>{{ item.label }}
+              <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+                <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:{{ item.badgeFg }}; background:{{ item.badgeBg }}; border-radius:10px; padding:2px 7px">{{ item.badge }}</span>
+              </sc-if>
+            </a>
+          </sc-for>
+        </nav>
+        <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px; padding:0 10px">
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">128,443 records · backup 03:00</span>
+          <span style="font-size:12px; color:#86868B">Arun Verma · <a href="#settings">Settings</a></span>
+        </div>
+      </aside>
+      <!-- main -->
+      <main style="padding:32px 40px 48px; display:flex; flex-direction:column; gap:20px; box-sizing:border-box">
+        <div style="display:flex; align-items:flex-start; gap:16px">
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <span style="font-size:26px; font-weight:600; letter-spacing:-.02em">Review queue</span>
+            <span style="font-size:13px; color:#6E6E73">{{ queueCount }} items awaiting your approval — nothing enters the record without you.</span>
+          </div>
+          <button onClick="{{ noop }}" style="margin-left:auto; border:none; cursor:pointer; display:flex; align-items:center; gap:7px; background:#0F8A63; color:#fff; border-radius:20px; padding:9px 18px; font-size:13px; font-weight:600; font-family:inherit; white-space:nowrap">✓ Approve 5 high-confidence</button>
+        </div>
+        <!-- filter chips -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <sc-for list="{{ filters }}" as="ft" hint-placeholder-count="5">
+            <span style="display:flex; align-items:center; gap:7px; border-radius:20px; padding:7px 15px; font-size:12.5px; font-weight:500; color:{{ ft.fg }}; background:{{ ft.bg }}; box-shadow:{{ ft.shadow }}">{{ ft.label }} <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:{{ ft.countColor }}">{{ ft.count }}</span></span>
+          </sc-for>
+        </div>
+        <!-- queue items -->
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <sc-for list="{{ queue }}" as="q" hint-placeholder-count="4">
+            <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:grid; grid-template-columns:auto 1fr auto; gap:16px; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+              <span style="width:38px; height:38px; border-radius:12px; background:{{ q.iconBg }}; color:{{ q.iconFg }}; display:grid; place-items:center; font-size:16px">{{ q.icon }}</span>
+              <div style="display:flex; flex-direction:column; gap:4px; min-width:0">
+                <div style="display:flex; align-items:center; gap:9px">
+                  <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">{{ q.title }}</span>
+                  <sc-if value="{{ q.aiTag }}" hint-placeholder-val="{{ false }}">
+                    <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:3px 8px">✦ AI</span>
+                  </sc-if>
+                  <span style="font:500 9.5px 'IBM Plex Mono',monospace; color:{{ q.stateColor }}">{{ q.state }}</span>
+                </div>
+                <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">{{ q.meta }}</span>
+                <div style="display:flex; align-items:center; gap:8px">
+                  <div style="width:120px; height:3px; background:#F0F0EE; border-radius:2px"><div style="height:100%; border-radius:2px; background:{{ q.confColor }}; width:{{ q.confW }}"></div></div>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:{{ q.confColor }}">conf {{ q.conf }}</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">· {{ q.when }}</span>
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center">
+                <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:{{ q.primaryFg }}; background:{{ q.primaryBg }}; border-radius:18px; padding:7px 16px; font-family:inherit; white-space:nowrap">{{ q.primary }}</button>
+                <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:18px; padding:7px 14px; font-family:inherit">Details</button>
+              </div>
+            </div>
+          </sc-for>
+
+          <!-- conflict reconciliation, inline in queue -->
+          <sc-if value="{{ showConflict }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:13px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+              <div style="display:flex; align-items:center; gap:10px">
+                <span style="width:38px; height:38px; border-radius:12px; background:#F4F4F2; display:grid; place-items:center; font-size:16px">⇄</span>
+                <div style="display:flex; flex-direction:column; gap:2px">
+                  <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Two sources reported heart rate for 07:00–08:00</span>
+                  <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">conflict · your device priority puts Watch first for HR</span>
+                </div>
+                <span style="margin-left:auto; font:500 9.5px 'IBM Plex Mono',monospace; color:#C7811B">NEEDS DECISION</span>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+                <div style="border:1.5px solid #0F8A63; border-radius:14px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; background:#FAFDFC">
+                  <span style="font:400 11px 'IBM Plex Mono',monospace; color:#6E6E73">⌚ Apple Watch</span>
+                  <span style="font:500 16px 'IBM Plex Mono',monospace">61 bpm</span>
+                  <span style="font:500 10px 'IBM Plex Mono',monospace; color:#0F8A63">PRIORITY ✓</span>
+                </div>
+                <div style="border:1px solid #F0F0EE; border-radius:14px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center">
+                  <span style="font:400 11px 'IBM Plex Mono',monospace; color:#6E6E73">◌ Oura</span>
+                  <span style="font:500 16px 'IBM Plex Mono',monospace">63 bpm</span>
+                  <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">kept, hidden</span>
+                </div>
+              </div>
+              <div style="display:flex; gap:8px">
+                <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#fff; background:#0F8A63; border-radius:18px; padding:7px 16px; font-family:inherit">Use Watch for HR</button>
+                <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:18px; padding:7px 14px; font-family:inherit">Keep both</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        <!-- footer note -->
+        <div style="display:flex; align-items:center; gap:9px; padding:4px 2px">
+          <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">Approving files the results into your record with their source attached. Rejected items keep the original file, marked “not entered”.</span>
+        </div>
+      </main>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1560px&quot;},&quot;ocrEngine&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;local&quot;,&quot;cloud&quot;],&quot;default&quot;:&quot;local&quot;,&quot;tsType&quot;:&quot;'local' | 'cloud'&quot;,&quot;section&quot;:&quot;Privacy boundary&quot;},&quot;showConflict&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Review queue&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const ocrCloud = (this.props.ocrEngine ?? 'local') === 'cloud';
+    const showConflict = this.props.showConflict ?? true;
+    const active = (label) => label === 'Review queue';
+    return {
+      noop: () => {},
+      showConflict,
+      queueCount: showConflict ? 8 : 7,
+      ocrDot: ocrCloud ? '#C7811B' : '#1E9E6A',
+      ocrLabel: ocrCloud ? 'Cloud OCR · Anthropic' : 'Local OCR · Tesseract',
+      ocrTag: ocrCloud ? 'leaves device' : 'stays home',
+      ocrTagColor: ocrCloud ? '#C7811B' : '#AEAEB2',
+      ocrBorder: ocrCloud ? '#F3E3C8' : '#F0F0EE',
+      ocrBg: ocrCloud ? '#FDF9F1' : '#FFFFFF',
+      captureTiles: [
+        { icon: '▤', label: 'Scan a document', sub: 'camera or scanner · OCR', iconBg: '#E7F4EF', iconFg: '#0F8A63' },
+        { icon: '⌗', label: 'Photo of a device screen', sub: 'AI reads the display', iconBg: '#EFEFFC', iconFg: '#5E5CE6' },
+        { icon: '⇪', label: 'Upload files', sub: 'PDF · CSV · HL7 · FHIR', iconBg: '#F4F4F2', iconFg: '#1D1D1F' },
+        { icon: '✎', label: 'Manual entry', sub: 'vitals · symptoms · notes', iconBg: '#F4F4F2', iconFg: '#1D1D1F' },
+        { icon: '⊞', label: 'Pair a device', sub: 'BLE · NFC wizard', iconBg: '#F4F4F2', iconFg: '#1D1D1F' },
+        { icon: '⇄', label: 'Connect a service', sub: 'OAuth · scopes shown first', iconBg: '#F4F4F2', iconFg: '#1D1D1F' },
+        { icon: '✉', label: 'Email-to-inbox', sub: 'arun@inbox.healme.local', iconBg: '#F4F4F2', iconFg: '#1D1D1F' },
+        { icon: '♪', label: 'Voice note', sub: 'transcribed locally', iconBg: '#F4F4F2', iconFg: '#1D1D1F' },
+      ],
+      docRows: [
+        { val: '182', nameW: '86%', hlBg: 'rgba(30,158,106,.10)', hlOutline: '1px solid rgba(30,158,106,.45)' },
+        { val: '48', nameW: '64%', hlBg: 'rgba(30,158,106,.10)', hlOutline: '1px solid rgba(30,158,106,.45)' },
+        { val: '112', nameW: '74%', hlBg: 'rgba(30,158,106,.10)', hlOutline: '1px solid rgba(30,158,106,.45)' },
+        { val: '138', nameW: '70%', hlBg: 'rgba(30,158,106,.10)', hlOutline: '1px solid rgba(30,158,106,.45)' },
+        { val: '5.8', nameW: '52%', hlBg: 'rgba(30,158,106,.10)', hlOutline: '1px solid rgba(30,158,106,.45)' },
+        { val: '98', nameW: '78%', hlBg: 'rgba(199,129,27,.12)', hlOutline: '1.5px solid rgba(199,129,27,.6)' },
+      ],
+      fields: [
+        { name: 'Total cholesterol', loinc: '2093-3', value: '182', unit: 'mg/dL', ref: '< 200', conf: '0.98', confW: '98%', confColor: '#1E9E6A', dot: '#1E9E6A', state: 'IN RANGE', valColor: '#1D1D1F' },
+        { name: 'HDL cholesterol', loinc: '2085-9', value: '48', unit: 'mg/dL', ref: '> 40', conf: '0.97', confW: '97%', confColor: '#1E9E6A', dot: '#1E9E6A', state: 'IN RANGE', valColor: '#1D1D1F' },
+        { name: 'LDL (calculated)', loinc: '13457-7', value: '112', unit: 'mg/dL', ref: '< 100', conf: '0.95', confW: '95%', confColor: '#1E9E6A', dot: '#C7811B', state: 'ABOVE REF', valColor: '#C7811B' },
+        { name: 'Triglycerides', loinc: '2571-8', value: '138', unit: 'mg/dL', ref: '< 150', conf: '0.93', confW: '93%', confColor: '#1E9E6A', dot: '#1E9E6A', state: 'IN RANGE', valColor: '#1D1D1F' },
+        { name: 'HbA1c', loinc: '4548-4', value: '5.8', unit: '%', ref: '4.0–5.6', conf: '0.99', confW: '99%', confColor: '#1E9E6A', dot: '#C7811B', state: 'ABOVE REF', valColor: '#C7811B' },
+        { name: 'Fasting glucose', loinc: '1558-6', value: '98', unit: 'mg/dL', ref: '70–99', conf: '0.88', confW: '88%', confColor: '#C7811B', dot: '#C7811B', state: 'CHECK UNIT', valColor: '#1D1D1F' },
+      ],
+      nav: [
+        { icon: '◈', label: 'Dashboard' },
+        { icon: '♥', label: 'Vitals' },
+        { icon: '⚗', label: 'Labs' },
+        { icon: '⊞', label: 'Devices' },
+        { icon: '✦', label: 'AI Insights', badge: '3', badgeFg: '#5E5CE6', badgeBg: '#EFEFFC' },
+        { icon: '☰', label: 'Timeline' },
+        { icon: '⌸', label: 'Explorer' },
+        { icon: '▤', label: 'Documents' },
+        { icon: '◌', label: 'Medications' },
+        { icon: '☾', label: 'Sleep & Activity' },
+        { icon: '✎', label: 'Journal' },
+        { icon: '✉', label: 'Assistant' },
+        { icon: '⇄', label: 'Connections' },
+        { icon: '☑', label: 'Review queue', badge: String(showConflict ? 8 : 7), badgeFg: '#C7811B', badgeBg: '#FBF3E4' },
+      ].map((n) => ({
+        ...n,
+        weight: active(n.label) ? 600 : 500,
+        color: active(n.label) ? '#1D1D1F' : '#6E6E73',
+        bg: active(n.label) ? '#F0F0EE' : 'transparent',
+        badge: n.badge || false,
+        badgeFg: n.badgeFg || '#5E5CE6',
+        badgeBg: n.badgeBg || '#EFEFFC',
+      })),
+      filters: [
+        { label: 'All', count: String(showConflict ? 8 : 7), fg: '#fff', bg: '#1D1D1F', countColor: '#D1D1D6', shadow: 'none' },
+        { label: 'Documents', count: '2', fg: '#6E6E73', bg: '#FFFFFF', countColor: '#AEAEB2', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+        { label: 'Device sync', count: '3', fg: '#6E6E73', bg: '#FFFFFF', countColor: '#AEAEB2', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+        { label: 'AI-extracted', count: '2', fg: '#6E6E73', bg: '#FFFFFF', countColor: '#AEAEB2', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+        { label: 'Conflicts', count: showConflict ? '1' : '0', fg: '#6E6E73', bg: '#FFFFFF', countColor: '#AEAEB2', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+      ],
+      queue: [
+        { icon: '▤', iconBg: '#E7F4EF', iconFg: '#0F8A63', title: 'Lipid panel + A1c — Quest', aiTag: false, state: 'READY', stateColor: '#1E9E6A', meta: '6 observations extracted · Mar 12 2026 · original PDF kept', conf: '0.95', confW: '95%', confColor: '#1E9E6A', when: 'yesterday 16:40', primary: 'Review 6 →', primaryFg: '#fff', primaryBg: '#0F8A63' },
+        { icon: '⌗', iconBg: '#EFEFFC', iconFg: '#5E5CE6', title: 'BP monitor photo', aiTag: true, state: 'NEEDS CONFIRM', stateColor: '#C7811B', meta: 'AI read 132/84 mmHg from Omron display · photo kept', conf: '0.76', confW: '76%', confColor: '#C7811B', when: 'Jul 10 08:12', primary: 'Confirm value', primaryFg: '#fff', primaryBg: '#1D1D1F' },
+        { icon: '◌', iconBg: '#F4F4F2', iconFg: '#1D1D1F', title: 'Oura backfill — 3 days', aiTag: false, state: 'AUTO-MAPPED', stateColor: '#1E9E6A', meta: '412 observations · sleep, HRV, temperature · after reconnect', conf: '0.99', confW: '99%', confColor: '#1E9E6A', when: 'today 06:31', primary: 'Approve all', primaryFg: '#fff', primaryBg: '#0F8A63' },
+        { icon: '⇪', iconBg: '#F4F4F2', iconFg: '#1D1D1F', title: 'CSV import — legacy scale', aiTag: false, state: 'MAPPING CONFIRMED', stateColor: '#1E9E6A', meta: '90 rows → body weight observations · 2019–2021', conf: '0.97', confW: '97%', confColor: '#1E9E6A', when: 'Jul 9', primary: 'Approve 90', primaryFg: '#fff', primaryBg: '#0F8A63' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

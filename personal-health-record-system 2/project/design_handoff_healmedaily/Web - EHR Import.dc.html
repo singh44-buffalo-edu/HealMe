@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="EHR import" style="min-height:100vh; min-width:1280px; display:flex; flex-direction:column; align-items:center; padding:0 0 80px; box-sizing:border-box">
+
+  <!-- top bar -->
+  <div style="width:100%; background:#FFFFFF; border-bottom:1px solid #E8E8E5; box-sizing:border-box; padding:16px 40px; display:flex; align-items:center; gap:16px">
+    <span style="font-size:13px; font-weight:500; color:#6E6E73">← Connections</span>
+    <div style="display:flex; flex-direction:column; gap:1px">
+      <span style="font-size:17px; font-weight:600; letter-spacing:-.015em">Bring your history home</span>
+      <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">pull your records out of hospital systems worldwide — into your vault, then they're yours</span>
+    </div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:18px; padding:7px 14px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace">imports land in your review queue · originals kept</span>
+    </div>
+  </div>
+
+  <div style="width:100%; max-width:1120px; padding:28px 40px 0; box-sizing:border-box; display:flex; flex-direction:column; gap:18px">
+
+    <!-- find your systems -->
+    <div style="background:#FFFFFF; border-radius:18px; padding:20px 26px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <div style="display:flex; align-items:center; gap:12px">
+        <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Where have you been treated?</span>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:16px; padding:8px 14px; width:320px">
+          <span style="color:#AEAEB2; font-size:13px">⌕</span>
+          <span style="font-size:13px; color:#AEAEB2">Search a hospital, clinic, or country…</span>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px">
+        <sc-for list="{{ networks }}" as="n" hint-placeholder-count="6">
+          <div style="border:{{ n.border }}; background:{{ n.bg }}; border-radius:16px; padding:15px 17px; display:flex; flex-direction:column; gap:8px; box-sizing:border-box">
+            <div style="display:flex; align-items:center; gap:9px">
+              <span style="font-size:16px">{{ n.flag }}</span>
+              <div style="display:flex; flex-direction:column; gap:1px">
+                <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ n.name }}</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">{{ n.how }}</span>
+              </div>
+              <span style="margin-left:auto; font:500 9px 'IBM Plex Mono',monospace; color:{{ n.stateColor }}; white-space:nowrap">{{ n.state }}</span>
+            </div>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.5">{{ n.covers }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex; align-items:center; gap:9px; background:#FAFAF9; border-radius:12px; padding:10px 15px">
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">No portal? Three fallbacks always work: <strong style="color:#1D1D1F">⇪ upload a FHIR/C-CDA export</strong> · <strong style="color:#1D1D1F">✉ ask the clinic to email your inbox address</strong> · <strong style="color:#1D1D1F">▤ scan the paper</strong> — same review queue either way.</span>
+      </div>
+    </div>
+
+    <!-- active imports -->
+    <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:16px; align-items:start">
+      <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+        <div style="display:flex; align-items:center; padding:18px 24px 12px">
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Importing now</span>
+          <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">translated to FHIR R4 · deduped against your record</span>
+        </div>
+        <sc-for list="{{ imports }}" as="im" hint-placeholder-count="3">
+          <div style="display:flex; flex-direction:column; gap:9px; padding:15px 24px; border-top:1px solid #F4F4F2">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="font-size:15px">{{ im.flag }}</span>
+              <div style="display:flex; flex-direction:column; gap:1px">
+                <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ im.name }}</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">{{ im.detail }}</span>
+              </div>
+              <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:{{ im.stateColor }}">{{ im.state }}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px">
+              <div style="flex:1; height:4px; background:#F0F0EE; border-radius:2px"><div style="height:100%; border-radius:2px; background:{{ im.barColor }}; width:{{ im.pct }}"></div></div>
+              <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">{{ im.progress }}</span>
+            </div>
+            <sc-if value="{{ im.note }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:center; gap:8px; background:#FAFAF9; border-radius:10px; padding:8px 12px">
+                <span style="width:5px; height:5px; border-radius:50%; background:{{ im.noteDot }}"></span>
+                <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">{{ im.note }}</span>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- coverage + what happens -->
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:11px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Your life, covered</span>
+            <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">what the record spans after import</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:7px">
+            <sc-for list="{{ coverage }}" as="c" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:10px">
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B; width:76px; flex-shrink:0">{{ c.span }}</span>
+                <div style="flex:1; height:12px; border-radius:6px; background:#F4F4F2; overflow:hidden; display:flex">
+                  <span style="width:{{ c.off }}"></span>
+                  <span style="width:{{ c.w }}; background:{{ c.color }}; border-radius:6px"></span>
+                </div>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:{{ c.labelColor }}; width:104px; flex-shrink:0; text-align:right">{{ c.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">the 2014–2019 Pune years arrive with Manipal — childhood stays paper: scan when visiting home</span>
+        </div>
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">What happens to every import</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.75">· translated to FHIR R4, units + codes normalized<br>· deduped — same lab from two systems merges, both cited<br>· conflicts go to your review queue, never auto-resolved<br>· source system stamped on every value, forever<br>· then the connection can be closed — the copy is yours</span>
+        </div>
+        <div style="background:#1D1D1F; border-radius:16px; padding:14px 18px; display:flex; align-items:center; gap:11px; color:#F5F5F4">
+          <span style="font-size:14px">⌂</span>
+          <span style="font-size:12px; line-height:1.5; color:#98989D">Import is one-way: systems → your vault. Nothing syncs back out, and no one is notified you took your copy.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      noop: () => {},
+      networks: [
+        { flag: '🇮🇳', name: 'ABDM / ABHA', how: 'India · consent via ABHA number + OTP', covers: 'linked hospitals & labs nationwide — Arun: ABHA •••• 4821 · Ma: linkable from her vault', state: 'CONNECTED', stateColor: '#1E9E6A', border: '1.5px solid #CFE5DC', bg: '#FBFDFC' },
+        { flag: '🇺🇸', name: 'US portals · SMART on FHIR', how: 'Epic · Cerner/Oracle · MyChart login', covers: 'the Boston years — Mass General 2021–22 · also via Apple Health Records', state: 'IMPORTING', stateColor: '#0F8A63', border: '1.5px solid #CFE5DC', bg: '#FBFDFC' },
+        { flag: '🇬🇧', name: 'NHS', how: 'UK · NHS login → GP record', covers: 'GP summary, meds, allergies, test results', state: 'AVAILABLE', stateColor: '#AEAEB2', border: '1px solid #F0F0EE', bg: '#FFFFFF' },
+        { flag: '🇪🇺', name: 'EU · MyHealth@EU', how: 'national patient portals · EHDS', covers: 'patient summaries & e-prescriptions across member states', state: 'AVAILABLE', stateColor: '#AEAEB2', border: '1px solid #F0F0EE', bg: '#FFFFFF' },
+        { flag: '🇦🇺', name: 'My Health Record', how: 'Australia · myGov', covers: 'shared health summary, pathology, imaging reports', state: 'AVAILABLE', stateColor: '#AEAEB2', border: '1px solid #F0F0EE', bg: '#FFFFFF' },
+        { flag: '🌐', name: 'Any FHIR endpoint', how: 'paste a URL + your credentials', covers: 'self-hosted systems, insurers (US Blue Button), anything speaking FHIR', state: 'AVAILABLE', stateColor: '#AEAEB2', border: '1px dashed #D9D9D5', bg: '#FFFFFF' },
+      ],
+      imports: [
+        { flag: '🇮🇳', name: 'Manipal Hospital, Pune', detail: 'via ABDM · consent granted Jul 14 · 2014–2019', state: 'IMPORTING', stateColor: '#0F8A63', pct: '72%', barColor: '#0F8A63', progress: '212 of ~290 records', note: '3 lab results also exist in your record — dedupe queued for your review', noteDot: '#C7811B' },
+        { flag: '🇺🇸', name: 'Mass General Brigham', detail: 'SMART on FHIR · Epic · 2021–2022', state: 'IMPORTING', stateColor: '#0F8A63', pct: '38%', barColor: '#0F8A63', progress: '96 of ~250 records', note: false, noteDot: '#1E9E6A' },
+        { flag: '🇮🇳', name: 'Dr. Lal PathLabs', detail: 'via ABDM · 12 lab reports · 2019–2023', state: 'DONE — 46 in review', stateColor: '#1E9E6A', pct: '100%', barColor: '#1E9E6A', progress: 'all records fetched', note: false, noteDot: '#1E9E6A' },
+      ],
+      coverage: [
+        { span: '2014–19', off: '6%', w: '26%', color: '#9BD9BF', label: 'arriving now', labelColor: '#0F8A63' },
+        { span: '2019–21', off: '38%', w: '12%', color: '#E8C989', label: 'labs only', labelColor: '#C7811B' },
+        { span: '2021–22', off: '52%', w: '10%', color: '#9BD9BF', label: 'arriving now', labelColor: '#0F8A63' },
+        { span: '2022–now', off: '64%', w: '36%', color: '#0F8A63', label: 'your vault ✓', labelColor: '#1E9E6A' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

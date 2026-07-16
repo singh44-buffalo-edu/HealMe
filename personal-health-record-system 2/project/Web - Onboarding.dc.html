@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:32px; padding:56px; align-items:flex-start">
+
+  <header style="display:flex; flex-direction:column; gap:8px">
+    <div style="display:flex; align-items:center; gap:12px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">HealMeDaily · First run — <a href="#3a">3a</a> welcome · <a href="#3b">3b</a> your keys · <a href="#3c">3c</a> connect · <a href="#3d">3d</a> first import</span>
+    </div>
+    <p style="margin:0; max-width:660px; font-size:14px; line-height:1.6; color:#6E6E73">First run happens once, on Arun's own machine. Four steps: establish trust, generate the keys, connect the first sources, watch real data land. No account creation — there is no company to have an account with.</p>
+  </header>
+
+  <div style="display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start">
+
+    <!-- ============ 3a · WELCOME ============ -->
+    <div id="3a" data-screen-label="Onboarding Welcome" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">3a</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Welcome — the promise, before anything else</span></span>
+      <div style="width:1100px; height:760px; border-radius:24px; background:#1D1D1F; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:28px; color:#F5F5F4; position:relative; overflow:hidden">
+        <span style="position:absolute; top:28px; left:32px; font:400 10px 'IBM Plex Mono',monospace; color:#636366">healmedaily · running on arun-mini.local</span>
+        <div style="width:52px; height:52px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:22px; font-weight:600">H</div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center">
+          <h1 style="margin:0; font-size:44px; font-weight:600; letter-spacing:-.028em; line-height:1.1">Your health record.<br>On your hardware. Only yours.</h1>
+          <p style="margin:0; max-width:480px; font-size:15px; line-height:1.65; color:#98989D">This machine becomes your medical vault. No cloud account, no company database, no one reading along. AI features are off until you turn them on — one by one.</p>
+        </div>
+        <div style="display:flex; gap:10px">
+          <span style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.07); border-radius:20px; padding:8px 16px; font:400 11px 'IBM Plex Mono',monospace; color:#D1D1D6"><span style="width:6px; height:6px; border-radius:50%; background:#4FD6A6"></span>⌂ everything stays here</span>
+          <span style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.07); border-radius:20px; padding:8px 16px; font:400 11px 'IBM Plex Mono',monospace; color:#D1D1D6">⇩ export anytime, standard FHIR</span>
+          <span style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.07); border-radius:20px; padding:8px 16px; font:400 11px 'IBM Plex Mono',monospace; color:#D1D1D6">✦ AI is opt-in, always labeled</span>
+        </div>
+        <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:15px; font-weight:600; color:#062E22; background:#4FD6A6; border-radius:24px; padding:14px 36px; font-family:inherit">Set up my vault</button>
+        <span style="font:400 10px 'IBM Plex Mono',monospace; color:#636366">~4 minutes · nothing leaves this machine during setup</span>
+      </div>
+    </div>
+
+    <!-- ============ 3b · KEYS ============ -->
+    <div id="3b" data-screen-label="Onboarding Keys" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">3b</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Your keys — encryption + recovery, one honest moment</span></span>
+      <div style="width:1100px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); display:flex; flex-direction:column; align-items:center; padding:56px 0 48px; gap:26px">
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; color:#0F8A63">STEP 2 OF 4</span>
+          <div style="display:flex; gap:4px"><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#D9D9D5"></span><span style="width:22px; height:3px; border-radius:2px; background:#D9D9D5"></span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center">
+          <h2 style="margin:0; font-size:30px; font-weight:600; letter-spacing:-.025em">These keys encrypt everything.</h2>
+          <p style="margin:0; max-width:460px; font-size:13.5px; line-height:1.6; color:#6E6E73">Your record is sealed with keys generated on this machine, just now. We can't reset them for you — <strong style="color:#1D1D1F">there is no "we"</strong>. Store the recovery phrase somewhere real.</p>
+        </div>
+        <div style="background:#FFFFFF; border-radius:18px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; width:560px; box-sizing:border-box; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#AEAEB2">Recovery phrase · write it down</span>
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px">
+            <sc-for list="{{ phrase }}" as="w" hint-placeholder-count="12">
+              <span style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:10px; padding:8px 11px"><span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ w.n }}</span><span style="font:500 12px 'IBM Plex Mono',monospace">{{ w.word }}</span></span>
+            </sc-for>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; border-top:1px solid #F4F4F2; padding-top:14px">
+            <span style="width:7px; height:7px; border-radius:50%; background:#C7811B"></span>
+            <span style="font-size:12px; line-height:1.5; color:#6E6E73">Lose the phrase + the disk = the record is gone. That's the honest cost of no one else holding your keys.</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="width:20px; height:20px; border-radius:6px; border:1.5px solid #0F8A63; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:11px">✓</span>
+          <span style="font-size:13px; font-weight:500">I wrote it down — it's not a screenshot</span>
+        </div>
+        <div style="display:flex; gap:10px">
+          <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:20px; padding:12px 28px; font-family:inherit">Continue</button>
+          <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:20px; padding:12px 20px; font-family:inherit; box-shadow:0 1px 2px rgba(0,0,0,.05)">Print backup kit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 3c · CONNECT ============ -->
+    <div id="3c" data-screen-label="Onboarding Connect" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">3c</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Connect first sources — scopes shown before anything syncs</span></span>
+      <div style="width:1100px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); display:flex; flex-direction:column; align-items:center; padding:56px 0 48px; gap:26px">
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; color:#0F8A63">STEP 3 OF 4</span>
+          <div style="display:flex; gap:4px"><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#D9D9D5"></span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center">
+          <h2 style="margin:0; font-size:30px; font-weight:600; letter-spacing:-.025em">Where does your data live today?</h2>
+          <p style="margin:0; max-width:440px; font-size:13.5px; line-height:1.6; color:#6E6E73">Pick what you have — pairing comes next. Every source shows exactly what it will read before it connects.</p>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:760px">
+          <sc-for list="{{ sources }}" as="s" hint-placeholder-count="6">
+            <div style="background:#FFFFFF; border:{{ s.border }}; border-radius:16px; padding:16px 17px; display:flex; flex-direction:column; gap:9px; cursor:pointer; box-sizing:border-box">
+              <div style="display:flex; align-items:center; gap:9px">
+                <span style="width:32px; height:32px; border-radius:10px; background:#F4F4F2; display:grid; place-items:center; font-size:14px">{{ s.icon }}</span>
+                <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ s.name }}</span>
+                <span style="margin-left:auto; width:19px; height:19px; border-radius:6px; border:{{ s.checkBorder }}; background:{{ s.checkBg }}; color:#fff; display:grid; place-items:center; font-size:10px; box-sizing:border-box">{{ s.check }}</span>
+              </div>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.5">{{ s.scope }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center">
+          <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:20px; padding:12px 28px; font-family:inherit">Connect 3 sources</button>
+          <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:20px; padding:12px 20px; font-family:inherit; box-shadow:0 1px 2px rgba(0,0,0,.05)">Skip — start empty</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 3d · FIRST IMPORT ============ -->
+    <div id="3d" data-screen-label="Onboarding First Import" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">3d</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">First import — data lands, review habit starts here</span></span>
+      <div style="width:1100px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); display:flex; flex-direction:column; align-items:center; padding:56px 0 48px; gap:26px">
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; color:#0F8A63">STEP 4 OF 4</span>
+          <div style="display:flex; gap:4px"><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span><span style="width:22px; height:3px; border-radius:2px; background:#0F8A63"></span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center">
+          <h2 style="margin:0; font-size:30px; font-weight:600; letter-spacing:-.025em">Your record is filling up.</h2>
+          <p style="margin:0; max-width:440px; font-size:13.5px; line-height:1.6; color:#6E6E73">Historical data imports in the background. One habit to learn: <strong style="color:#1D1D1F">new data waits for your approval</strong> in the review queue.</p>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px; width:560px">
+          <sc-for list="{{ imports }}" as="im" hint-placeholder-count="3">
+            <div style="background:#FFFFFF; border-radius:16px; padding:15px 20px; display:grid; grid-template-columns:auto 1fr auto; gap:13px; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+              <span style="width:34px; height:34px; border-radius:10px; background:#F4F4F2; display:grid; place-items:center; font-size:15px">{{ im.icon }}</span>
+              <div style="display:flex; flex-direction:column; gap:4px">
+                <div style="display:flex; align-items:center; gap:8px">
+                  <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ im.name }}</span>
+                  <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B; margin-left:auto">{{ im.count }}</span>
+                </div>
+                <div style="height:4px; background:#F0F0EE; border-radius:2px"><div style="height:100%; border-radius:2px; background:{{ im.barColor }}; width:{{ im.pct }}"></div></div>
+              </div>
+              <span style="font:500 10px 'IBM Plex Mono',monospace; color:{{ im.stateColor }}">{{ im.state }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; background:#FFFFFF; border-radius:16px; padding:12px 18px; box-shadow:0 1px 2px rgba(0,0,0,.04)">
+          <span style="width:6px; height:6px; border-radius:50%; background:#C7811B"></span>
+          <span style="font-size:12.5px; font-weight:500">2 items already waiting in your review queue</span>
+          <a href="#queue" style="font-size:12.5px; font-weight:500; margin-left:6px">Review now →</a>
+        </div>
+        <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:13.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:20px; padding:12px 32px; font-family:inherit">Go to my dashboard</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const sel = '1.5px solid #0F8A63';
+    const unsel = '1px solid transparent';
+    return {
+      noop: () => {},
+      phrase: ['ember','walnut','tide','harbor','lucid','fern','quarry','drift','maple','onset','vault','pine'].map((word, i) => ({ n: String(i + 1).padStart(2, '0'), word })),
+      sources: [
+        { icon: '♥', name: 'Apple Health', scope: 'reads: HR, steps, sleep, workouts · 14 types', border: sel, check: '✓', checkBg: '#0F8A63', checkBorder: '1.5px solid #0F8A63' },
+        { icon: '◉', name: 'Libre 3 CGM', scope: 'reads: glucose stream · NFC pair on next screen', border: sel, check: '✓', checkBg: '#0F8A63', checkBorder: '1.5px solid #0F8A63' },
+        { icon: '⚖', name: 'Withings', scope: 'reads: weight, body comp, BP · OAuth', border: sel, check: '✓', checkBg: '#0F8A63', checkBorder: '1.5px solid #0F8A63' },
+        { icon: '◌', name: 'Oura', scope: 'reads: sleep, HRV, temperature · OAuth', border: unsel, check: '', checkBg: '#FFFFFF', checkBorder: '1.5px solid #D9D9D5' },
+        { icon: '⇄', name: 'Provider portal', scope: 'reads: labs, visit notes · SMART-on-FHIR', border: unsel, check: '', checkBg: '#FFFFFF', checkBorder: '1.5px solid #D9D9D5' },
+        { icon: '▤', name: 'Paper & PDFs', scope: 'scan or drop files · local OCR extracts values', border: unsel, check: '', checkBg: '#FFFFFF', checkBorder: '1.5px solid #D9D9D5' },
+      ],
+      imports: [
+        { icon: '♥', name: 'Apple Health — 4 years', count: '81,240 / 84,211 obs', pct: '96%', barColor: '#0F8A63', state: 'IMPORTING', stateColor: '#0F8A63' },
+        { icon: '⚖', name: 'Withings history', count: '2,412 obs', pct: '100%', barColor: '#1E9E6A', state: 'DONE ✓', stateColor: '#1E9E6A' },
+        { icon: '◉', name: 'Libre 3 — live stream', count: 'first reading 104 mg/dL', pct: '100%', barColor: '#1E9E6A', state: 'LIVE', stateColor: '#0F8A63' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

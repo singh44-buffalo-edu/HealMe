@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Access control" style="min-height:100vh; min-width:1280px; display:flex; flex-direction:column; align-items:center; padding:0 0 80px; box-sizing:border-box">
+
+  <!-- context banner -->
+  <div style="width:100%; background:#3E2A50; color:#F5F5F4; box-sizing:border-box; padding:12px 40px; display:flex; align-items:center; gap:12px">
+    <span style="width:26px; height:26px; border-radius:50%; background:#F3E8FB; color:#8E44AD; display:grid; place-items:center; font-size:11px; font-weight:600">SV</span>
+    <span style="font-size:13px; font-weight:500">Sudha's vault — the owner's side of the caretaker relationship</span>
+    <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#C9B8D8">her device in Pune · larger type per her accessibility setting</span>
+    <span style="margin-left:auto; display:flex; align-items:center; gap:7px; background:rgba(255,255,255,.10); border-radius:18px; padding:6px 14px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#4FD6A6"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace">On this device</span>
+    </span>
+  </div>
+
+  <div style="width:100%; max-width:1000px; padding:36px 40px 0; box-sizing:border-box; display:flex; flex-direction:column; gap:20px">
+
+    <!-- header -->
+    <div style="display:flex; align-items:flex-start; gap:16px">
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Who sees my health</span>
+        <span style="font-size:14px; color:#6E6E73">You decide what each person sees. You can change your mind anytime — they'll simply stop seeing it.</span>
+      </div>
+      <button onClick="{{ noop }}" style="margin-left:auto; border:none; cursor:pointer; font-size:14px; font-weight:600; color:#fff; background:#0F8A63; border-radius:22px; padding:12px 24px; font-family:inherit; white-space:nowrap">＋ Add someone</button>
+    </div>
+
+    <!-- Arun's card — expanded with scope toggles -->
+    <div style="background:#FFFFFF; border-radius:20px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden; border:1.5px solid #CFE5DC">
+      <div style="display:flex; align-items:center; gap:14px; padding:20px 26px 14px">
+        <span style="width:44px; height:44px; border-radius:50%; background:#E7F4EF; color:#0F8A63; display:grid; place-items:center; font-size:16px; font-weight:600">AV</span>
+        <div style="display:flex; flex-direction:column; gap:2px">
+          <span style="font-size:17px; font-weight:600; letter-spacing:-.015em">Arun — my son</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">caretaker since Mar 2026 · Bengaluru · checks in most evenings</span>
+        </div>
+        <span style="margin-left:auto; display:flex; align-items:center; gap:6px"><span style="width:7px; height:7px; border-radius:50%; background:#1E9E6A"></span><span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1E9E6A">ACTIVE</span></span>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 26px; padding:6px 26px 8px">
+        <sc-for list="{{ arunScopes }}" as="s" hint-placeholder-count="6">
+          <div style="display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; padding:12px 0; border-top:1px solid #F4F4F2">
+            <div style="display:flex; flex-direction:column; gap:2px">
+              <span style="font-size:14px; font-weight:500; letter-spacing:-.01em; color:{{ s.nameColor }}">{{ s.name }}</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ s.detail }}</span>
+            </div>
+            <button onClick="{{ s.toggle }}" style="border:none; cursor:pointer; width:44px; height:26px; border-radius:14px; background:{{ s.trackBg }}; position:relative; padding:0">
+              <span style="position:absolute; top:3px; left:{{ s.knobLeft }}; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:left .15s ease"></span>
+            </button>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; padding:14px 26px; background:#FAFAF9; border-top:1px solid #F4F4F2">
+        <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">{{ arunSummary }}</span>
+        <button onClick="{{ noop }}" style="margin-left:auto; border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#D64545; background:#FBEFEF; border-radius:16px; padding:7px 16px; font-family:inherit">Remove Arun's access</button>
+      </div>
+    </div>
+
+    <!-- others, collapsed -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px">
+      <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; align-items:center; gap:13px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <span style="width:38px; height:38px; border-radius:50%; background:#FBEFE4; color:#C7601B; display:grid; place-items:center; font-size:13px; font-weight:600">PV</span>
+        <div style="display:flex; flex-direction:column; gap:2px">
+          <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Priya — my daughter</span>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">alerts only · if Arun doesn't respond in 30 min</span>
+        </div>
+        <a href="#edit" style="margin-left:auto; font-size:13px; font-weight:500">Change</a>
+      </div>
+      <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; align-items:center; gap:13px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <span style="width:38px; height:38px; border-radius:50%; background:#EDF3FA; color:#0A84FF; display:grid; place-items:center; font-size:13px; font-weight:600">DK</span>
+        <div style="display:flex; flex-direction:column; gap:2px">
+          <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">Dr. Kulkarni</span>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">share slices only, when I send them · nothing standing</span>
+        </div>
+        <a href="#edit" style="margin-left:auto; font-size:13px; font-weight:500">Change</a>
+      </div>
+    </div>
+
+    <!-- alert rules + emergency -->
+    <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:16px; align-items:start">
+      <!-- alert rules -->
+      <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+        <div style="display:flex; align-items:center; padding:18px 24px 10px">
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">When to tell my family</span>
+          <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">my rules, not theirs</span>
+        </div>
+        <sc-for list="{{ alertRules }}" as="r" hint-placeholder-count="4">
+          <div style="display:grid; grid-template-columns:1fr auto auto; gap:16px; align-items:center; padding:13px 24px; border-top:1px solid #F4F4F2">
+            <div style="display:flex; flex-direction:column; gap:2px">
+              <span style="font-size:14px; font-weight:500; letter-spacing:-.01em">{{ r.rule }}</span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ r.detail }}</span>
+            </div>
+            <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">{{ r.who }}</span>
+            <span style="font:500 10px 'IBM Plex Mono',monospace; color:{{ r.stateColor }}">{{ r.state }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <!-- emergency policy + log -->
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div style="background:#1D1D1F; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:10px; color:#F5F5F4">
+          <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em">If I can't respond</span>
+          <p style="margin:0; font-size:12.5px; line-height:1.6; color:#98989D">Arun may unlock everything for 24 hours. I get told the moment it happens, and it's written in my ledger forever. I chose this — I can turn it off.</p>
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="width:6px; height:6px; border-radius:50%; background:#4FD6A6"></span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#D1D1D6">enabled · never used</span>
+            <a href="#change" style="margin-left:auto; font-size:12px; font-weight:500; color:#4FD6A6">Turn off</a>
+          </div>
+        </div>
+        <div style="background:#FFFFFF; border-radius:18px; padding:16px 20px; display:flex; flex-direction:column; gap:9px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Who looked, lately</span>
+          <div style="display:flex; flex-direction:column; gap:7px; font:400 11px 'IBM Plex Mono',monospace; color:#86868B">
+            <div style="display:flex; justify-content:space-between"><span>Arun · meds + glucose</span><span style="color:#1D1D1F">today 19:50</span></div>
+            <div style="display:flex; justify-content:space-between"><span>Arun · sent reminder</span><span style="color:#1D1D1F">today 19:52</span></div>
+            <div style="display:flex; justify-content:space-between"><span>Priya · alert opened</span><span style="color:#1D1D1F">Sun 12:40</span></div>
+          </div>
+          <a href="#log" style="font-size:12.5px; font-weight:500">Full access log →</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { scopes: [true, true, true, false, false, false] };
+  renderVals() {
+    const defs = [
+      { name: 'Medications & dispenser', detail: 'doses, adherence, refills' },
+      { name: 'Glucose & blood pressure', detail: 'live readings and trends' },
+      { name: 'Alerts & falls', detail: 'missed doses, lows, no-activity' },
+      { name: 'My journal', detail: 'private notes' },
+      { name: 'Documents & visit notes', detail: 'reports, referrals' },
+      { name: 'Labs & history', detail: 'panels, past conditions' },
+    ];
+    const on = this.state.scopes;
+    const count = on.filter(Boolean).length;
+    return {
+      noop: () => {},
+      arunSummary: 'Arun sees ' + count + ' of 6 areas · everything else stays private, including all history from before Mar 2026',
+      arunScopes: defs.map((d, i) => ({
+        ...d,
+        nameColor: on[i] ? '#1D1D1F' : '#86868B',
+        trackBg: on[i] ? '#0F8A63' : '#D9D9D5',
+        knobLeft: on[i] ? '21px' : '3px',
+        toggle: () => this.setState((s) => ({ scopes: s.scopes.map((v, j) => (j === i ? !v : v)) })),
+      })),
+      alertRules: [
+        { rule: 'Missed dose, 2 hours late', detail: 'dispenser reminded twice first', who: 'Arun', state: 'ON', stateColor: '#1E9E6A' },
+        { rule: 'Glucose below 70', detail: 'after asking me first — 10 min to answer', who: 'Arun, then Priya', state: 'ON', stateColor: '#1E9E6A' },
+        { rule: 'No activity by 10 am', detail: 'kitchen + hallway motion', who: 'Arun', state: 'ON', stateColor: '#1E9E6A' },
+        { rule: 'Every BP reading', detail: 'felt like being watched', who: '—', state: 'OFF, my choice', stateColor: '#AEAEB2' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

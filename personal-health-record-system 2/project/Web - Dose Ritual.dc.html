@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:32px; padding:56px; align-items:flex-start">
+
+  <header style="display:flex; flex-direction:column; gap:8px">
+    <div style="display:flex; align-items:center; gap:12px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">HealMeDaily · Dose ritual — <a href="#6a">6a</a> the moment · <a href="#6b">6b</a> what it becomes · <a href="#6c">6c</a> voice check-in · <a href="#6d">6d</a> library &amp; editing</span>
+    </div>
+    <p style="margin:0; max-width:700px; font-size:14px; line-height:1.6; color:#6E6E73">The pickup is the one moment the person is already present, twice a day. The ritual: pills in hand, <strong style="color:#1D1D1F">one</strong> question, one tap, done. AI picks the most relevant question; the answer becomes an observation that trends over months and sharpens the picture for medication adjustments. Never more than one question per dose, never blocks the pills, always skippable.</p>
+  </header>
+
+  <div style="display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start">
+
+    <!-- ═══════ 6a · THE MOMENT ═══════ -->
+    <div id="6a" data-screen-label="Ritual moment" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">6a</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Pickup detected → one question, one tap</span></span>
+      <div style="width:1180px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); padding:32px; box-sizing:border-box; display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:stretch">
+
+        <!-- dispenser screen -->
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">On the dispenser · right after pickup ⚖</span>
+          <div style="flex:1; background:#111112; border-radius:22px; padding:34px 30px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; color:#F5F5F4; text-align:center">
+            <span style="font:400 11px 'IBM Plex Mono',monospace; color:#4FD6A6">✓ evening dose taken · 19:07</span>
+            <span style="font-size:26px; font-weight:600; letter-spacing:-.02em; line-height:1.3; max-width:340px">Any stomach trouble since this morning?</span>
+            <div style="display:flex; gap:12px">
+              <span style="width:88px; padding:16px 0; text-align:center; border-radius:18px; background:rgba(255,255,255,.09); font-size:16px; font-weight:600">None</span>
+              <span style="width:88px; padding:16px 0; text-align:center; border-radius:18px; background:rgba(255,255,255,.09); font-size:16px; font-weight:600">Mild</span>
+              <span style="width:88px; padding:16px 0; text-align:center; border-radius:18px; background:rgba(255,255,255,.09); font-size:16px; font-weight:600">Bad</span>
+            </div>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#636366">tap or just say it · skips itself in 30 s — the pills are already yours</span>
+          </div>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">✦ asked because: metformin's most common side effect, and you logged "queasy" twice last week</span>
+        </div>
+
+        <!-- ritual rules -->
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">The ritual contract — why it never becomes a chore</span>
+          <sc-for list="{{ rules }}" as="r" hint-placeholder-count="5">
+            <div style="background:#FFFFFF; border-radius:14px; padding:13px 17px; display:flex; gap:12px; align-items:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.04)">
+              <span style="font-size:14px; flex-shrink:0">{{ r.icon }}</span>
+              <div style="display:flex; flex-direction:column; gap:2px">
+                <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">{{ r.title }}</span>
+                <span style="font-size:12px; line-height:1.5; color:#6E6E73">{{ r.text }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ 6b · WHAT IT BECOMES ═══════ -->
+    <div id="6b" data-screen-label="Ritual insights" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">6b</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Six months of one-tap answers — what they become</span></span>
+      <div style="width:1180px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); padding:32px; box-sizing:border-box; display:flex; flex-direction:column; gap:16px">
+
+        <!-- trend card -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px 26px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; align-items:center; gap:10px">
+            <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">How you've been feeling — from 214 dose check-ins</span>
+            <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">✎ self-reported · 6 mo · avg 4 s to answer</span>
+          </div>
+          <svg viewBox="0 0 1060 120" style="width:100%; height:120px; display:block">
+            <rect x="0" y="14" width="1060" height="88" rx="6" fill="#FAFAF9"></rect>
+            <text x="10" y="30" font-family="IBM Plex Mono" font-size="9" fill="#AEAEB2">STOMACH TROUBLE · weekly share of "mild/bad"</text>
+            <path d="M0,50 C90,46 160,40 260,44 C340,47 420,58 530,66 C640,74 760,80 880,84 C960,86 1020,87 1060,88" fill="none" stroke="#E8891B" stroke-width="2.2" stroke-linecap="round"></path>
+            <line x1="330" y1="14" x2="330" y2="102" stroke="#5E5CE6" stroke-width="1" stroke-dasharray="3 4"></line>
+            <text x="338" y="26" font-family="IBM Plex Mono" font-size="9" fill="#4B49C8">SWITCHED TO WITH-DINNER · APR</text>
+            <circle cx="1060" cy="88" r="3.4" fill="#E8891B"></circle>
+            <text x="1052" y="76" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#1D1D1F">8% of days · was 34%</text>
+          </svg>
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">every tap = one observation with the dose it followed · trends live in Explorer like any other signal</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start">
+          <!-- insight for the visit -->
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px 24px; display:flex; flex-direction:column; gap:11px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 8px 28px rgba(94,92,230,.10)">
+            <div style="display:flex; align-items:center; gap:9px">
+              <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:3px 8px">✦ FOR YOUR JUL 21 VISIT</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">conf high · 0.86</span>
+            </div>
+            <span style="font-size:14px; line-height:1.5; font-weight:500; letter-spacing:-.01em">Taking metformin with dinner cut your stomach trouble from 1 in 3 days to fewer than 1 in 10 — worth telling Dr. Rao the with-food timing works before discussing the dose increase.</span>
+            <div style="display:flex; gap:8px">
+              <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#fff; background:#1D1D1F; border-radius:18px; padding:7px 16px; font-family:inherit">Add to visit prep</button>
+              <a href="#evidence" style="font-size:12px; font-weight:500; color:#5E5CE6; align-self:center">214 check-ins →</a>
+            </div>
+          </div>
+          <!-- question log -->
+          <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+            <div style="display:flex; align-items:center; padding:15px 20px 9px">
+              <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Recent check-ins</span>
+              <a href="#log" style="margin-left:auto; font-size:12px; font-weight:500">All · edit or delete →</a>
+            </div>
+            <sc-for list="{{ log }}" as="l" hint-placeholder-count="4">
+              <div style="display:grid; grid-template-columns:1fr auto auto; gap:12px; align-items:center; padding:10px 20px; border-top:1px solid #F4F4F2">
+                <div style="display:flex; flex-direction:column; gap:1px">
+                  <span style="font-size:12.5px; font-weight:500; letter-spacing:-.01em">{{ l.q }}</span>
+                  <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ l.why }}</span>
+                </div>
+                <span style="font:500 12px 'IBM Plex Mono',monospace; color:{{ l.aColor }}">{{ l.a }}</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ l.when }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<section style="display:flex; flex-direction:column; gap:32px; padding:0 56px 56px; align-items:flex-start">
+  <div style="display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start">
+
+    <!-- ═══════ 6c · VOICE CHECK-IN ═══════ -->
+    <div id="6c" data-screen-label="Voice check-in" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">6c</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Voice check-in — say it, the AI does the structuring</span></span>
+      <div style="width:1180px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); padding:32px; box-sizing:border-box; display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:stretch">
+
+        <!-- dispenser voice conversation -->
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">On the dispenser · hands stay free ⌂ transcribed on-device</span>
+          <div style="flex:1; background:#111112; border-radius:22px; padding:26px 26px 22px; display:flex; flex-direction:column; gap:16px; color:#F5F5F4">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="display:flex; align-items:center; gap:3px">
+                <span style="width:3px; height:10px; border-radius:2px; background:#4FD6A6; animation:hmdPulse 1s infinite"></span>
+                <span style="width:3px; height:18px; border-radius:2px; background:#4FD6A6; animation:hmdPulse 1.3s infinite"></span>
+                <span style="width:3px; height:8px; border-radius:2px; background:#4FD6A6; animation:hmdPulse .8s infinite"></span>
+                <span style="width:3px; height:14px; border-radius:2px; background:#4FD6A6; animation:hmdPulse 1.1s infinite"></span>
+              </span>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:#4FD6A6">listening · Hindi या English</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#636366">✓ dose taken 19:07</span>
+            </div>
+            <sc-for list="{{ voiceTurns }}" as="vt" hint-placeholder-count="5">
+              <div style="align-self:{{ vt.align }}; max-width:88%; background:{{ vt.bg }}; color:{{ vt.fg }}; border-radius:{{ vt.radius }}; padding:11px 15px; font-size:14px; line-height:1.5; letter-spacing:-.01em">{{ vt.text }}</div>
+            </sc-for>
+            <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#636366; text-align:center">one follow-up max · silence just ends it — the answer still counts</span>
+          </div>
+        </div>
+
+        <!-- how AI hears it -->
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#86868B">How the AI tracks it — verbatim kept, structure extracted</span>
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:11px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 8px 28px rgba(94,92,230,.10)">
+            <div style="display:flex; align-items:center; gap:8px">
+              <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:20px; padding:3px 8px">✦ EXTRACTED</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#1E9E6A">⌂ local · you confirm before it saves</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; font:400 11px 'IBM Plex Mono',monospace; color:#86868B">
+              <div style="display:flex; justify-content:space-between"><span>symptom</span><span style="color:#1D1D1F">nausea · mild</span></div>
+              <div style="display:flex; justify-content:space-between"><span>timing</span><span style="color:#1D1D1F">after morning dose · resolved by lunch</span></div>
+              <div style="display:flex; justify-content:space-between"><span>linked to</span><span style="color:#1D1D1F">metformin 08:02 dose</span></div>
+              <div style="display:flex; justify-content:space-between"><span>your words</span><span style="color:#1D1D1F">kept, verbatim · deletable</span></div>
+            </div>
+          </div>
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+            <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">Signals beyond the answer</span>
+            <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.7">· hesitation &amp; skip patterns → burden score — questions get fewer, not louder<br>· same question, drifting answers → gentle trend flag<br>· one-word days vs chatty days → tracked, never judged<br>· fatigue detected → ritual drops to 1 question/day automatically</span>
+          </div>
+          <div style="background:#FAFAF9; border-radius:14px; padding:12px 16px; display:flex; align-items:center; gap:9px">
+            <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">voice never leaves the house · works for Ma too — same colours, her language</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ 6d · LIBRARY & EDITING ═══════ -->
+    <div id="6d" data-screen-label="Question library" style="display:flex; flex-direction:column; gap:12px">
+      <span style="display:flex; align-items:center; gap:10px"><span style="font:500 11px 'IBM Plex Mono',monospace; background:#1D1D1F; color:#fff; border-radius:8px; padding:3px 9px">6d</span><span style="font-size:14px; font-weight:600; letter-spacing:-.01em">The library — log anything yourself · edit any past answer</span></span>
+      <div style="width:1180px; border-radius:24px; background:#EFEFED; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 24px 64px rgba(0,0,0,.12); padding:32px; box-sizing:border-box; display:grid; grid-template-columns:1.15fr 1fr; gap:24px; align-items:start">
+
+        <!-- library -->
+        <div style="background:#FFFFFF; border-radius:20px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+          <div style="display:flex; flex-direction:column; gap:12px; padding:20px 24px 12px">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="font-size:16px; font-weight:600; letter-spacing:-.015em">Check-in library</span>
+              <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">answer anything, anytime — not just at doses</span>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap">
+              <span style="font-size:12px; font-weight:500; color:#fff; background:#1D1D1F; border-radius:16px; padding:6px 13px">All</span>
+              <span style="font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:6px 13px">Side effects</span>
+              <span style="font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:6px 13px">Mood &amp; energy</span>
+              <span style="font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:6px 13px">Pain</span>
+              <span style="font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:6px 13px">Sleep</span>
+            </div>
+          </div>
+          <sc-for list="{{ library }}" as="lq" hint-placeholder-count="5">
+            <div style="display:grid; grid-template-columns:1fr auto auto; gap:14px; align-items:center; padding:13px 24px; border-top:1px solid #F4F4F2">
+              <div style="display:flex; flex-direction:column; gap:2px">
+                <span style="font-size:13.5px; font-weight:500; letter-spacing:-.01em">{{ lq.q }}</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ lq.meta }}</span>
+              </div>
+              <span style="font:400 10px 'IBM Plex Mono',monospace; color:{{ lq.lastColor }}">{{ lq.last }}</span>
+              <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12px; font-weight:500; color:{{ lq.btnFg }}; background:{{ lq.btnBg }}; border-radius:16px; padding:7px 14px; font-family:inherit; white-space:nowrap">{{ lq.btn }}</button>
+            </div>
+          </sc-for>
+          <div style="display:flex; align-items:center; gap:9px; padding:13px 24px; background:#FAFAF9; border-top:1px solid #F4F4F2">
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">★ pin a question and the dispenser starts asking it at doses · ＋ write your own</span>
+          </div>
+        </div>
+
+        <!-- edit a past answer -->
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); border:1.5px solid #CFE5DC">
+            <div style="display:flex; align-items:center; gap:9px">
+              <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Editing yesterday's answer</span>
+              <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">Jul 13 · 19:04</span>
+            </div>
+            <span style="font-size:13px; color:#6E6E73">"Sleep okay last night?" — you tapped <strong style="color:#C7811B">Restless</strong> in a hurry.</span>
+            <div style="display:flex; gap:8px">
+              <span style="font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:8px 15px">Fine</span>
+              <span style="font-size:12.5px; font-weight:500; color:#C7811B; background:#FBF3E4; border-radius:16px; padding:8px 15px; border:1.5px solid #E8C989">Restless</span>
+              <span style="font-size:12.5px; font-weight:600; color:#fff; background:#1D1D1F; border-radius:16px; padding:8px 15px">Poor — woke 3×</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px; border-top:1px solid #F4F4F2; padding-top:11px; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">
+              <div style="display:flex; justify-content:space-between"><span>v2 · you · corrected</span><span style="color:#1D1D1F">Poor — woke 3× · now</span></div>
+              <div style="display:flex; justify-content:space-between; color:#AEAEB2"><span>v1 · one tap at dose</span><span>Restless · Jul 13</span></div>
+            </div>
+            <div style="display:flex; gap:8px">
+              <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:16px; padding:8px 16px; font-family:inherit">Save correction</button>
+              <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:8px 14px; font-family:inherit">Cancel</button>
+            </div>
+          </div>
+          <div style="background:#FAFAF9; border-radius:14px; padding:12px 16px; display:flex; flex-direction:column; gap:5px">
+            <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#AEAEB2">WHY EDITING MATTERS</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.6">One-tap answers trade precision for ease — corrections restore precision without breaking the ritual. Nothing is lost: the first answer stays in the version history, and trends use the corrected value.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section></x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      noop: () => {},
+      rules: [
+        { icon: '①', title: 'One question, ever', text: 'Never a second question, never a form. If two things matter, the other one waits for the next dose.' },
+        { icon: '✦', title: 'AI picks what matters today', text: 'Med side effects get priority early on a new prescription; otherwise the question follows your signals — a flagged HR trends asks about sleep, a BP watch asks about salt or stress.' },
+        { icon: '⇢', title: 'Pills first, always', text: 'The question appears after pickup is verified. Ignoring it costs nothing — it skips itself and never nags.' },
+        { icon: '↻', title: 'Repetition builds the trend', text: 'The same question recurs on a cadence so answers become a comparable series — not one-off trivia.' },
+        { icon: '✎', title: 'Yours to edit', text: 'Every answer is a normal record entry: see it in History, correct it, or delete it.' },
+      ],
+      voiceTurns: [
+        { align: 'flex-start', bg: 'rgba(255,255,255,.08)', fg: '#F5F5F4', radius: '4px 16px 16px 16px', text: 'Any stomach trouble since this morning?' },
+        { align: 'flex-end', bg: '#F5F5F4', fg: '#111112', radius: '16px 16px 4px 16px', text: '"Haan, a bit queasy after breakfast… but it passed by lunch."' },
+        { align: 'flex-start', bg: 'rgba(255,255,255,.08)', fg: '#F5F5F4', radius: '4px 16px 16px 16px', text: 'Got it — mild, after the morning dose, gone by lunch. Shall I note it that way?' },
+        { align: 'flex-end', bg: '#F5F5F4', fg: '#111112', radius: '16px 16px 4px 16px', text: '"Yes."' },
+        { align: 'flex-start', bg: 'rgba(79,214,166,.14)', fg: '#4FD6A6', radius: '4px 16px 16px 16px', text: '✓ Noted. Good night, Arun.' },
+      ],
+      library: [
+        { q: 'Any stomach trouble today?', meta: 'side effects · metformin · asked at doses 2×/wk', last: 'None · today', lastColor: '#1E9E6A', btn: '★ Pinned', btnFg: '#86868B', btnBg: '#F4F4F2' },
+        { q: 'Dizzy when standing up?', meta: 'side effects · lisinopril · monthly', last: 'No · Jul 14', lastColor: '#1E9E6A', btn: 'Log now', btnFg: '#fff', btnBg: '#0F8A63' },
+        { q: 'How is your energy right now?', meta: 'mood & energy · 1–5 + a word if you like', last: '4 · Jul 13', lastColor: '#1E9E6A', btn: 'Log now', btnFg: '#fff', btnBg: '#0F8A63' },
+        { q: 'Knee pain during your walk?', meta: 'pain · added by you · 0–10 + which knee', last: '3 · Jul 11', lastColor: '#C7811B', btn: 'Log now', btnFg: '#fff', btnBg: '#0F8A63' },
+        { q: 'How stressed was work today?', meta: 'mood & energy · ✦ suggested — BP watch', last: 'never asked', lastColor: '#AEAEB2', btn: 'Try it', btnFg: '#fff', btnBg: '#0F8A63' },
+      ],
+      log: [
+        { q: 'Any stomach trouble since this morning?', why: 'metformin · asked 2×/wk', a: 'None', aColor: '#1E9E6A', when: '19:07' },
+        { q: 'Dizzy at all when standing up?', why: 'lisinopril · monthly', a: 'No', aColor: '#1E9E6A', when: 'Jul 14' },
+        { q: 'How was your energy today?', why: 'baseline · weekly', a: 'Good', aColor: '#1E9E6A', when: 'Jul 13' },
+        { q: 'Sleep okay last night?', why: '✦ follows your HR flag', a: 'Restless', aColor: '#C7811B', when: 'Jul 13' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

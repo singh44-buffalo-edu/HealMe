@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Timeline" style="display:grid; grid-template-columns:232px 1fr; min-height:100vh; min-width:1280px">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="background:#FFFFFF; border-right:1px solid #E8E8E5; padding:24px 14px; display:flex; flex-direction:column; gap:24px; position:sticky; top:0; height:100vh; box-sizing:border-box">
+    <div style="display:flex; align-items:center; gap:10px; padding:0 10px">
+      <div style="width:30px; height:30px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:14px; font-weight:600">H</div>
+      <span style="font-size:15px; font-weight:600; letter-spacing:-.015em">HealMeDaily</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:7px; background:#F4F4F2; border-radius:20px; padding:6px 12px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1D1D1F">On this device</span>
+    </div>
+    <nav style="display:flex; flex-direction:column; gap:2px">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="13">
+        <a href="#nav" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:12px; font-size:13.5px; font-weight:{{ item.weight }}; color:{{ item.color }}; background:{{ item.bg }}">
+          <span style="width:18px; text-align:center; font-size:13px">{{ item.icon }}</span>{{ item.label }}
+          <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:#5E5CE6; background:#EFEFFC; border-radius:10px; padding:2px 7px">{{ item.badge }}</span>
+          </sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px; padding:0 10px">
+      <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">128,443 records · backup 03:00</span>
+      <span style="font-size:12px; color:#86868B">Arun Verma · <a href="#settings">Settings</a></span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main style="padding:32px 40px 64px; display:flex; flex-direction:column; gap:18px; max-width:1080px; box-sizing:border-box; width:100%">
+
+    <!-- top bar -->
+    <div style="display:flex; align-items:flex-start; gap:16px">
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:26px; font-weight:600; letter-spacing:-.02em">Timeline</span>
+        <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">everything, in order · 4 years 2 months of record</span>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap">
+        <sc-for list="{{ filters }}" as="f" hint-placeholder-count="6">
+          <span style="display:flex; align-items:center; gap:6px; border-radius:18px; padding:6px 13px; font-size:12px; font-weight:500; color:{{ f.fg }}; background:{{ f.bg }}; box-shadow:{{ f.shadow }}; cursor:pointer">{{ f.label }}</span>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- year scrubber -->
+    <div style="background:#FFFFFF; border-radius:16px; padding:14px 22px; display:flex; align-items:center; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="font:500 10px 'IBM Plex Mono',monospace; color:#AEAEB2">2022</span>
+      <div style="flex:1; height:26px; display:flex; align-items:flex-end; gap:2px">
+        <sc-for list="{{ density }}" as="d" hint-placeholder-count="50">
+          <span style="flex:1; border-radius:1px; background:{{ d.color }}; height:{{ d.h }}"></span>
+        </sc-for>
+      </div>
+      <span style="font:500 10px 'IBM Plex Mono',monospace; color:#1D1D1F">JUL 2026</span>
+    </div>
+
+    <!-- timeline -->
+    <div style="display:flex; flex-direction:column; gap:0">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+        <div style="display:flex; flex-direction:column; gap:0">
+          <div style="display:flex; align-items:center; gap:12px; padding:18px 0 10px">
+            <span style="font:500 11px 'IBM Plex Mono',monospace; letter-spacing:.1em; text-transform:uppercase; color:#86868B">{{ g.label }}</span>
+            <span style="flex:1; height:1px; background:#E4E4E1"></span>
+            <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ g.count }}</span>
+          </div>
+          <sc-for list="{{ g.events }}" as="ev" hint-placeholder-count="4">
+            <div style="display:grid; grid-template-columns:64px auto 1fr auto; gap:14px; align-items:flex-start; padding:0">
+              <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2; text-align:right; padding-top:14px">{{ ev.time }}</span>
+              <div style="display:flex; flex-direction:column; align-items:center; align-self:stretch">
+                <span style="width:1.5px; height:10px; background:#E4E4E1"></span>
+                <span style="width:11px; height:11px; border-radius:50%; background:#FFFFFF; border:2.5px solid {{ ev.dot }}; box-sizing:border-box"></span>
+                <span style="width:1.5px; flex:1; background:#E4E4E1"></span>
+              </div>
+              <div style="background:#FFFFFF; border-radius:14px; padding:12px 18px; display:flex; flex-direction:column; gap:4px; margin-bottom:8px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.04); border:{{ ev.border }}">
+                <div style="display:flex; align-items:center; gap:9px">
+                  <span style="font-size:13px">{{ ev.icon }}</span>
+                  <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">{{ ev.title }}</span>
+                  <sc-if value="{{ ev.tag }}" hint-placeholder-val="{{ false }}">
+                    <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.06em; color:{{ ev.tagFg }}; background:{{ ev.tagBg }}; border-radius:20px; padding:2px 7px">{{ ev.tag }}</span>
+                  </sc-if>
+                </div>
+                <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">{{ ev.meta }}</span>
+              </div>
+              <a href="#detail" style="font-size:12px; font-weight:500; padding-top:14px">Open →</a>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+      <div style="display:flex; align-items:center; gap:12px; padding:14px 0 0 78px">
+        <span style="font-size:12.5px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:18px; padding:8px 18px; box-shadow:0 1px 2px rgba(0,0,0,.05); cursor:pointer">Load earlier — Jun 2026 ↓</span>
+      </div>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const active = (label) => label === 'Timeline';
+    const seed = [8,12,6,10,14,9,7,11,13,8,10,15,9,6,12,10,8,14,11,9,13,7,10,12,8,11,9,14,10,12,13,9,11,8,15,10,12,14,11,13,10,12,15,13,14,12,16,15,17,18];
+    return {
+      noop: () => {},
+      nav: [
+        { icon: '◈', label: 'Dashboard' },
+        { icon: '♥', label: 'Vitals' },
+        { icon: '⚗', label: 'Labs' },
+        { icon: '⊞', label: 'Devices' },
+        { icon: '✦', label: 'AI Insights', badge: '3' },
+        { icon: '☰', label: 'Timeline' },
+        { icon: '⌸', label: 'Explorer' },
+        { icon: '▤', label: 'Documents' },
+        { icon: '◌', label: 'Medications' },
+        { icon: '☾', label: 'Sleep & Activity' },
+        { icon: '✎', label: 'Journal' },
+        { icon: '✉', label: 'Assistant' },
+        { icon: '⇄', label: 'Connections' },
+      ].map((n) => ({
+        ...n,
+        weight: active(n.label) ? 600 : 500,
+        color: active(n.label) ? '#1D1D1F' : '#6E6E73',
+        bg: active(n.label) ? '#F0F0EE' : 'transparent',
+        badge: n.badge || false,
+      })),
+      filters: [
+        { label: 'All', fg: '#fff', bg: '#1D1D1F', shadow: 'none' },
+        { label: 'Milestones', fg: '#6E6E73', bg: '#FFFFFF', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+        { label: 'Labs', fg: '#6E6E73', bg: '#FFFFFF', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+        { label: 'Meds', fg: '#6E6E73', bg: '#FFFFFF', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+        { label: 'Visits', fg: '#6E6E73', bg: '#FFFFFF', shadow: '0 1px 2px rgba(0,0,0,.05)' },
+        { label: '✦ AI', fg: '#5E5CE6', bg: '#EFEFFC', shadow: 'none' },
+      ],
+      density: seed.map((v, i) => ({ h: v + 'px', color: i > 44 ? '#0F8A63' : '#D9D9D5' })),
+      groups: [
+        {
+          label: 'Today · Wed Jul 15', count: '4 events',
+          events: [
+            { time: '09:42', icon: '◉', dot: '#0F8A63', title: '288 CGM readings synced', meta: 'Libre 3 → Bot cgm-ingest · 94% in range', tag: false, border: '1px solid transparent' },
+            { time: '08:02', icon: '⊕', dot: '#1E9E6A', title: 'Metformin 500 mg dispensed', meta: 'Pi dispenser · tray 1 wedge · confirmed by base-tray load cell', tag: false, border: '1px solid transparent' },
+            { time: '07:10', icon: '✦', dot: '#5E5CE6', title: 'Resting HR trend flagged', meta: 'DetectedIssue · +8% vs baseline · conf 0.84', tag: '✦ AI', tagFg: '#5E5CE6', tagBg: '#EFEFFC', border: '1px solid #DEDDF9' },
+            { time: '07:05', icon: '◍', dot: '#C7811B', title: 'Morning BP 128/82 — above target', meta: 'Withings BPM Connect · seated, rested', tag: 'WATCH', tagFg: '#C7811B', tagBg: '#FBF3E4', border: '1px solid transparent' },
+          ],
+        },
+        {
+          label: 'Yesterday · Tue Jul 14', count: '6 events',
+          events: [
+            { time: '20:10', icon: '◍', dot: '#1E9E6A', title: 'Evening BP 119/78 — in target', meta: 'Withings BPM Connect · after walk', tag: false, border: '1px solid transparent' },
+            { time: '16:40', icon: '▤', dot: '#1E9E6A', title: 'Lipid panel approved into record', meta: '6 observations · you reviewed · original PDF kept', tag: 'REVIEWED', tagFg: '#1E9E6A', tagBg: '#E7F4EF', border: '1px solid transparent' },
+            { time: '06:31', icon: '☾', dot: '#00B7C3', title: 'Sleep 7h 42m · score 88', meta: 'Oura → HealthKit · 3 wake events', tag: false, border: '1px solid transparent' },
+          ],
+        },
+        {
+          label: 'Earlier this month', count: '18 events',
+          events: [
+            { time: 'Jul 10', icon: '⌗', dot: '#5E5CE6', title: 'BP photo captured — AI read 132/84', meta: 'Omron display · you confirmed the value', tag: '✦ AI', tagFg: '#5E5CE6', tagBg: '#EFEFFC', border: '1px solid transparent' },
+            { time: 'Jul 6', icon: '◉', dot: '#1E9E6A', title: 'CGM sensor calibrated', meta: 'Libre 3 · fingerstick reference 102 mg/dL', tag: false, border: '1px solid transparent' },
+            { time: 'Jul 2', icon: '⚗', dot: '#1E9E6A', title: 'Quarterly labs ordered', meta: 'Dr. Rao · fasting draw scheduled Jul 18', tag: false, border: '1px solid transparent' },
+          ],
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Tray filling" style="min-height:100vh; min-width:1280px; display:flex; flex-direction:column; box-sizing:border-box">
+
+  <!-- top bar -->
+  <div style="background:#FFFFFF; border-bottom:1px solid #E8E8E5; padding:16px 32px; display:flex; align-items:center; gap:16px">
+    <span style="font-size:13px; font-weight:500; color:#6E6E73">← Dispenser</span>
+    <div style="display:flex; flex-direction:column; gap:1px">
+      <span style="font-size:17px; font-weight:600; letter-spacing:-.015em">Filling station — weekly trays</span>
+      <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">lift the lid, pull a tray off the spindle · trays are numbered and colour-rimmed · each wedge holds one dose</span>
+    </div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:8px; background:#F4F4F2; border-radius:18px; padding:7px 14px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A; animation:hmdPulse 2s infinite"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace">lid open · filling mode · tray 2 off the spindle</span>
+    </div>
+  </div>
+
+  <div style="flex:1; display:grid; grid-template-columns:340px 1fr; gap:0">
+
+    <!-- ============ LEFT: the spindle stack ============ -->
+    <aside style="background:#FFFFFF; border-right:1px solid #E8E8E5; padding:24px 22px; display:flex; flex-direction:column; gap:8px; box-sizing:border-box">
+      <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#AEAEB2; padding-bottom:4px">The stack — 8 trays on the spindle</span>
+      <sc-for list="{{ trays }}" as="t" hint-placeholder-count="8">
+        <button onClick="{{ t.pick }}" style="border:none; cursor:pointer; text-align:left; background:{{ t.cardBg }}; border:{{ t.cardBorder }}; border-radius:14px; padding:11px 13px; display:flex; gap:12px; align-items:center; font-family:inherit; box-sizing:border-box">
+          <!-- disc side view -->
+          <div style="display:flex; flex-direction:column; align-items:center; gap:2px; flex-shrink:0">
+            <div style="width:54px; height:13px; border-radius:7px; background:linear-gradient(180deg,#FDFDFC,#ECECEA); border:1px solid #E0E0DC; border-top:3px solid {{ t.color }}; box-sizing:border-box; display:grid; place-items:center">
+              <span style="font:600 8px 'IBM Plex Mono',monospace; color:{{ t.color }}; line-height:1">{{ t.num }}</span>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:1px; min-width:0; flex:1">
+            <div style="display:flex; align-items:center; gap:7px">
+              <span style="font-size:12.5px; font-weight:600; letter-spacing:-.01em; color:{{ t.nameColor }}">{{ t.name }}</span>
+              <span style="margin-left:auto; font:500 9px 'IBM Plex Mono',monospace; color:{{ t.stateColor }}">{{ t.state }}</span>
+            </div>
+            <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">{{ t.meta }}</span>
+          </div>
+        </button>
+      </sc-for>
+      <div style="background:#FAFAF9; border-radius:14px; padding:12px 15px; display:flex; flex-direction:column; gap:5px; margin-top:auto">
+        <span style="font:500 9px 'IBM Plex Mono',monospace; letter-spacing:.1em; color:#AEAEB2">WHY COLOURS + NUMBERS</span>
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.6">One dose-time, one tray, one colour — on the rim, on the spindle slot, and on this screen. Wrong tray in your hand? The colours won't match. Works over the phone too: "the orange one, number 2."</span>
+      </div>
+    </aside>
+
+    <!-- ============ RIGHT: fill flow for selected tray ============ -->
+    <main style="padding:28px 36px 40px; display:flex; flex-direction:column; gap:16px; box-sizing:border-box; max-width:1060px">
+
+      <!-- colour-lock header -->
+      <div style="background:{{ sel.headerBg }}; border-radius:20px; padding:20px 26px; display:flex; align-items:center; gap:18px; border:2px solid {{ sel.color }}; box-sizing:border-box">
+        <div style="width:52px; height:52px; border-radius:50%; background:{{ sel.color }}; color:#fff; display:grid; place-items:center; font:600 22px 'IBM Plex Mono',monospace; flex-shrink:0">{{ sel.num }}</div>
+        <div style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0">
+          <span style="font-size:19px; font-weight:600; letter-spacing:-.015em">Tray {{ sel.num }} · {{ sel.name }} · {{ sel.colorName }} rim</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace; color:#6E6E73">{{ sel.combo }} · 7 wedges = Mon–Sun</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; background:#FFFFFF; border-radius:16px; padding:8px 14px; flex-shrink:0">
+          <span style="width:7px; height:7px; border-radius:50%; background:#1E9E6A"></span>
+          <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#1E9E6A">NFC READ · RIGHT TRAY ✓</span>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1.1fr 1fr; gap:14px; align-items:stretch">
+
+        <!-- wedge wheel (FIG.11 top view) -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:20px 24px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; align-items:center; gap:9px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Tray from above — fill each wedge</span>
+            <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">5 of 7 filled &amp; verified</span>
+          </div>
+          <div style="position:relative; width:100%; max-width:340px; align-self:center; aspect-ratio:1">
+            <svg viewBox="0 0 220 220" style="width:100%; height:100%; display:block">
+              <circle cx="110" cy="110" r="102" fill="#FDFDFC" stroke="{{ sel.color }}" stroke-width="5"></circle>
+              <sc-for list="{{ wedges }}" as="w" hint-placeholder-count="7">
+                <path d="{{ w.d }}" fill="{{ w.fill }}" stroke="{{ w.stroke }}" stroke-width="{{ w.sw }}"></path>
+              </sc-for>
+              <circle cx="110" cy="110" r="17" fill="#ECECEA" stroke="#D9D9D5" stroke-width="1.5"></circle>
+            </svg>
+            <sc-for list="{{ wedgeLabels }}" as="wl" hint-placeholder-count="7">
+              <div style="position:absolute; left:{{ wl.left }}; top:{{ wl.top }}; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:1px; pointer-events:none">
+                <span style="font:500 11px 'IBM Plex Mono',monospace; color:{{ wl.fill }}; line-height:1">{{ wl.day }}</span>
+                <span style="font:400 8.5px 'IBM Plex Mono',monospace; color:{{ wl.fill2 }}; line-height:1; white-space:nowrap">{{ wl.mark }}</span>
+              </div>
+            </sc-for>
+            <span style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font:600 11px 'IBM Plex Mono',monospace; color:#86868B; pointer-events:none">{{ sel.num }}</span>
+          </div>
+          <div style="display:flex; gap:12px; font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B; justify-content:center">
+            <span><span style="color:#1E9E6A">▮</span> verified</span>
+            <span><span style="color:{{ sel.color }}">▮</span> filling now — Sat</span>
+            <span><span style="color:#C9C9C5">▮</span> empty</span>
+          </div>
+        </div>
+
+        <!-- verify + seal -->
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <div style="background:#111112; border-radius:18px; padding:16px 20px; display:flex; flex-direction:column; gap:10px; color:#F5F5F4">
+            <div style="display:flex; align-items:center; gap:8px">
+              <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">Saturday wedge — camera check</span>
+              <span style="margin-left:auto; width:5px; height:5px; border-radius:50%; background:#4FD6A6; animation:hmdPulse 1.2s infinite"></span>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; background:linear-gradient(160deg,#232324,#1A1A1B); border-radius:12px; padding:14px 16px">
+              <span style="width:24px; height:24px; border-radius:50%; background:#F5F5F1; border:2px solid #4FD6A6"></span>
+              <span style="width:22px; height:14px; border-radius:7px; background:#FBF3D9; border:2px solid #4FD6A6"></span>
+              <div style="display:flex; flex-direction:column; gap:2px; margin-left:auto; text-align:right">
+                <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#4FD6A6">2 of 2 pills match ✓</span>
+                <span style="font:400 9px 'IBM Plex Mono',monospace; color:#98989D">metformin 500 · vit D softgel</span>
+              </div>
+            </div>
+            <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#98989D">expected combo comes from the schedule · pill-id v3 · ⌂ on the Pi</span>
+          </div>
+          <div style="background:#FFFFFF; border-radius:18px; padding:16px 20px; display:flex; flex-direction:column; gap:9px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+            <span style="font-size:13px; font-weight:600; letter-spacing:-.01em">Weigh &amp; slide back</span>
+            <div style="display:flex; flex-direction:column; gap:5px; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">
+              <div style="display:flex; justify-content:space-between"><span>⚖ tray weight</span><span style="color:#1D1D1F">+0.72 g · 12 pills across 6 wedges</span></div>
+              <div style="display:flex; justify-content:space-between"><span>Sunday wedge</span><span style="color:#C7811B">still empty — fill or skip</span></div>
+              <div style="display:flex; justify-content:space-between"><span>spindle slot</span><span style="color:#1D1D1F">2 of 8 · {{ sel.colorName }} mark</span></div>
+            </div>
+            <button onClick="{{ noop }}" style="border:none; cursor:not-allowed; font-size:13px; font-weight:600; color:#fff; background:#C9C9C5; border-radius:16px; padding:11px 0; font-family:inherit; width:100%">Slide tray 2 back — Sunday wedge is empty</button>
+            <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:16px; padding:9px 0; font-family:inherit; width:100%">Sunday is intentional — skip it</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- footer note -->
+      <div style="display:flex; align-items:center; gap:10px; background:#FFFFFF; border-radius:16px; padding:13px 20px; box-shadow:0 1px 2px rgba(0,0,0,.04)">
+        <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+        <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">On slide-back: tray {{ sel.num }} logs a refill event — wedge contents, count, who filled it. At dose time the spindle rotates this tray, today's wedge opens, and the pills drop through the funnel to the base tray. Ma's dispenser uses the same colours and numbers.</span>
+      </div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sel: 1 };
+  renderVals() {
+    const defs = [
+      { num: '1', name: 'Morning', color: '#0A84FF', colorName: 'blue', combo: 'metformin 500 + lisinopril 10 — 2 pills per wedge', state: '5 LEFT', stateColor: '#1E9E6A', meta: '08:00 · filled Sun · sealed', headerBg: '#EFF5FC', nameColor: '#1D1D1F' },
+      { num: '2', name: 'Evening', color: '#E8891B', colorName: 'orange', combo: 'metformin 500 + vitamin D — 2 pills per wedge', state: 'FILLING', stateColor: '#E8891B', meta: '19:00 · off the spindle now', headerBg: '#FCF4EA', nameColor: '#1D1D1F' },
+      { num: '3', name: 'Night', color: '#BF5AF2', colorName: 'purple', combo: 'unassigned', state: 'SPARE', stateColor: '#AEAEB2', meta: 'no night meds — empty', headerBg: '#F8F2FC', nameColor: '#86868B' },
+      { num: '4', name: 'Travel', color: '#00A3AD', colorName: 'teal', combo: 'unassigned', state: 'SPARE', stateColor: '#AEAEB2', meta: 'fill before a trip · pouch-scan on return', headerBg: '#EEF8F8', nameColor: '#86868B' },
+      { num: '5–8', name: 'Empty trays', color: '#C9C9C5', colorName: 'grey', combo: '—', state: '', stateColor: '#AEAEB2', meta: 'bottom of the spindle', headerBg: '#FAFAF9', nameColor: '#86868B' },
+    ];
+    const i = Math.min(this.state.sel, defs.length - 1);
+    const sel = defs[i];
+    // wedge geometry: 7 wedges, donut from r0=20 to r1=99, start at top
+    const cx = 110, cy = 110, r0 = 20, r1 = 99, n = 7;
+    const pt = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    // Mon-Fri verified, Sat filling, Sun empty
+    const status = ['v', 'v', 'v', 'v', 'v', 'f', 'e'];
+    const wedges = [], wedgeLabels = [];
+    for (let k = 0; k < n; k++) {
+      const a0 = (k / n) * 2 * Math.PI - Math.PI / 2 + 0.02;
+      const a1 = ((k + 1) / n) * 2 * Math.PI - Math.PI / 2 - 0.02;
+      const [x0o, y0o] = pt(r1, a0), [x1o, y1o] = pt(r1, a1);
+      const [x0i, y0i] = pt(r0, a0), [x1i, y1i] = pt(r0, a1);
+      const d = 'M' + x0i.toFixed(1) + ',' + y0i.toFixed(1) + ' L' + x0o.toFixed(1) + ',' + y0o.toFixed(1) +
+        ' A' + r1 + ',' + r1 + ' 0 0 1 ' + x1o.toFixed(1) + ',' + y1o.toFixed(1) +
+        ' L' + x1i.toFixed(1) + ',' + y1i.toFixed(1) +
+        ' A' + r0 + ',' + r0 + ' 0 0 0 ' + x0i.toFixed(1) + ',' + y0i.toFixed(1) + ' Z';
+      const s = status[k];
+      wedges.push({
+        d,
+        fill: s === 'v' ? '#DDF2E8' : s === 'f' ? sel.headerBg : '#F7F7F5',
+        stroke: s === 'v' ? '#1E9E6A' : s === 'f' ? sel.color : '#D9D9D5',
+        sw: s === 'f' ? '2.5' : '1.2',
+      });
+      const am = (a0 + a1) / 2;
+      const [lx, ly] = pt(62, am);
+      wedgeLabels.push({
+        day: days[k],
+        left: ((lx / 220) * 100).toFixed(1) + '%',
+        top: ((ly / 220) * 100).toFixed(1) + '%',
+        fill: s === 'e' ? '#AEAEB2' : '#1D1D1F',
+        mark: s === 'v' ? '✓ 2' : s === 'f' ? '● now' : '—',
+        fill2: s === 'v' ? '#1E9E6A' : s === 'f' ? sel.color : '#AEAEB2',
+      });
+    }
+    return {
+      noop: () => {},
+      sel,
+      wedges,
+      wedgeLabels,
+      trays: defs.map((t, j) => ({
+        ...t,
+        pick: () => this.setState({ sel: j }),
+        cardBg: j === i ? t.headerBg : '#FFFFFF',
+        cardBorder: j === i ? '2px solid ' + t.color : '1px solid #F0F0EE',
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

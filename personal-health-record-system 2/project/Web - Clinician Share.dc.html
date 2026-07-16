@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Clinician share view" style="min-height:100vh; min-width:1280px; display:flex; flex-direction:column; align-items:center; padding:0 0 80px; box-sizing:border-box">
+
+  <!-- banner: what this is -->
+  <div style="width:100%; background:#1D1D1F; color:#F5F5F4; box-sizing:border-box; padding:14px 40px; display:flex; align-items:center; gap:14px">
+    <div style="width:26px; height:26px; border-radius:50%; background:#0F8A63; color:#fff; display:grid; place-items:center; font-size:12px; font-weight:600">H</div>
+    <span style="font-size:13px; font-weight:500">Shared health record — read-only slice</span>
+    <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#98989D">prepared by the patient · served from their device · no copy retained after expiry</span>
+    <span style="margin-left:auto; display:flex; align-items:center; gap:7px; background:rgba(255,255,255,.08); border-radius:18px; padding:6px 14px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#E8A13D"></span>
+      <span style="font:500 10.5px 'IBM Plex Mono',monospace; color:#E8A13D">EXPIRES IN 6 DAYS · JUL 22</span>
+    </span>
+  </div>
+
+  <div style="width:100%; max-width:1080px; padding:36px 40px 0; box-sizing:border-box; display:flex; flex-direction:column; gap:20px">
+
+    <!-- patient header -->
+    <div style="display:flex; align-items:flex-start; gap:16px">
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <span style="font-size:26px; font-weight:600; letter-spacing:-.02em">Arun Verma · 34 M</span>
+        <span style="font:400 12px 'IBM Plex Mono',monospace; color:#86868B">DOB 12 Mar 1992 · prediabetes (E73.9) · HTN stage 1 (I10) · shared for: quarterly review Jul 21</span>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:8px">
+        <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:18px; padding:9px 16px; font-family:inherit; box-shadow:0 1px 2px rgba(0,0,0,.05)">⇩ Download PDF</button>
+        <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#FFFFFF; border-radius:18px; padding:9px 16px; font-family:inherit; box-shadow:0 1px 2px rgba(0,0,0,.05)">⇩ FHIR bundle</button>
+      </div>
+    </div>
+
+    <!-- scope of share -->
+    <div style="background:#FFFFFF; border-radius:16px; padding:14px 22px; display:flex; align-items:center; gap:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+      <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#AEAEB2">In this share</span>
+      <span style="display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500"><span style="width:7px; height:7px; border-radius:50%; background:#E8B10E"></span>Q2 labs · 2 panels</span>
+      <span style="display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500"><span style="width:7px; height:7px; border-radius:50%; background:#0A84FF"></span>BP · 90 days</span>
+      <span style="display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500"><span style="width:7px; height:7px; border-radius:50%; background:#1E9E6A"></span>Med adherence · 90 days</span>
+      <span style="margin-left:auto; font:400 10.5px 'IBM Plex Mono',monospace; color:#AEAEB2">everything else withheld by the patient</span>
+    </div>
+
+    <!-- patient question -->
+    <div style="background:#FFFFFF; border-radius:16px; padding:16px 22px; display:flex; gap:14px; align-items:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); border-left:3px solid #0F8A63">
+      <span style="font-size:16px">✎</span>
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font:500 10px 'IBM Plex Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#AEAEB2">Patient's question for this visit</span>
+        <span style="font-size:14px; line-height:1.55; letter-spacing:-.01em">"My morning BP runs ~9 mmHg above evening. I take lisinopril at 08:00 — worth moving it to the evening?"</span>
+      </div>
+    </div>
+
+    <!-- BP + labs grid -->
+    <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:16px; align-items:start">
+
+      <!-- BP summary -->
+      <div style="background:#FFFFFF; border-radius:18px; padding:20px 24px; display:flex; flex-direction:column; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="width:8px; height:8px; border-radius:50%; background:#0A84FF"></span>
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Blood pressure — 90 days · 212 readings</span>
+          <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">Withings BPM Connect · home</span>
+        </div>
+        <svg viewBox="0 0 620 150" style="width:100%; height:150px; display:block">
+          <rect x="0" y="74" width="620" height="34" rx="5" fill="#F4F4F2"></rect>
+          <text x="8" y="88" font-family="IBM Plex Mono" font-size="9" fill="#AEAEB2">TARGET &lt;120 / &lt;80</text>
+          <path d="M0,48 C60,46 100,52 160,50 C240,47 300,42 380,45 C460,48 540,40 620,42" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round"></path>
+          <path d="M0,104 C60,102 100,108 160,106 C240,103 300,98 380,101 C460,104 540,96 620,98" fill="none" stroke="#7CBBFF" stroke-width="1.8" stroke-linecap="round"></path>
+          <text x="614" y="32" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#1D1D1F">SYS avg 123</text>
+          <text x="614" y="120" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="#86868B">DIA avg 80</text>
+          <text x="6" y="142" font-family="IBM Plex Mono" font-size="9" fill="#AEAEB2">APR 16</text>
+          <text x="586" y="142" font-family="IBM Plex Mono" font-size="9" fill="#AEAEB2">JUL 15</text>
+        </svg>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; border-top:1px solid #F4F4F2; padding-top:14px">
+          <div style="display:flex; flex-direction:column; gap:2px"><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">90D AVG</span><span style="font:500 17px 'IBM Plex Mono',monospace">123/80</span></div>
+          <div style="display:flex; flex-direction:column; gap:2px"><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">MORNING AVG</span><span style="font:500 17px 'IBM Plex Mono',monospace; color:#C7811B">128/83</span></div>
+          <div style="display:flex; flex-direction:column; gap:2px"><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">EVENING AVG</span><span style="font:500 17px 'IBM Plex Mono',monospace">119/78</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; background:#FAFAF9; border-radius:12px; padding:10px 14px">
+          <span style="font:500 8.5px 'IBM Plex Mono',monospace; letter-spacing:.08em; color:#5E5CE6; background:#EFEFFC; border-radius:16px; padding:2px 7px">✦ AI</span>
+          <span style="font-size:12px; line-height:1.5; color:#6E6E73">Morning-vs-evening gap +9/+5 mmHg, consistent across 90 days (conf 0.82). Patient-generated flag — included with the patient's consent.</span>
+        </div>
+      </div>
+
+      <!-- labs -->
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+          <div style="display:flex; align-items:center; padding:15px 20px 9px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Q2 labs — Mar 12 2026</span>
+            <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">Quest · fasting</span>
+          </div>
+          <sc-for list="{{ labs }}" as="l" hint-placeholder-count="6">
+            <div style="display:grid; grid-template-columns:1.3fr auto auto; gap:12px; align-items:center; padding:9px 20px; border-top:1px solid #F4F4F2">
+              <span style="font-size:12.5px; font-weight:500; letter-spacing:-.01em">{{ l.name }}</span>
+              <span style="display:flex; align-items:baseline; gap:4px"><span style="font:500 13px 'IBM Plex Mono',monospace; color:{{ l.valColor }}">{{ l.val }}</span><span style="font:400 9px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ l.unit }}</span></span>
+              <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#86868B">ref {{ l.ref }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:#FFFFFF; border-radius:18px; padding:16px 20px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">Med adherence — 90 days</span>
+          <div style="display:flex; flex-direction:column; gap:8px; font:400 11px 'IBM Plex Mono',monospace; color:#86868B">
+            <div style="display:flex; justify-content:space-between; align-items:center"><span>metformin 500 mg ×2</span><span style="color:#1E9E6A; font-weight:500">97% · dispenser-verified</span></div>
+            <div style="display:flex; justify-content:space-between; align-items:center"><span>lisinopril 10 mg</span><span style="color:#C7811B; font-weight:500">93% · 6 missed, all mornings</span></div>
+            <div style="display:flex; justify-content:space-between; align-items:center"><span>vitamin D 2000 IU</span><span style="color:#1D1D1F; font-weight:500">90% · self-logged</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- provenance footer -->
+    <div style="display:flex; align-items:center; gap:10px; padding:4px 2px">
+      <span style="width:6px; height:6px; border-radius:50%; background:#1E9E6A"></span>
+      <span style="font:400 11px 'IBM Plex Mono',monospace; color:#86868B">Every value links to its source device or original document. Data classes: ink = measured · <span style="color:#5E5CE6">indigo ✦ = patient-run AI, always labeled</span>. This page self-destructs Jul 22 23:59.</span>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      noop: () => {},
+      labs: [
+        { name: 'HbA1c', val: '5.8', unit: '%', ref: '4.0–5.6', valColor: '#C7811B' },
+        { name: 'Fasting glucose', val: '98', unit: 'mg/dL', ref: '70–99', valColor: '#1D1D1F' },
+        { name: 'Total cholesterol', val: '182', unit: 'mg/dL', ref: '< 200', valColor: '#1D1D1F' },
+        { name: 'LDL (calc)', val: '112', unit: 'mg/dL', ref: '< 100', valColor: '#C7811B' },
+        { name: 'HDL', val: '48', unit: 'mg/dL', ref: '> 40', valColor: '#1D1D1F' },
+        { name: 'Potassium', val: '4.2', unit: 'mmol/L', ref: '3.5–5.0', valColor: '#1D1D1F' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

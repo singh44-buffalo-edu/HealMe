@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#EFEFED; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif; color:#1D1D1F; -webkit-font-smoothing:antialiased; }
+  a { color:#0F8A63; text-decoration:none; } a:hover { color:#0A6B4C; }
+  @keyframes hmdPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+</helmet>
+
+<div data-screen-label="Visit prep" style="min-height:100vh; min-width:1280px; display:flex; flex-direction:column; align-items:center; padding:0 0 80px; box-sizing:border-box">
+
+  <!-- context bar -->
+  <div style="width:100%; background:#FFFFFF; border-bottom:1px solid #E8E8E5; box-sizing:border-box; padding:16px 40px; display:flex; align-items:center; gap:16px">
+    <span style="font-size:13px; font-weight:500; color:#6E6E73">← Dashboard</span>
+    <div style="display:flex; align-items:center; gap:12px">
+      <div style="display:flex; flex-direction:column; align-items:center; background:#F4F4F2; border-radius:10px; padding:5px 10px">
+        <span style="font:500 9px 'IBM Plex Mono',monospace; color:#86868B">JUL</span>
+        <span style="font:500 14px 'IBM Plex Mono',monospace">21</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:1px">
+        <span style="font-size:17px; font-weight:600; letter-spacing:-.015em">Visit prep — Dr. Rao, quarterly review</span>
+        <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">Mon 09:30 · in 6 days · 15-minute slot — this page is built for those 15 minutes</span>
+      </div>
+    </div>
+    <div style="margin-left:auto; display:flex; gap:8px">
+      <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:500; color:#6E6E73; background:#F4F4F2; border-radius:18px; padding:9px 16px; font-family:inherit">⎙ Print one-pager</button>
+      <button onClick="{{ noop }}" style="border:none; cursor:pointer; font-size:12.5px; font-weight:600; color:#fff; background:#0F8A63; border-radius:18px; padding:9px 18px; font-family:inherit">Send slice ahead →</button>
+    </div>
+  </div>
+
+  <div style="width:100%; max-width:1120px; padding:28px 40px 0; box-sizing:border-box; display:flex; flex-direction:column; gap:18px">
+
+    <!-- the one answer first -->
+    <div style="background:#1D1D1F; border-radius:18px; padding:20px 26px; display:flex; align-items:center; gap:18px; color:#F5F5F4">
+      <span style="width:10px; height:10px; border-radius:50%; background:#4FD6A6; flex-shrink:0"></span>
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <span style="font-size:16px; font-weight:600; letter-spacing:-.015em">The quarter in one line: everything moved the right way — one open question.</span>
+        <span style="font:400 11px 'IBM Plex Mono',monospace; color:#98989D">HbA1c 5.8 ▾ · weight −0.8 kg · adherence 96% · BP in target 61% ▴ — except mornings, which is the question below</span>
+      </div>
+      <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#636366; text-align:right; flex-shrink:0">drafted by ✦ from 90 days<br>you edited it Jul 12</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:16px; align-items:start">
+
+      <!-- agenda -->
+      <div style="background:#FFFFFF; border-radius:18px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05); overflow:hidden">
+        <div style="display:flex; align-items:center; padding:18px 24px 12px">
+          <span style="font-size:15px; font-weight:600; letter-spacing:-.01em">Your agenda — 3 things, biggest first</span>
+          <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">drag to reorder · ≈12 of 15 min</span>
+        </div>
+        <sc-for list="{{ agenda }}" as="a" hint-placeholder-count="3">
+          <div style="display:flex; gap:14px; padding:16px 24px; border-top:1px solid #F4F4F2; align-items:flex-start">
+            <span style="width:24px; height:24px; border-radius:50%; background:#F4F4F2; display:grid; place-items:center; font:500 11px 'IBM Plex Mono',monospace; color:#6E6E73; flex-shrink:0; margin-top:2px">{{ a.n }}</span>
+            <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:0">
+              <span style="font-size:14.5px; font-weight:600; letter-spacing:-.01em; line-height:1.4">{{ a.ask }}</span>
+              <span style="font-size:12.5px; line-height:1.55; color:#6E6E73">{{ a.because }}</span>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+                <span style="display:flex; align-items:center; gap:6px; background:#F4F4F2; border-radius:14px; padding:4px 11px"><span style="font-size:10px">{{ a.srcIcon }}</span><span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#6E6E73">{{ a.src }}</span></span>
+                <a href="#evidence" style="font-size:11.5px; font-weight:500; color:#5E5CE6">{{ a.evidence }}</a>
+                <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">≈{{ a.mins }} min</span>
+              </div>
+            </div>
+            <span style="color:#D1D1CE; font-size:13px; cursor:grab; margin-top:2px">⠿</span>
+          </div>
+        </sc-for>
+        <div style="display:flex; align-items:center; gap:10px; padding:13px 24px; background:#FAFAF9; border-top:1px solid #F4F4F2">
+          <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">＋ anything you flag anywhere — a chart, an insight, a check-in — lands here with its evidence attached</span>
+          <span style="margin-left:auto; font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">2 items parked for next time</span>
+        </div>
+      </div>
+
+      <!-- right rail -->
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <!-- what travels -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:11px; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">What Dr. Rao gets</span>
+            <span style="margin-left:auto; font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">read-only · expires Jul 22</span>
+          </div>
+          <sc-for list="{{ slice }}" as="s" hint-placeholder-count="4">
+            <div style="display:flex; align-items:center; gap:10px; border:1px solid #F0F0EE; border-radius:12px; padding:10px 13px">
+              <span style="width:7px; height:7px; border-radius:50%; background:{{ s.dot }}"></span>
+              <div style="display:flex; flex-direction:column; gap:1px">
+                <span style="font-size:12.5px; font-weight:500; letter-spacing:-.01em">{{ s.what }}</span>
+                <span style="font:400 9.5px 'IBM Plex Mono',monospace; color:#AEAEB2">{{ s.detail }}</span>
+              </div>
+              <span style="margin-left:auto; font:500 10px 'IBM Plex Mono',monospace; color:{{ s.stateColor }}">{{ s.state }}</span>
+            </div>
+          </sc-for>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#86868B">everything else stays home · you choose per visit</span>
+        </div>
+
+        <!-- after the visit -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:18px 22px; display:flex; flex-direction:column; gap:11px; box-shadow:0 1px 2px rgba(94,92,230,.08), 0 8px 28px rgba(94,92,230,.10)">
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="font-size:14px; font-weight:600; letter-spacing:-.01em">After the visit — decisions become the record</span>
+          </div>
+          <span style="font-size:12.5px; line-height:1.6; color:#6E6E73">Walk out, tap once, speak what was decided. The AI drafts the changes; you approve each one:</span>
+          <div style="display:flex; flex-direction:column; gap:6px; font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B">
+            <div style="display:flex; justify-content:space-between; gap:10px"><span>"lisinopril moves to evening"</span><span style="color:#1D1D1F">→ schedule + tray change</span></div>
+            <div style="display:flex; justify-content:space-between; gap:10px"><span>"watch morning BP 2 weeks"</span><span style="color:#1D1D1F">→ ritual question, 14 days</span></div>
+            <div style="display:flex; justify-content:space-between; gap:10px"><span>"recheck K⁺ in 4 weeks"</span><span style="color:#1D1D1F">→ lab reminder Aug 18</span></div>
+          </div>
+          <span style="font:400 10px 'IBM Plex Mono',monospace; color:#AEAEB2">next visit's prep starts collecting from these, automatically</span>
+        </div>
+
+        <!-- one-pager -->
+        <div style="background:#FFFFFF; border-radius:18px; padding:16px 22px; display:flex; gap:14px; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05)">
+          <div style="width:52px; height:68px; background:#F4F4F2; border-radius:8px; display:flex; flex-direction:column; gap:3px; padding:7px 6px; box-sizing:border-box; flex-shrink:0">
+            <div style="width:70%; height:4px; background:#2A6E52; border-radius:2px"></div>
+            <div style="width:100%; height:3px; background:#E0E0DC; border-radius:2px"></div>
+            <div style="width:100%; height:3px; background:#E0E0DC; border-radius:2px"></div>
+            <div style="width:60%; height:3px; background:#E0E0DC; border-radius:2px"></div>
+            <div style="width:100%; height:10px; background:#E9F2EE; border-radius:2px; margin-top:2px"></div>
+            <div style="width:100%; height:3px; background:#E0E0DC; border-radius:2px"></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:2px">
+            <span style="font-size:13.5px; font-weight:600; letter-spacing:-.01em">The paper version</span>
+            <span style="font:400 10.5px 'IBM Plex Mono',monospace; color:#86868B; line-height:1.5">agenda + the one chart per item · fits one page · for the desk between you</span>
+          </div>
+          <a href="#print" style="margin-left:auto; font-size:12.5px; font-weight:500; white-space:nowrap">Preview →</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      noop: () => {},
+      agenda: [
+        { n: '1', ask: 'Morning BP runs +9/+5 over evenings — move lisinopril to the evening?', because: 'Consistent across 90 days and 122 readings. The 6 doses I missed were all mornings too — an evening dose might fix both.', srcIcon: '♥', src: 'flagged from Vitals · Jul 12', evidence: '122 readings + pattern →', mins: '5' },
+        { n: '2', ask: 'With-dinner metformin killed the stomach trouble — keep timing, still discuss the dose?', because: 'Check-ins show trouble on 8% of days now, down from 34% before the April switch. If a dose increase is on the table, the timing lesson matters.', srcIcon: '◉', src: 'from dose check-ins · 214 answers', evidence: 'check-in trend →', mins: '4' },
+        { n: '3', ask: 'HbA1c is 5.8 and forecast says 5.4 by October — anything to change, or stay the course?', because: 'Fourth straight improvement. Mostly a confirmation question — and the good news of the visit.', srcIcon: '⚗', src: 'from Labs · forecast', evidence: '8 draws + forecast →', mins: '3' },
+      ],
+      slice: [
+        { what: 'This agenda', detail: 'your 3 questions, in your words', dot: '#1E9E6A', state: 'IN', stateColor: '#1E9E6A' },
+        { what: 'Q2 labs + BP 90 days', detail: '2 panels · 212 readings · morning pattern', dot: '#1E9E6A', state: 'IN', stateColor: '#1E9E6A' },
+        { what: 'Med adherence + check-in trend', detail: 'dispenser-verified · stomach-trouble series', dot: '#1E9E6A', state: 'IN', stateColor: '#1E9E6A' },
+        { what: 'Sleep, weight, journal', detail: 'not relevant to these questions', dot: '#D1D1CE', state: 'STAYS HOME', stateColor: '#AEAEB2' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
