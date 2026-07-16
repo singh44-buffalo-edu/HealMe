@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     ai_model: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"  # custom-endpoint option (proxy/gateway)
     gemini_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434/"
 

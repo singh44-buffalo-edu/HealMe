@@ -4,6 +4,8 @@
 Creates (idempotently):
   1. The first user + the "HealMeDaily" Project (via the registration API)
   2. A ClientApplication for the Python service
+  3. A least-privilege AccessPolicy ('service/healmedaily-ai') bound to the
+     ClientApplication's ProjectMembership (Phase 9 hardening)
 and persists ids/secrets into the repo-root .env.
 
 Local-dev posture: the admin password is generated once and stored in .env
@@ -205,6 +207,105 @@ def ensure_client_app(base: str, token: str, project_id: str) -> tuple[str, str]
     return client["id"], client["secret"]
 
 
+SERVICE_POLICY_NAME = "service/healmedaily-ai"
+
+# Least privilege for the Python ai-service (Phase 9 hardening). AccessPolicy
+# is an allowlist by nature: any resource type not listed is denied. Read-only
+# types cover lookups the service needs but must never alter (the regimen, the
+# question bank, raw check-in answers, the Patient). AuditEvent is create-only
+# (boundary-ledger writes). Everything read/write is what ingestion, Health
+# Review and reminders actually touch today (see ai-service/app).
+SERVICE_POLICY_RESOURCES: list[dict] = [
+    {"resourceType": "Patient", "readonly": True},
+    {"resourceType": "Medication", "readonly": True},
+    {"resourceType": "MedicationRequest", "readonly": True},
+    {"resourceType": "Questionnaire", "readonly": True},
+    {"resourceType": "QuestionnaireResponse", "readonly": True},
+    {"resourceType": "Observation"},
+    {"resourceType": "MedicationAdministration"},
+    {"resourceType": "MedicationStatement"},
+    {"resourceType": "Device"},
+    {"resourceType": "DocumentReference"},
+    {"resourceType": "Binary"},
+    {"resourceType": "Task"},
+    {"resourceType": "Provenance"},
+    {"resourceType": "DiagnosticReport"},
+    {"resourceType": "Condition"},
+    {"resourceType": "AllergyIntolerance"},
+    {"resourceType": "Immunization"},
+    {"resourceType": "Communication"},
+    {"resourceType": "CommunicationRequest"},
+    {"resourceType": "SupplyDelivery"},
+    {"resourceType": "Basic"},
+    {"resourceType": "AuditEvent", "interaction": ["create"]},
+]
+
+
+def ensure_service_access_policy(base: str, token: str, client_id: str) -> None:
+    """Create/update the ai-service AccessPolicy and bind it to the
+    ClientApplication's ProjectMembership.access. Idempotent."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/fhir+json",
+    }
+    policy = {
+        "resourceType": "AccessPolicy",
+        "name": SERVICE_POLICY_NAME,
+        "resource": SERVICE_POLICY_RESOURCES,
+    }
+    bundle = fhir_get(
+        base, token, "AccessPolicy", {"name": SERVICE_POLICY_NAME, "_count": 5}
+    )
+    policy_id = None
+    for entry in bundle.get("entry", []):
+        if entry["resource"].get("name") == SERVICE_POLICY_NAME:
+            policy_id = entry["resource"]["id"]
+            break
+    if policy_id:
+        resp = httpx.put(
+            base + f"fhir/R4/AccessPolicy/{policy_id}",
+            json={**policy, "id": policy_id},
+            headers=headers,
+            timeout=15,
+        )
+        if resp.status_code >= 400:
+            die(f"AccessPolicy update failed: {resp.status_code} {resp.text[:300]}")
+        log(f"updated AccessPolicy/{policy_id} ({SERVICE_POLICY_NAME})")
+    else:
+        resp = httpx.post(
+            base + "fhir/R4/AccessPolicy", json=policy, headers=headers, timeout=15
+        )
+        if resp.status_code >= 400:
+            die(f"AccessPolicy create failed: {resp.status_code} {resp.text[:300]}")
+        policy_id = resp.json()["id"]
+        log(f"created AccessPolicy/{policy_id} ({SERVICE_POLICY_NAME})")
+
+    memberships = fhir_get(
+        base,
+        token,
+        "ProjectMembership",
+        {"profile": f"ClientApplication/{client_id}", "_count": 5},
+    )
+    entries = memberships.get("entry", [])
+    if not entries:
+        die(f"no ProjectMembership found for ClientApplication/{client_id}")
+    membership = entries[0]["resource"]
+    desired = [{"policy": {"reference": f"AccessPolicy/{policy_id}"}}]
+    if membership.get("access") == desired:
+        log("service ClientApplication already bound to the least-privilege policy")
+        return
+    membership["access"] = desired
+    resp = httpx.put(
+        base + f"fhir/R4/ProjectMembership/{membership['id']}",
+        json=membership,
+        headers=headers,
+        timeout=15,
+    )
+    if resp.status_code >= 400:
+        die(f"membership access binding failed: {resp.status_code} {resp.text[:300]}")
+    log(f"bound {SERVICE_POLICY_NAME} to ProjectMembership/{membership['id']}")
+
+
 def verify_client_credentials(base: str, client_id: str, client_secret: str) -> None:
     resp = httpx.post(
         base + "oauth2/token",
@@ -260,6 +361,8 @@ def main() -> None:
     client_id, client_secret = ensure_client_app(base, token, project_id)
     save("MEDPLUM_CLIENT_ID", client_id)
     save("MEDPLUM_CLIENT_SECRET", client_secret)
+
+    ensure_service_access_policy(base, token, client_id)
 
     verify_client_credentials(base, client_id, client_secret)
 

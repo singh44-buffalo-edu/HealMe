@@ -3,7 +3,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml
 COMPOSE_ALL := docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml
 PY := ai-service/.venv/bin/python
 
-.PHONY: up down logs dev seed smoke bootstrap install test lint format check bots prod-up prod-down prod-logs
+.PHONY: up down logs dev seed smoke bootstrap install test lint format check bots prod-up prod-down prod-logs backup
 
 up:
 	$(COMPOSE) up -d
@@ -36,6 +36,10 @@ dev:
 
 smoke:
 	$(PY) scripts/smoke_test.py
+
+# Timestamped local backup: Postgres CDR dump + Medplum binary storage -> data/backups/
+backup:
+	$(PY) scripts/backup.py
 
 # Containerized deployment: Medplum stack + built frontend (:8080) + AI service (:8000).
 # Stop `make dev` first — the AI container claims port 8000.
@@ -77,3 +81,11 @@ check: lint test
 	cd frontend && npm run build
 	cd backend-bots && npm run build
 	@echo "check: all green"
+
+# --- Pi dispenser (Phase 8) — simulator-first, zero hardware needed ---
+.PHONY: pi-sim pi-test
+pi-sim:
+	PYTHONPATH=pi-dispenser $(PY) -m pi_dispenser sim --scenario pi-dispenser/scenarios/day.json --speed 60 --dry-run
+
+pi-test:
+	$(PY) -m pytest pi-dispenser/tests -q

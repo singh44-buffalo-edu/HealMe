@@ -59,9 +59,22 @@ def env(key: str, default: str = "") -> str:
 
 
 def get_token(base: str) -> str:
+    # Seeding is an owner-level operation: prefer the admin login. The service
+    # ClientApplication is bound to the least-privilege 'service/healmedaily-ai'
+    # AccessPolicy (scripts/bootstrap.py) and can no longer create the Patient,
+    # Questionnaires or MedicationRequests this script seeds.
+    admin_email, admin_password = env("HMD_ADMIN_EMAIL"), env("HMD_ADMIN_PASSWORD")
+    if admin_email and admin_password:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from bootstrap import password_login
+
+        token = password_login(base, admin_email, admin_password)
+        if token:
+            return token
+        log("admin login failed — falling back to client credentials")
     client_id, client_secret = env("MEDPLUM_CLIENT_ID"), env("MEDPLUM_CLIENT_SECRET")
     if not client_id or not client_secret:
-        die("no client credentials in .env — run `make bootstrap` first")
+        die("no admin or client credentials in .env — run `make bootstrap` first")
     resp = httpx.post(
         base + "oauth2/token",
         data={

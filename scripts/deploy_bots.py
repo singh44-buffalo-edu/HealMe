@@ -42,6 +42,21 @@ BOTS = [
             "supported_interaction": "create",
         },
     },
+    {
+        # On-demand ($execute with a Parameters input) — no Subscription.
+        "name": "break-glass",
+        "description": "Care-circle break-glass: swap a member to the 24h emergency policy and back",
+        "dist": REPO / "backend-bots/dist/break-glass.js",
+        "subscription": None,
+    },
+    {
+        # Cron bot — no Subscription; Medplum invokes it on the schedule below.
+        "name": "reminders-runner",
+        "description": "Overdue unlogged dose slots -> CommunicationRequest reminders (display-only)",
+        "dist": REPO / "backend-bots/dist/reminders-runner.js",
+        "subscription": None,
+        "cron": "*/15 * * * *",
+    },
 ]
 
 
@@ -71,7 +86,8 @@ def main() -> None:
         "Content-Type": "application/fhir+json",
     }
 
-    # 1. Ensure the project has bots enabled. Project.features is a
+    # 1. Ensure the project has the needed features enabled ('bots' to run
+    # bots at all, 'cron' for schedule-triggered bots). Project.features is a
     # super-admin-protected field: a normal project admin's PUT silently
     # strips it, so this step uses the instance super admin (seeded by the
     # server on first boot; change its password during hardening).
@@ -83,7 +99,8 @@ def main() -> None:
             f"cannot read Project/{project_id}: {project.status_code} {project.text[:200]}"
         )
     proj = project.json()
-    if "bots" not in proj.get("features", []):
+    needed = {"bots", "cron"} - set(proj.get("features", []))
+    if needed:
         sa_email = env("HMD_SUPERADMIN_EMAIL", "admin@example.com")
         sa_password = env("HMD_SUPERADMIN_PASSWORD", "medplum_admin")
         sa_token = password_login(base, sa_email, sa_password)
@@ -93,7 +110,7 @@ def main() -> None:
             "Authorization": f"Bearer {sa_token}",
             "Content-Type": "application/fhir+json",
         }
-        proj["features"] = proj.get("features", []) + ["bots"]
+        proj["features"] = proj.get("features", []) + sorted(needed)
         resp = httpx.put(
             base + f"fhir/R4/Project/{project_id}",
             json=proj,
@@ -101,13 +118,13 @@ def main() -> None:
             timeout=15,
         )
         if resp.status_code >= 400:
-            die(f"enabling bots feature failed: {resp.status_code} {resp.text[:300]}")
+            die(f"enabling features failed: {resp.status_code} {resp.text[:300]}")
         check = httpx.get(
             base + f"fhir/R4/Project/{project_id}", headers=headers, timeout=15
         ).json()
-        if "bots" not in check.get("features", []):
-            die("bots feature did not persist — investigate super admin permissions")
-        log("enabled 'bots' feature on project (as super admin)")
+        if needed - set(check.get("features", [])):
+            die("features did not persist — investigate super admin permissions")
+        log(f"enabled {sorted(needed)} feature(s) on project (as super admin)")
 
     for bot_def in BOTS:
         name = bot_def["name"]
@@ -150,8 +167,31 @@ def main() -> None:
             die(f"bot deploy failed: {resp.status_code} {resp.text[:300]}")
         log(f"deployed code to Bot/{bot_id} ({len(code)} bytes)")
 
-        # 4. Ensure the Subscription exists
+        # 4. Cron wiring (cron bots have no Subscription; Medplum's scheduler
+        # invokes them per Bot.cronString — requires the 'cron' project feature)
+        cron = bot_def.get("cron")
+        if cron:
+            bot_res = httpx.get(
+                base + f"fhir/R4/Bot/{bot_id}", headers=headers, timeout=15
+            ).json()
+            if bot_res.get("cronString") != cron:
+                bot_res["cronString"] = cron
+                resp = httpx.put(
+                    base + f"fhir/R4/Bot/{bot_id}",
+                    json=bot_res,
+                    headers=headers,
+                    timeout=15,
+                )
+                if resp.status_code >= 400:
+                    die(f"cron wiring failed: {resp.status_code} {resp.text[:300]}")
+                log(f"set cronString '{cron}' on Bot/{bot_id}")
+            else:
+                log(f"cronString '{cron}' already set on Bot/{bot_id}")
+
+        # 5. Ensure the Subscription exists (event-triggered bots only)
         sub_def = bot_def["subscription"]
+        if sub_def is None:
+            continue
         endpoint = f"Bot/{bot_id}"
         subs = httpx.get(
             base + "fhir/R4/Subscription",

@@ -15,7 +15,8 @@ from . import importers, ingest
 from .config import REPO_ROOT, settings
 from .medplum import medplum
 
-STRUCTURED = {".json": "fhir", ".csv": "csv", ".xml": "apple"}
+# .xml defaults to Apple Health; run_import sniffs ClinicalDocument roots and reroutes to ccda.
+STRUCTURED = {".json": "fhir", ".csv": "csv", ".xml": "apple", ".cda": "ccda", ".ccda": "ccda", ".hl7": "hl7"}
 DOCUMENTS = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
 

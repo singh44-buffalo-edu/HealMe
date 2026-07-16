@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import export, health_review, importers, ingest, watcher
+from . import ai_settings, assistant, export, health_review, importers, ingest, watcher
 from .config import settings
 from .medplum import MedplumError, medplum
 from .providers import ProviderError, ProviderNotConfigured, provider_status
@@ -31,6 +31,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(ai_settings.router)
+app.include_router(assistant.router)
 
 
 def _patient_id() -> str:
@@ -169,13 +172,14 @@ async def scan_now() -> dict:
     return {"inbox": str(watcher.inbox_dir()), "results": results}
 
 
-IMPORT_KINDS = {"fhir", "csv", "apple"}
+IMPORT_KINDS = {"fhir", "csv", "apple", "ccda", "hl7"}
 
 
 @app.post("/import/{kind}")
 async def import_structured(kind: str, file: UploadFile = File(...)) -> dict:
     """Deterministic structured imports: FHIR R4 bundle (json), observations
-    CSV (this app's export format), or Apple Health export.xml."""
+    CSV (this app's export format), Apple Health export.xml, C-CDA document
+    (ccda), or HL7v2 ORU results (hl7)."""
     if kind not in IMPORT_KINDS:
         raise HTTPException(status_code=404, detail=f"unknown import kind — one of {sorted(IMPORT_KINDS)}")
     data = await file.read()

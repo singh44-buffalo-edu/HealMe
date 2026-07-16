@@ -82,19 +82,31 @@ export interface ImportResult {
   skipped: Record<string, number>;
 }
 
-const IMPORT_KIND_BY_EXT: Record<string, string> = { json: 'fhir', csv: 'csv', xml: 'apple' };
+export type ImportKind = 'fhir' | 'csv' | 'apple' | 'ccda' | 'hl7';
 
-export const importStructured = (file: File) => {
+// .xml stays "apple" for backward compat — the server sniffs C-CDA roots and reroutes.
+const IMPORT_KIND_BY_EXT: Record<string, ImportKind> = {
+  json: 'fhir',
+  csv: 'csv',
+  xml: 'apple',
+  cda: 'ccda',
+  ccda: 'ccda',
+  hl7: 'hl7',
+};
+
+export const importStructured = (file: File, kind?: ImportKind) => {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  const kind = IMPORT_KIND_BY_EXT[ext];
-  if (!kind) {
+  const resolved = kind ?? IMPORT_KIND_BY_EXT[ext];
+  if (!resolved) {
     return Promise.reject(
-      new Error('Unsupported file — .json (FHIR bundle), .csv (observations export) or .xml (Apple Health)')
+      new Error(
+        'Unsupported file — .json (FHIR bundle), .csv (observations export), .xml (Apple Health or C-CDA), .cda/.ccda (C-CDA) or .hl7 (HL7v2 ORU results)'
+      )
     );
   }
   const form = new FormData();
   form.append('file', file);
-  return request<ImportResult>(`import/${kind}`, { method: 'POST', body: form });
+  return request<ImportResult>(`import/${resolved}`, { method: 'POST', body: form });
 };
 
 export interface ReviewTask {
@@ -114,3 +126,102 @@ export const approveTask = (taskId: string, resource: Record<string, unknown> | 
 
 export const rejectTask = (taskId: string) =>
   request<{ status: string }>(`ingest/tasks/${encodeURIComponent(taskId)}/reject`, { method: 'POST' });
+
+// ---------------------------------------------------------------------------
+// AI settings (BYOK, per-feature routing) — /ai
+// ---------------------------------------------------------------------------
+
+export type AiRoute = 'local' | 'cloud' | 'off';
+export type AiFeature = 'health-review' | 'ingest-extraction' | 'assistant' | 'nl-import';
+
+export interface AiProviderInfo {
+  name: string;
+  is_local: boolean;
+  configured: boolean;
+  model: string;
+  masked_key?: string;
+  base_url?: string;
+}
+
+export interface AiSettings {
+  providers: AiProviderInfo[];
+  routing: Record<AiFeature, AiRoute>;
+  cloud_provider: string | null;
+}
+
+export const getAiSettings = () => request<AiSettings>('ai/settings');
+
+export const putAiSettings = (body: {
+  routing?: Partial<Record<AiFeature, AiRoute>>;
+  cloud_provider?: string;
+  models?: Record<string, string>;
+}) => request<AiSettings>('ai/settings', { ...json(body), method: 'PUT' });
+
+export const setAiKey = (provider: string, key: string) =>
+  request<{ provider: string; configured: boolean; masked_key: string }>(
+    `ai/keys/${encodeURIComponent(provider)}`,
+    json({ key })
+  );
+
+export const deleteAiKey = (provider: string) =>
+  request<{ provider: string; deleted: boolean; configured: boolean }>(
+    `ai/keys/${encodeURIComponent(provider)}`,
+    { method: 'DELETE' }
+  );
+
+export interface AiTestResult {
+  ok: boolean;
+  provider: string;
+  model?: string;
+  latency_ms?: number;
+  reply?: string;
+  reason?: string;
+}
+
+export const testAiProvider = (provider: string) =>
+  request<AiTestResult>(`ai/test/${encodeURIComponent(provider)}`, { method: 'POST' });
+
+// ---------------------------------------------------------------------------
+// Assistant (record-grounded Q&A, read-only) — /assistant
+// ---------------------------------------------------------------------------
+
+export interface AssistantCitation {
+  n: number;
+  resourceType: string;
+  id: string;
+  display: string;
+  value?: string;
+  date?: string;
+}
+
+export interface AssistantAnswer {
+  answer_markdown: string;
+  citations: AssistantCitation[];
+  read_count: number;
+  provider: { name: string; is_local: boolean };
+  communication_id: string;
+  disclaimer: string;
+}
+
+export const askAssistant = (question: string) =>
+  request<AssistantAnswer>('assistant/ask', json({ question }));
+
+export interface AssistantSession {
+  id: string;
+  question: string;
+  answer_preview: string;
+  sent: string;
+}
+
+export const listAssistantSessions = () => request<AssistantSession[]>('assistant/sessions');
+
+export const deleteAssistantSession = (id: string) =>
+  request<{ id: string; deleted: boolean }>(`assistant/sessions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+
+export const nlImport = (text: string) =>
+  request<{ proposals: number; task_ids: string[]; note?: string }>(
+    'assistant/nl-import',
+    json({ text })
+  );

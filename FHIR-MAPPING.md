@@ -202,6 +202,11 @@ Representative identifier systems:
 | Refill | `supply-delivery` | client event UUID |
 | Source document | `document` | source-system ID or content hash/import UUID |
 | Proposal Task | `ingestion-task` | source document + candidate ordinal/type/hash |
+| Dispense event | `medication-dispense` | request + scheduled occurrence |
+| Escalation rung | `communication-request` | request + occurrence + rung |
+| Structured import | `import` | sha256 content hash (first 32 hex chars) |
+| NL capture proposal | `nl-import` | sha256 of raw text payload |
+| Dose reminder | `reminder` | request + occurrence |
 
 Imported identifiers from hospitals or health apps retain their original `system` and `value`; project identifiers supplement rather than replace them.
 
@@ -216,7 +221,48 @@ Dashboards are projections over FHIR search results, not stored aggregates in an
 
 Exact search parameter names are checked against the running R4 server before implementation. All searches paginate and apply server-side bounds.
 
-## 9. Deliberately excluded mappings
+## 9. Dispenser (Phase 8)
+
+The dispenser is a parent `Device` (type local code `pill-dispenser`); cartridges point at it via `Device.parent`. It authenticates as its own `ClientApplication` scoped by AccessPolicy (LAN only).
+
+| Event | FHIR mapping |
+| --- | --- |
+| Wedge/tray drop at dose time | `MedicationDispense(status=completed, whenHandedOver=T0, authorizingPrescription -> MedicationRequest)` |
+| Pickup / confirmed intake | the same logical dose event as §3: `MedicationAdministration` (identifier = request + scheduled occurrence) with `completed` |
+| Verification method | `MedicationAdministration.extension[url = .../StructureDefinition/administration-verification]` valueCode `weight` \| `camera` \| `self` (priority weight > camera > self) |
+| Timeliness | `MedicationAdministration.effectiveDateTime − MedicationDispense.whenHandedOver` (computed, never stored) |
+| Refill per cartridge | §5 `SupplyDelivery` + Device update, one transaction, `ifMatch` |
+| Escalation rungs | `CommunicationRequest(status=active, medium local code chime/push/ask-why, occurrenceDateTime)` → completed `Communication` when delivered |
+| Device telemetry (load cell, sensor states) | not stored as Observations; only dose events reach the record |
+
+Rules: the dispenser writes dose events only — never Conditions/Observations. A missed pickup follows §3 (no resource until the user or the escalation flow logs an outcome; the T+2h rung logs `not-done` + `statusReason user-marked-missed` only after the user-configured ladder says so, and that write is attributed to the dispenser agent in Provenance). Inventory never gates dosing.
+
+## 10. Care circle (Phase 9)
+
+Each member (caretaker, alerts-only contact, clinician share) is a `ProjectMembership` whose `access[]` binds a scoped `AccessPolicy`. Sharing has exactly one mechanism: AccessPolicy. No ad-hoc cross-member queries.
+
+| Concept | FHIR mapping |
+| --- | --- |
+| Member + role | `ProjectMembership` + `Practitioner`/`RelatedPerson` profile; role tag via AccessPolicy naming (`care-circle/caretaker`, `care-circle/alerts-only`, `care-circle/clinician-share`) |
+| Scope toggles (meds, vitals, labs, check-ins, documents, AI insights) | `AccessPolicy.resource[]` entries per resource type with criteria; owner edits update the policy in place |
+| Time-boxed clinician share | AccessPolicy plus expiry: membership removed by the share job at `endDateTime` (stored in the policy name/extension); read-only (`readonly = true` on every resource rule) |
+| Break-glass | Bot swaps the member's `access[]` to the emergency policy for 24 h, creates `Communication` to the owner, writes a permanent `AuditEvent` (code local `break-glass`); a second bot run restores the original policy |
+| Who-looked-lately | `AuditEvent` search filtered by agent = member profile |
+| Reminders / alert rules | Bot cron: due-dose scan → `CommunicationRequest`; a rung the owner declined is simply absent (owner preference stored in a `Basic` resource, local code `alert-rules`) |
+
+Caretaker UI renders only what the policy returns; locked areas are a client-side presentation of server-side denial, never a client-side filter over broader data.
+
+## 11. Assistant and AI settings (Phase 7)
+
+| Concept | FHIR mapping |
+| --- | --- |
+| Q&A session | `Communication(category local assistant-qa, subject=Patient, payload = question + answer markdown, sent)` — deletable; deletion writes an `AuditEvent` stub |
+| Citations | resource references inside the answer payload; every claim must resolve to a real resource |
+| NL quick capture | §6 proposal gate verbatim: raw text `Binary` (local type `nl-capture`) + proposal Binaries + review `Task` — never a direct commit |
+| Boundary ledger | `AuditEvent` per cloud AI call (written before the call), entity description names feature + provider; the Privacy Vault ledger is a search over these |
+| BYOK keys / per-feature routing | **not FHIR** — OS keychain or `data/secrets/` (0600, gitignored); never in the record, never in exports/backups of the record |
+
+## 12. Deliberately excluded mappings
 
 - No side-database tables for clinical facts, embeddings, dashboard aggregates, or ingestion state.
 - No AI-created Condition, MedicationRequest, allergy, or regimen change without explicit confirmation.

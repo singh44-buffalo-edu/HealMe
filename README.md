@@ -102,6 +102,8 @@ frontend/       React app — src/fhir.ts is the tested dose/adherence core; src
 ai-service/     FastAPI — providers.py (AI adapters), health_review.py, ingest.py, export.py, medplum.py
 backend-bots/   Medplum bots (vitest + MockClient); deployed via scripts/deploy_bots.py
 scripts/        bootstrap.py (one-time identity), seed.py (idempotent data), smoke_test.py, deploy_bots.py
+pi-dispenser/   Raspberry Pi pill-dispenser agent (Phase 8), simulator-first: `make pi-sim` dry-runs a
+                full day with zero hardware, `make pi-test` runs its tests — see pi-dispenser/README.md
 infra/          docker-compose.yml (Medplum stack, pinned) + docker-compose.app.yml (app containers)
 CLAUDE.md       living engineering rules + verified Medplum gotchas — read before changing anything
 FHIR-MAPPING.md canonical domain→resource mapping — read before touching any resource shape

@@ -1,0 +1,90 @@
+{
+  "comment": "Sample simulated day. Dose 1 (09:00, tray 1) is picked up on time at 09:04 — weight-verified, only the T+0 chime fires. Dose 2 (19:00, tray 2) sits until the T+15 push rung fires, then is picked up at 19:22.",
+  "date": "2026-07-15",
+  "timezone": "local",
+  "patient_id": "patient-local",
+  "dispenser": {
+    "resourceType": "Device",
+    "id": "dispenser-1",
+    "status": "active",
+    "identifier": [{ "system": "https://healmedaily.local/fhir/identifier/device", "value": "dispenser-kitchen" }],
+    "deviceName": [{ "name": "Pi dispenser - kitchen", "type": "user-friendly-name" }],
+    "type": { "coding": [{ "system": "https://healmedaily.local/fhir/CodeSystem/device", "code": "pill-dispenser" }] }
+  },
+  "medications": [
+    {
+      "resourceType": "Medication",
+      "id": "med-a",
+      "status": "active",
+      "code": { "text": "Sample Medication A 10 mg tablet" }
+    },
+    {
+      "resourceType": "Medication",
+      "id": "med-b",
+      "status": "active",
+      "code": { "text": "Sample Medication B 500 mg tablet" }
+    }
+  ],
+  "medication_requests": [
+    {
+      "resourceType": "MedicationRequest",
+      "id": "req-a",
+      "status": "active",
+      "intent": "order",
+      "authoredOn": "2026-04-16",
+      "identifier": [{ "system": "https://healmedaily.local/fhir/identifier/medication-request", "value": "sample-med-a-daily" }],
+      "extension": [{ "url": "https://healmedaily.local/fhir/StructureDefinition/medicationrequest-life-critical", "valueBoolean": true }],
+      "subject": { "reference": "Patient/patient-local" },
+      "medicationReference": { "reference": "Medication/med-a", "display": "Sample Medication A 10 mg tablet" },
+      "dosageInstruction": [
+        {
+          "text": "1 tablet daily at 09:00",
+          "timing": { "repeat": { "frequency": 1, "period": 1, "periodUnit": "d", "timeOfDay": ["09:00:00"] } }
+        }
+      ]
+    },
+    {
+      "resourceType": "MedicationRequest",
+      "id": "req-b",
+      "status": "active",
+      "intent": "order",
+      "authoredOn": "2026-04-16",
+      "identifier": [{ "system": "https://healmedaily.local/fhir/identifier/medication-request", "value": "sample-med-b-evening" }],
+      "subject": { "reference": "Patient/patient-local" },
+      "medicationReference": { "reference": "Medication/med-b", "display": "Sample Medication B 500 mg tablet" },
+      "dosageInstruction": [
+        {
+          "text": "1 tablet with dinner at 19:00",
+          "timing": { "repeat": { "frequency": 1, "period": 1, "periodUnit": "d", "timeOfDay": ["19:00:00"] } }
+        }
+      ]
+    }
+  ],
+  "cartridges": [
+    {
+      "resourceType": "Device",
+      "id": "cart-1",
+      "status": "active",
+      "identifier": [{ "system": "https://healmedaily.local/fhir/identifier/device", "value": "cartridge-1" }],
+      "deviceName": [{ "name": "Cartridge 1", "type": "user-friendly-name" }],
+      "type": { "coding": [{ "system": "https://healmedaily.local/fhir/CodeSystem/device", "code": "medication-cartridge" }] },
+      "extension": [{ "url": "https://healmedaily.local/fhir/StructureDefinition/device-assigned-medication", "valueReference": { "reference": "Medication/med-a" } }],
+      "parent": { "reference": "Device/dispenser-1" }
+    },
+    {
+      "resourceType": "Device",
+      "id": "cart-2",
+      "status": "active",
+      "identifier": [{ "system": "https://healmedaily.local/fhir/identifier/device", "value": "cartridge-2" }],
+      "deviceName": [{ "name": "Cartridge 2", "type": "user-friendly-name" }],
+      "type": { "coding": [{ "system": "https://healmedaily.local/fhir/CodeSystem/device", "code": "medication-cartridge" }] },
+      "extension": [{ "url": "https://healmedaily.local/fhir/StructureDefinition/device-assigned-medication", "valueReference": { "reference": "Medication/med-b" } }],
+      "parent": { "reference": "Device/dispenser-1" }
+    }
+  ],
+  "hardware": { "load_cell": true, "camera": true, "wedge_grams": 0.62, "lid_closed": true },
+  "pickups": [
+    { "at": "09:04:00", "via": "sensor" },
+    { "at": "19:22:00", "via": "sensor" }
+  ]
+}
