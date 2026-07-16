@@ -3,6 +3,18 @@
  * medication cartridges today, the Pi pill dispenser in Phase 8.
  * Design ground truth: design_handoff_healmedaily / "Web - Devices".
  * Real data only: Device resources + device-verified dose events.
+ *
+ * Architecture: routed from App.tsx; ENTIRELY read-only over the Medplum CDR
+ * (Device, Medication, MedicationAdministration via ../fhir loaders) — all
+ * editing lives on CartridgesPage ("Manage →"). Data model: FHIR-MAPPING.md
+ * §5 (cartridge Device shape, dispenser as parent Device via Device.parent)
+ * and §9 (dispenser events).
+ *
+ * "Device-logged" means: a MedicationAdministration carrying the
+ * administration-verification extension, which only the dispenser pipeline
+ * stamps (valueCode weight | camera | self, in that trust order — §9). Hand-
+ * logged doses lack the extension and are filtered out here. Stock numbers
+ * shown are informational only — inventory never gates dosing (§5/§9).
  */
 import { Loader } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
@@ -19,6 +31,8 @@ import { T, mono } from '../tokens';
 // Verification method stamped on dispenser-confirmed doses (FHIR-MAPPING §9).
 const EXT_VERIFICATION = `${BASE}/StructureDefinition/administration-verification`;
 
+// Glyph/label per verification code (trust order weight > camera > self —
+// FHIR-MAPPING.md §9). Unknown codes fall back to a raw uppercase label.
 const VERIFICATION: Record<string, { glyph: string; label: string }> = {
   weight: { glyph: '⚖', label: 'WEIGHT' },
   camera: { glyph: '⌗', label: 'CAMERA' },
@@ -46,6 +60,8 @@ interface RosterStatus {
   color: string;
 }
 
+/** Roster badge from Device state alone: disabled → INACTIVE, low stock →
+ * ATTENTION (amber), else ACTIVE. Purely informational — never gates. */
 function cartridgeStatus(cart: CartridgeInfo): RosterStatus {
   if (!cart.enabled) return { label: 'INACTIVE', color: T.quaternary };
   if (cart.low) return { label: 'ATTENTION', color: T.watch };
@@ -56,6 +72,17 @@ function cartridgeStatus(cart: CartridgeInfo): RosterStatus {
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Fleet dashboard: health strip, cartridge roster, dispenser card (or the
+ * Phase 8 placeholder), the static how-a-dose-lands explainer, and the last
+ * 14 days of device-verified dose events.
+ *
+ * FHIR touched: reads Device (cartridges + pill-dispenser type), Medication
+ * (name lookup), MedicationAdministration (14-day window, then filtered to
+ * verification-stamped events client-side — there is no search param for an
+ * extension). No writes. Failure mode: any load error renders the error
+ * card; there is no partial rendering.
+ */
 export function DevicesPage() {
   const medplum = useMedplum();
   const [cartridges, setCartridges] = useState<CartridgeInfo[]>([]);
@@ -314,6 +341,8 @@ function StatCell({ label, value, color = T.ink, monoValue = true }: {
   );
 }
 
+/** Read-only roster card for one cartridge: status, capacity/remaining/
+ * low-at stats, stock bar, and the Manage link to CartridgesPage. */
 function CartridgeRosterCard({
   cart,
   index,
@@ -401,6 +430,8 @@ function CartridgeRosterCard({
 // Dispenser card — pill-dispenser Device with its mounted trays
 // ---------------------------------------------------------------------------
 
+/** Pill-dispenser Device (Phase 8) with the cartridges mounted on it —
+ * membership is Device.parent → this dispenser (FHIR-MAPPING.md §5). */
 function DispenserCard({
   dispenser,
   mounted,
@@ -509,6 +540,9 @@ function PipelineArrow() {
 // Device-logged dose row
 // ---------------------------------------------------------------------------
 
+/** One device-verified dose: when, med, verification chip, and the outcome
+ * word mapped from the §3 dose-event semantics (completed → TAKEN; not-done
+ * splits on statusReason user-skipped / user-marked-missed). */
 function EventRow({
   event,
   medications,

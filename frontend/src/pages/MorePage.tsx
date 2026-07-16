@@ -2,6 +2,17 @@
  * MorePage — mobile "Health hub" (design Mobile 4d): full nav parity behind the
  * More tab. Every route as a 44px tap row, grouped Health / Capture / Privacy &
  * settings, plus the sidebar footer content (record count, disclaimer, sign out).
+ *
+ * Architecture: routed from App.tsx (mobile shell's More tab); consumes the
+ * NAV / NAV_SETTINGS route registries and the shared count hooks from App —
+ * it defines no routes of its own, so a route added to App appears here
+ * automatically (that's the "parity by construction" below). Reads nothing
+ * from FHIR directly; the only action is Medplum sign-out.
+ *
+ * Invariants: the review-queue badge rides the /ingest row only (mirrors the
+ * sidebar badge); AI-flavored routes get the indigo icon treatment via
+ * item.ai (AI-labeling rule, CLAUDE.md §2); the not-medical-advice footer
+ * line ships on this surface too.
  */
 import { useMedplum, useMedplumProfile } from '@medplum/react';
 import { IconChevronRight } from '@tabler/icons-react';
@@ -28,6 +39,8 @@ interface Section {
   items: NavItem[];
 }
 
+/** One 44px tap row: icon tile (indigo when item.ai), label, optional count
+ * badge, chevron. `first` suppresses the hairline divider on group tops. */
 function NavRow({ item, first, badge }: { item: NavItem; first: boolean; badge?: number }) {
   const IconCmp = item.icon;
   return (
@@ -87,6 +100,11 @@ function NavRow({ item, first, badge }: { item: NavItem; first: boolean; badge?:
   );
 }
 
+/**
+ * The hub itself: three grouped nav sections plus the footer (observation
+ * count, disclaimer, profile name, sign out). Sign-out clears the Medplum
+ * session and hard-reloads so no per-page state survives the identity change.
+ */
 export function MorePage() {
   const medplum = useMedplum();
   const profile = useMedplumProfile();

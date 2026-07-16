@@ -1,4 +1,9 @@
-"""Escalation ladder: config + per-dose state machine (time injected)."""
+"""ladder.py: owner config parsing/validation + per-dose state machine.
+
+Pins the Dose Ritual default ladder (T+0/T+15/T+45/T+2h, missed logged,
+NO family alert), rung ordering across late wakes, pickup/close terminality,
+and the config validation rules (close-tray only last, strictly increasing
+offsets). Time is always passed in — no sleeping, no wall clock."""
 
 from datetime import datetime, timedelta, timezone
 

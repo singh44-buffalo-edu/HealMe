@@ -14,6 +14,22 @@
 The dispenser writes dose events ONLY — never Conditions/Observations, and
 telemetry (load cell, sensors) never reaches the record. All writes are
 idempotent: stable identifiers + conditional create (ifNoneExist).
+
+Idempotency identifiers (FHIR-MAPPING.md §7; value format from
+schedule.DoseSlot.ident_value = "{request-slug}-{YYYY-MM-DD}T{HH:MM}"):
+
+    MedicationDispense        identifier/medication-dispense      | ident_value
+    MedicationAdministration  identifier/medication-administration| ident_value
+    CommunicationRequest      identifier/communication-request    | ident_value + "-{medium}"
+
+Dispense and administration share the VALUE but live on different identifier
+SYSTEMS — they are distinct moments (offered vs taken) of the same slot.
+The administration identifier is the exact one the frontend's manual tap
+uses, which is how machine and human converge on one logical dose event.
+
+Layering: agent.py calls the builders (pure, no I/O) and hands the payloads
+to a sink. DryRunSink prints; MedplumSink is the ONLY code path that writes
+dispenser data to the record.
 """
 
 from __future__ import annotations
@@ -49,7 +65,12 @@ def _med_ref(slot: DoseSlot) -> dict:
 
 
 def dispense_event(slot: DoseSlot, patient_id: str, dispenser_id: str, when_handed_over: datetime) -> dict:
-    """Wedge/tray drop at dose time -> MedicationDispense."""
+    """Wedge/tray drop at dose time -> MedicationDispense.
+
+    `when_handed_over` is T0, the moment pills physically landed in the base
+    tray — readers compute timeliness as administration.effectiveDateTime
+    minus this (§9: computed, never stored). The dispenser Device is the
+    performer; the MedicationRequest is the authorizing prescription."""
     return {
         "resourceType": "MedicationDispense",
         "identifier": [{"system": IDENT_DISPENSE, "value": slot.ident_value}],
@@ -71,8 +92,14 @@ def pickup_event(
 ) -> dict:
     """Pickup / confirmed intake -> the §3 logical dose event, completed.
 
-    Timeliness is effectiveDateTime - whenHandedOver: computed by readers,
-    never stored (§9).
+    `effective` is the observed pickup moment (clinical time, not write
+    time); `verification` must be one of weight|camera|self — how the pickup
+    was confirmed, chosen by agent.choose_verification (weight > camera >
+    self, §9) — and lands in the administration-verification extension.
+    Device references (cartridge + dispenser) record which hardware served
+    the dose. Timeliness is effectiveDateTime - whenHandedOver: computed by
+    readers, never stored (§9). Raises ValueError on an unknown verification
+    code rather than writing an unlabeled confirmation.
     """
     if verification not in VERIFICATIONS:
         raise ValueError(f"verification must be one of {VERIFICATIONS}, got {verification!r}")
@@ -102,7 +129,14 @@ def escalation_event(
     recipient: str | None = None,
 ) -> dict:
     """One escalation rung -> CommunicationRequest (delivery marks it a
-    completed Communication later; that is the app's job, not ours)."""
+    completed Communication later; that is the app's job, not ours).
+
+    `medium` is the rung's local escalation code (chime/push/ask-why —
+    ladder.py); it is part of the identifier ("{ident_value}-{medium}"), so
+    re-firing the same rung for the same slot is a no-op while different
+    rungs of one slot stay distinct (§7 "request + occurrence + rung").
+    `recipient` is ONLY ever set for the owner-configured family alert —
+    absent by default (no family alerts unless opted in)."""
     resource = {
         "resourceType": "CommunicationRequest",
         "identifier": [{"system": IDENT_COMM_REQ, "value": f"{slot.ident_value}-{medium}"}],
@@ -124,7 +158,15 @@ def missed_event(slot: DoseSlot, patient_id: str, dispenser_id: str, at: datetim
     """Final-rung missed log -> transaction: MedicationAdministration
     not-done (user-marked-missed) + Provenance attributing the write to the
     dispenser agent (§9). Callers gate this on the user's ladder config —
-    NEVER call it unless the configured final rung says to log."""
+    NEVER call it unless the configured final rung says to log.
+
+    Transaction bundle (CLAUDE.md §6 multi-resource rule) so administration
+    and its Provenance land atomically; the admin entry is itself
+    conditional (ifNoneExist), keeping the §3 rule that a user's own log
+    always wins over the machine's."""
+    # uuid5 (not uuid4): the fullUrl is derived from the dose identity, so a
+    # retried/replayed bundle is byte-identical and the Provenance target
+    # still resolves — deterministic replay, pinned by test_events.py.
     full_url = f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, IDENT_ADMIN + '|' + slot.ident_value)}"
     admin = {
         "resourceType": "MedicationAdministration",
@@ -175,6 +217,10 @@ def missed_event(slot: DoseSlot, patient_id: str, dispenser_id: str, at: datetim
 # ---------------------------------------------------------------------------
 # Sinks — where payloads go
 # ---------------------------------------------------------------------------
+#
+# Sink contract: submit(payload: dict) -> None. The agent is sink-agnostic;
+# cli.py picks MedplumSink when DISPENSER_MEDPLUM_* is configured (and
+# --dry-run is off), else DryRunSink. Tests always use DryRunSink.
 
 
 def describe(payload: dict) -> str:
@@ -199,7 +245,11 @@ def describe(payload: dict) -> str:
 
 
 class DryRunSink:
-    """Collects payloads and prints them — no Medplum required."""
+    """Collects payloads and prints them — no Medplum required.
+
+    The default when credentials are absent (the package must be fully
+    usable with zero configuration, like the app's no-AI-key rule). The
+    collected `payloads` list is what the e2e tests assert against."""
 
     def __init__(self, out: Callable[[str], None] = print, print_payloads: bool = True) -> None:
         self.payloads: list[dict] = []
@@ -235,6 +285,11 @@ class MedplumSink:
         return found[0] if found else None
 
     def submit(self, payload: dict) -> None:
+        # Missed-dose bundle: pre-check whether ANY administration already
+        # exists for this slot (any status — a user's tap/skip beats the
+        # machine's "missed"), then post the transaction. The pre-check plus
+        # the entry's own ifNoneExist covers the race where a log lands
+        # between check and POST.
         if payload.get("resourceType") == "Bundle":
             admin = payload["entry"][0]["resource"]
             if self._existing("MedicationAdministration", admin["identifier"][0]):
@@ -245,6 +300,10 @@ class MedplumSink:
             return
 
         ident = payload["identifier"][0]
+        # Administrations may legitimately exist already (user skipped in the
+        # app, then picked up from the tray): same status -> no-op replay;
+        # different status -> version-checked update of the SAME logical
+        # event, never a second resource (§3 skipped->taken rule).
         if payload["resourceType"] == "MedicationAdministration":
             existing = self._existing("MedicationAdministration", ident)
             if existing is not None:
@@ -255,5 +314,7 @@ class MedplumSink:
                 self._client.update_if_match(updated, existing.get("meta", {}).get("versionId"))
                 self._out(f"[fhir] updated same logical dose event: {describe(payload)}")
                 return
+        # Everything else (dispense, escalation, first-time administration):
+        # plain conditional create on the stable identifier.
         self._client.create_if_none_exist(payload, f"identifier={ident['system']}|{ident['value']}")
         self._out(f"[fhir] committed {describe(payload)}")

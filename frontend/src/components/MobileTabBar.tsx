@@ -1,6 +1,9 @@
 /**
  * MobileTabBar — floating blurred-white pill bottom nav (design Mobile 2a/4d).
  * Five slots: Today · Meds · center ＋ capture · Assistant · More.
+ * Rendered only by MobileShell (App.tsx); every page not covered by the five
+ * slots is reachable through More (/more), which reuses the desktop NAV list
+ * so the shells never drift apart.
  */
 import {
   IconLayoutDashboard,
@@ -13,6 +16,9 @@ import {
 import { Link, useLocation } from 'react-router';
 import { T, mono } from '../tokens';
 
+/** One tab slot: 44px minimum hit target, active = ink / inactive =
+ * quaternary. The badge renders in AI indigo because the review queue it
+ * counts holds AI-extraction proposals (AI-labeling rule). */
 function Slot({
   to,
   label,
@@ -67,7 +73,9 @@ function Slot({
   );
 }
 
-/** Fixed bottom tab bar; `reviewCount` renders the review-queue badge on More. */
+/** Fixed bottom tab bar; `reviewCount` renders the review-queue badge on
+ * More. Bottom offset includes the iOS safe-area inset; MobileShell's main
+ * padding reserves matching space so content never hides beneath the bar. */
 export function MobileTabBar({ reviewCount = 0 }: { reviewCount?: number }) {
   return (
     <nav

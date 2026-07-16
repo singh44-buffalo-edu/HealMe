@@ -1,4 +1,10 @@
-"""FHIR writers: identifier idempotency + §9 shapes."""
+"""events.py payload builders: FHIR-MAPPING.md §9 shapes + §7 identifiers.
+
+Pins the contracts that must never drift: idempotent identifiers across
+retries, dispense vs administration on distinct identifier systems, the
+verification-extension whitelist, the missed-dose transaction (not-done +
+user-marked-missed + dispenser Provenance) with a deterministic fullUrl,
+and no recipient on escalations unless a family alert is configured."""
 
 from datetime import datetime, timezone
 

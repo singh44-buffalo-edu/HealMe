@@ -1,3 +1,25 @@
+/**
+ * LabsPage — lab results dashboard (route /labs): hero analyte trend, panel
+ * cards with per-analyte range-position bars, a flagged-only view, and a flat
+ * by-date history.
+ *
+ * Implements the design handoff's `Web - Labs.dc.html`. Deliberately omitted
+ * from that design: the dashed AI forecast cone ("✦ 5.4 BY OCT") — forecasts
+ * have no backend yet and AI content is never faked (CLAUDE.md §2).
+ *
+ * Architecture: leaf route in App.tsx's shell; read-only. "Add results" links
+ * to ingestion — lab values enter the record only through the review-queue
+ * gate (FHIR-MAPPING §6), never directly from this page. One FHIR read:
+ * - Observation category=laboratory _count=1000 _sort=date — the FULL history,
+ *   no date bound: draws are sparse and multi-year context is the point.
+ *
+ * Reference-range rule (SR-3): the gray band on the hero chart and the tinted
+ * segment of each RangeBar are the range STATED ON THE SOURCE REPORT
+ * (Observation.referenceRange, preserved by ingestion). When a report carries
+ * no range, no band is drawn and out-of-range coloring is suppressed — the UI
+ * never fabricates a threshold. This is the one page where a reference band
+ * legitimately appears, precisely because it is quoted, not invented.
+ */
 import { Loader } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import type { Observation } from '@medplum/fhirtypes';
@@ -44,7 +66,9 @@ const RANGE_OPTIONS: { value: HeroRange; label: string }[] = [
 
 const RANGE_DAYS: Record<HeroRange, number | undefined> = { '1Y': 365, '3Y': 1095, ALL: undefined };
 
-/** Presentation-only grouping of analyte display names into familiar panel cards. */
+/** Presentation-only grouping of analyte display names into familiar panel
+ * cards. First matching regex wins (order matters); anything unmatched lands
+ * in "Other results". A navigation aid, not a clinical taxonomy. */
 const PANEL_DEFS: { name: string; match: RegExp }[] = [
   { name: 'Metabolic', match: /a1c|glucose|insulin|homa/i },
   { name: 'Lipids', match: /cholesterol|\bldl\b|\bhdl\b|triglycer|lipoprotein/i },
@@ -72,6 +96,14 @@ interface LabPanel {
   analytes: Analyte[];
 }
 
+/**
+ * Labs dashboard page. Loads the whole lab history once on mount; view
+ * switching (panel/date/flagged), hero selection and range windows are pure
+ * client state over that snapshot. The hero defaults to the analyte with the
+ * most draws (the longest story); clicking any analyte row promotes it.
+ * Failure mode: a search error renders an inline error card; zero results
+ * renders guidance pointing at document ingestion.
+ */
 export function LabsPage() {
   const medplum = useMedplum();
   const navigate = useNavigate();
@@ -202,6 +234,16 @@ export function LabsPage() {
   );
 }
 
+/**
+ * Bucket raw lab Observations into per-analyte series. The grouping key is the
+ * display name (code.text, falling back to coding display/code): imported
+ * reports from different sources rarely share consistent codings, so
+ * same-named analytes merge into one trend. Each analyte keeps its points
+ * sorted by draw date, the first stated referenceRange found in the group,
+ * and an out-of-range flag computed from the LATEST value only — a historical
+ * excursion does not flag the analyte today. Unit comes from the first
+ * observation; values are used exactly as stored (no unit conversion).
+ */
 function groupAnalytes(observations: Observation[]): Analyte[] {
   const groups = new Map<string, Observation[]>();
   for (const obs of observations) {
@@ -243,6 +285,14 @@ function groupAnalytes(observations: Observation[]): Analyte[] {
 // Hero trend card
 // ---------------------------------------------------------------------------
 
+/**
+ * Large trend chart for the selected analyte with 1Y/3Y/ALL windows. The
+ * ReferenceArea band is the report-stated range only (see file header); the
+ * latest draw gets an emphasized dot + value label and takes the out-of-range
+ * color when flagged — status color lives on the value, never floods the card.
+ * The 12-month delta in the header is computed over ALL points, not just the
+ * windowed ones, so switching to 1Y doesn't change the stated delta.
+ */
 function HeroTrendCard({
   analyte,
   range,
@@ -395,6 +445,7 @@ function HeroTrendCard({
 // Panel cards
 // ---------------------------------------------------------------------------
 
+/** First matching PANEL_DEFS entry for an analyte name, else the catch-all. */
 function panelFor(name: string): string {
   for (const def of PANEL_DEFS) {
     if (def.match.test(name)) return def.name;
@@ -402,6 +453,7 @@ function panelFor(name: string): string {
   return OTHER_PANEL;
 }
 
+/** Group analytes into panels in PANEL_DEFS order, keeping only non-empty ones. */
 function buildPanels(analytes: Analyte[]): LabPanel[] {
   const byPanel = new Map<string, Analyte[]>();
   for (const a of analytes) {
@@ -432,6 +484,13 @@ function PanelGrid({
   );
 }
 
+/**
+ * One panel card: per-analyte rows with latest value, range-position bar and
+ * trend note vs the previous draw. The header status counts analytes whose
+ * LATEST value sits above/below its stated range — "ALL IN RANGE" therefore
+ * only claims that every latest result with a stated range is inside it.
+ * Rows are keyboard-activable and promote the analyte to the hero chart.
+ */
 function PanelCard({
   panel,
   onSelect,
@@ -534,7 +593,11 @@ function PanelCard({
   );
 }
 
-/** 120×16 range-position bar: whisper track, green-tinted ref segment, status-colored value dot. */
+/** 120×16 range-position bar: whisper track, green-tinted ref segment,
+ * status-colored value dot. Without a stated range no segment is tinted and
+ * the scale falls back to the observed min/max — nothing implied. The ±40%
+ * padding (mirroring the hero chart) keeps the dot visibly inside the track
+ * even for out-of-range values. */
 function RangeBar({ analyte, value, color }: { analyte: Analyte; value: number; color: string }) {
   const vals = analyte.points.map((p) => p.value);
   const lo = analyte.low ?? Math.min(...vals, value);
@@ -563,6 +626,12 @@ function RangeBar({ analyte, value, color }: { analyte: Analyte; value: number; 
 // By-date view
 // ---------------------------------------------------------------------------
 
+/**
+ * Flat reverse-chronological list of every draw, capped at the latest 100 for
+ * render cost. Unlike the panel view's latest-only flag, out-of-range coloring
+ * here is per-draw against the analyte's stated range, so old excursions are
+ * visible in history.
+ */
 function ByDateCard({
   analytes,
   onSelect,
@@ -656,10 +725,12 @@ function fmtTick(iso: string, withDay: boolean): string {
   return withDay ? `${MONTHS[m - 1]} ${d}` : `${MONTHS[m - 1]} ’${String(y).slice(2)}`;
 }
 
+/** Trim to ≤2 decimals without trailing zeros. */
 function fmtNum(v: number): string {
   return parseFloat(v.toFixed(2)).toString();
 }
 
+/** Humanized span between first and last draw: days → months → years. */
 function spanText(minDate: string, maxDate: string): string {
   const days = Math.round((new Date(maxDate).getTime() - new Date(minDate).getTime()) / 86400000);
   if (days >= 730) return `${Math.round(days / 365.25)} years`;

@@ -1,5 +1,10 @@
 """Markdown-lite → PDF via reportlab. Handles the subset the Health Review
-emits: #/##/### headings, bullet lists, bold via **, plain paragraphs."""
+emits: #/##/### headings, bullet lists, bold via **, plain paragraphs.
+
+Used only by health_review._store_review to produce the printable rendition
+(FHIR-MAPPING: Health Review output = DocumentReference + Binary PDF). Pure
+function of its inputs — no FHIR, no network, no state. If the Health Review
+prompt ever emits richer markdown (tables, links), extend the parser here."""
 
 from __future__ import annotations
 
@@ -13,11 +18,16 @@ from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTempl
 
 
 def _inline(text: str) -> str:
+    """Escape XML entities FIRST (reportlab Paragraphs parse mini-XML — raw
+    '<' in model output would crash the build), then map **bold** → <b>."""
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
 
 
 def markdown_to_pdf(markdown: str, title: str) -> bytes:
+    """Render markdown-lite to A4 PDF bytes; `title` becomes the PDF document
+    title. Line-oriented single pass — consecutive bullets buffer into one
+    ListFlowable (flush_bullets) so lists keep their spacing."""
     styles = getSampleStyleSheet()
     h1 = ParagraphStyle("HMD-H1", parent=styles["Heading1"], spaceAfter=6)
     h2 = ParagraphStyle("HMD-H2", parent=styles["Heading2"], spaceBefore=10, spaceAfter=4)

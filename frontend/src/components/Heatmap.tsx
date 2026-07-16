@@ -1,8 +1,16 @@
+/**
+ * Adherence calendar heatmap (GitHub-contribution style) for the Adherence
+ * page. Input is fhir.ts DaySummary[] — every day's status was already
+ * computed by the shared slot model (summarizeDays), so this component is
+ * purely presentational and never touches FHIR itself.
+ */
 import { Tooltip } from '@mantine/core';
 import type { DaySummary, DayStatus } from '../fhir';
 import { T, mono } from '../tokens';
 
-/** Design-handoff adherence palette (tinted trio for large calendar cells). */
+/** Design-handoff adherence palette (tinted trio for large calendar cells).
+ * 'unlogged' and 'none-taken' stay visually distinct on purpose: silence is
+ * not the same fact as an explicit skip (no-log⇒no-resource rule). */
 const COLORS: Record<DayStatus, string> = {
   'all-taken': T.heatTaken, // #ddf2e8
   partial: T.heatLate, // #fbf3e4
@@ -24,7 +32,9 @@ export function Heatmap({ days }: { days: DaySummary[] }) {
   if (days.length === 0) {
     return null;
   }
-  // Pad the start so the first column begins on Monday
+  // Pad the start so the first column begins on Monday. Parsing at noon
+  // keeps DST/UTC edges from shifting the weekday; (getDay()+6)%7 remaps
+  // Sunday-first getDay() to Monday-first (Mon=0 … Sun=6).
   const firstWeekday = (new Date(`${days[0].date}T12:00`).getDay() + 6) % 7;
   const cells: (DaySummary | null)[] = [...Array(firstWeekday).fill(null), ...days];
   const weeks: (DaySummary | null)[][] = [];

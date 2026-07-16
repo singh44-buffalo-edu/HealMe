@@ -1,4 +1,8 @@
-# HealMeDaily pill-dispenser agent (Phase 8)
+# HealMeDaily pill-dispenser agent (Phase 8) — runs `python -m pi_dispenser
+# run` (cli.cmd_run: fetch regimen each morning, dispense/observe all day)
+# as a boot service on the Raspberry Pi. Full setup: pi-dispenser/README.md
+# "Pi setup". Paths assume the README layout (checkout + venv + .env at
+# /home/pi/pi-dispenser); adjust User/WorkingDirectory/paths for other rigs.
 # Install:
 #   sudo cp systemd/pi-dispenser.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now pi-dispenser
@@ -6,6 +10,8 @@
 
 [Unit]
 Description=HealMeDaily pill dispenser agent (not a certified medical device)
+# network-online (not just network): the agent needs the Medplum server on
+# the LAN at startup to fetch the day's regimen.
 After=network-online.target
 Wants=network-online.target
 
@@ -14,8 +20,13 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/pi-dispenser
 # .env holds DISPENSER_MEDPLUM_BASE_URL / _CLIENT_ID / _CLIENT_SECRET / _PATIENT_ID
+# (the dispenser's own ClientApplication — least-privilege AccessPolicy, LAN
+# only; never the owner's credentials). Secrets live only in this file, 0600.
 EnvironmentFile=/home/pi/pi-dispenser/.env
 ExecStart=/home/pi/pi-dispenser/.venv/bin/python -m pi_dispenser run
+# on-failure + idempotent FHIR writes (stable identifiers, conditional
+# create) make crash-restart safe: replayed events converge, duplicates
+# cannot be created. Missing config exits 1 and is retried like any failure.
 Restart=on-failure
 RestartSec=10
 

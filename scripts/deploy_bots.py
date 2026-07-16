@@ -1,12 +1,23 @@
 #!/usr/bin/env python
 """Deploy bots to the local Medplum and wire their Subscriptions.
 
-Idempotent: enables the project 'bots' feature, creates each Bot once
-(found by name), re-deploys its built code every run, and creates the
-triggering Subscription once.
+Run via `make bots` (which builds backend-bots first — each bot bundles to
+one dist/*.js via esbuild). The BOTS table below is the single source of
+wiring truth: name/description, built file, and EITHER a Subscription
+definition (event-triggered) OR subscription=None (+ optional cron string).
+
+Idempotent: enables the project 'bots'/'cron' features, creates each Bot once
+(found by name), re-deploys its built code every run (that is how code
+changes ship), and creates the triggering Subscription once.
+
+⚠️ Bot-endpoint Subscriptions execute once and NEVER retry (CLAUDE.md §5) —
+every bot registered here must be idempotent (stable identifiers +
+conditional creates; see the headers in backend-bots/src/*.ts) and
+non-critical to data integrity.
 
 Run `npm run build --prefix backend-bots` first (or via `make bots`).
-Requires admin credentials in .env (from scripts/bootstrap.py).
+Requires admin credentials in .env (from scripts/bootstrap.py), and the
+instance super admin for the one-time feature flip (see .env.example).
 """
 
 from __future__ import annotations
@@ -21,8 +32,12 @@ from bootstrap import env, password_login  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
+# Subscription criteria are FHIR search strings; supported_interaction maps to
+# Medplum's subscription-supported-interaction extension (one valueCode only)
+# so update-storms don't re-fire create-triggered bots.
 BOTS = [
     {
+        # Fans check-in answers out to chartable Observations (FHIR-MAPPING §4).
         "name": "questionnaire-response-to-observations",
         "description": "Fans numeric check-in answers out to Observations",
         "dist": REPO / "backend-bots/dist/questionnaire-response-to-observations.js",
@@ -33,6 +48,8 @@ BOTS = [
         },
     },
     {
+        # Next-day check-back Task per symptom; criteria filter on the local
+        # symptom code so ordinary Observations never invoke the bot.
         "name": "symptom-follow-up",
         "description": "Creates a next-day follow-up Task when a symptom is logged",
         "dist": REPO / "backend-bots/dist/symptom-follow-up.js",
@@ -50,7 +67,9 @@ BOTS = [
         "subscription": None,
     },
     {
-        # Cron bot — no Subscription; Medplum invokes it on the schedule below.
+        # Cron bot — no Subscription; Medplum invokes it on the schedule below
+        # (every 15 min). Each run rescans from scratch, so missed ticks are
+        # harmless; it never writes dose status (medical-safety rule).
         "name": "reminders-runner",
         "description": "Overdue unlogged dose slots -> CommunicationRequest reminders (display-only)",
         "dist": REPO / "backend-bots/dist/reminders-runner.js",
@@ -70,6 +89,8 @@ def die(msg: str) -> None:
 
 
 def main() -> None:
+    """Ensure features, then for each bot: ensure resource -> deploy code ->
+    wire cron or Subscription. Any HTTP failure aborts (die-fast)."""
     base = env("MEDPLUM_BASE_URL", "http://localhost:8103/")
     if not base.endswith("/"):
         base += "/"

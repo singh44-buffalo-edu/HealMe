@@ -1,3 +1,30 @@
+/**
+ * CheckinPage — the cadence-driven check-in surface ("Check-ins" nav item).
+ *
+ * Architecture: routed from App.tsx; all data access goes through the shared
+ * helpers in ../fhir (loadCheckins / getPatient), which hit the Medplum CDR
+ * directly via MedplumClient. Rendering the actual form is delegated to
+ * @medplum/react's <QuestionnaireForm>.
+ *
+ * Cadence engine (FHIR-MAPPING.md §2 "Questionnaire cadence", spec §11-lite):
+ * - Every active Questionnaire tagged with the questionnaire-cadence extension
+ *   (valueCode D|W|M) is a check-in. loadCheckins() computes the current
+ *   period identifier per cadence — `{q-key}-{YYYY-MM-DD}` (daily),
+ *   `{q-key}-week-{monday}` (weekly), `{q-key}-month-{YYYY-MM}` (monthly) —
+ *   and looks up whether a QuestionnaireResponse already exists for it.
+ * - "DUE" simply means: no response with this period identifier yet. There is
+ *   no separate due-table or cron — dueness is derived, never stored.
+ * - Resubmitting inside the same period UPDATES the existing response (same
+ *   identifier) rather than creating a duplicate. That identifier is the
+ *   idempotency key (FHIR-MAPPING.md §7 "Daily response").
+ *
+ * Downstream: a Subscription-triggered Bot fans selected answers out to
+ * Observations (derivedFrom → this response). This page never writes
+ * Observations itself — QuestionnaireResponse is the source of truth
+ * (FHIR-MAPPING.md §4). Note the Bot fires on create/update but derived
+ * Observations chart the first submission until re-derivation lands (the
+ * notification below says so to the user).
+ */
 import { Loader } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
@@ -67,6 +94,16 @@ function CheckinTile({
   );
 }
 
+/**
+ * Check-in hub: tile per cadence-tagged questionnaire, DUE/DONE state, and the
+ * selected form (or its submitted answers with an Edit affordance).
+ *
+ * FHIR touched: reads Questionnaire + QuestionnaireResponse (via loadCheckins),
+ * reads Patient (subject ref), creates/updates one QuestionnaireResponse per
+ * submit. Failure modes: load errors render the error card (page stays
+ * usable on retry); save errors surface as a red notification and keep the
+ * form state so nothing typed is lost.
+ */
 export function CheckinPage() {
   const medplum = useMedplum();
   const [checkins, setCheckins] = useState<CheckinDef[]>();
@@ -132,6 +169,14 @@ export function CheckinPage() {
   const selected = checkins.find((d) => d.questionnaire.url === selectedUrl) ?? checkins[0];
   const dueCount = checkins.filter((d) => !d.existing).length;
 
+  /**
+   * Persist one check-in. The QuestionnaireForm hands us a draft response;
+   * we stamp the fields the Bot and the period-dedup logic depend on:
+   * canonical questionnaire url, Patient subject, authored = now (clinical
+   * time; record time stays in meta.lastUpdated), and the stable period
+   * identifier so a resubmit in the same period is an update, not a
+   * duplicate (idempotent by construction — safe to retry after a failure).
+   */
   const handleSubmit = async (def: CheckinDef, response: QuestionnaireResponse) => {
     try {
       const patient = await getPatient(medplum);
@@ -145,6 +190,7 @@ export function CheckinPage() {
         identifier: { system: QR_IDENT_SYSTEM, value: def.periodIdent },
       };
       if (def.existing) {
+        // Same period ⇒ update the existing response in place (same id).
         await medplum.updateResource({ ...resource, id: def.existing.id });
         notifications.show({
           color: 'teal',

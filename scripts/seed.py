@@ -2,9 +2,25 @@
 """Seed the Medplum CDR with the core resources + sample data so dashboards
 aren't empty.
 
-Idempotent: every entry uses a stable identifier + conditional create
-(ifNoneExist), so re-running never duplicates. Sample-only resources are
-tagged `https://healmedaily.local/fhir/tags|seed-sample` for easy purge later.
+Run via `make seed` after `make bootstrap`. One transaction Bundle (plain
+FHIR REST via httpx, admin credentials) + a handful of targeted fixups;
+writes MEDPLUM_PATIENT_ID back into .env for the frontend/service/scripts.
+
+Idempotency = ifNoneExist semantics. Every entry carries a stable business
+identifier (systems in FHIR-MAPPING.md §7) and its transaction request says
+`ifNoneExist: identifier=<system>|<value>`. Server behavior when the search
+matches: the entry is SKIPPED and returns 200 + the existing resource — the
+payload in this script is NOT applied as an update. Two consequences:
+  - re-running never duplicates, but
+  - reshaping a resource here does nothing to an already-seeded instance.
+    That is exactly why the post-transaction fixups at the bottom exist: they
+    PUT the delta onto found resources (retire superseded questionnaire
+    versions, cadence extension, life-critical flag, authoredOn anchor,
+    cartridge->dispenser mount). Add a fixup whenever you upgrade the shape
+    of a resource that earlier seeds already created.
+
+Sample-only resources are tagged `https://healmedaily.local/fhir/tags|seed-sample`
+for easy purge later. The Patient and Questionnaires are real (untagged).
 
 Creates:
   - the single Patient (the owner)
@@ -59,6 +75,7 @@ def env(key: str, default: str = "") -> str:
 
 
 def get_token(base: str) -> str:
+    """Access token for seeding — admin first, service credentials fallback."""
     # Seeding is an owner-level operation: prefer the admin login. The service
     # ClientApplication is bound to the least-privilege 'service/healmedaily-ai'
     # AccessPolicy (scripts/bootstrap.py) and can no longer create the Patient,
@@ -90,11 +107,17 @@ def get_token(base: str) -> str:
 
 
 def ident(suffix: str, value: str) -> dict:
+    """Business identifier under the project system (FHIR-MAPPING.md §7)."""
     return {"system": f"{IDENT}/{suffix}", "value": value}
 
 
 def entry(resource: dict, suffix: str, value: str, url: str | None = None) -> dict:
-    """Transaction entry with conditional create on the stable identifier."""
+    """Transaction entry with conditional create on the stable identifier.
+
+    fullUrl is a uuid5 OF the identifier, so it is stable across runs and
+    intra-bundle references built with ref() always point at the same
+    logical resource, whether it is being created now or already exists.
+    """
     resource.setdefault("identifier", []).append(ident(suffix, value))
     return {
         "fullUrl": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, f'{IDENT}/{suffix}|{value}')}",
@@ -108,15 +131,20 @@ def entry(resource: dict, suffix: str, value: str, url: str | None = None) -> di
 
 
 def ref(e: dict) -> dict:
+    """Intra-bundle reference by fullUrl; the server rewrites it to the real
+    id — the existing resource's id when ifNoneExist matched."""
     return {"reference": e["fullUrl"]}
 
 
 def local_dt(d: date, hhmm: str, tz: ZoneInfo) -> str:
+    """ISO datetime at HH:MM in the owner's timezone — clinical timestamps
+    always carry an offset (FHIR-MAPPING.md §1)."""
     h, m = (int(x) for x in hhmm.split(":"))
     return datetime.combine(d, dtime(h, m), tzinfo=tz).isoformat(timespec="seconds")
 
 
 def main() -> None:
+    """Build the transaction bundle, POST it, verify, then run the fixups."""
     base = env("MEDPLUM_BASE_URL", "http://localhost:8103/")
     if not base.endswith("/"):
         base += "/"
@@ -477,6 +505,10 @@ def main() -> None:
             admin, "medication-administration", f"{slug_base}-{d.isoformat()}T{hhmm}"
         )
 
+    # Deliberate adherence gaps (values = days ago) so the Adherence dashboard
+    # has all three log states to render: skipped, user-marked-missed, and an
+    # evening-dose miss pattern. Days with NO entry at all are not modeled
+    # here — "no log => no resource" (FHIR-MAPPING.md §3).
     med_a_skipped = {3, 9}
     med_a_missed = {6}
     med_b_missed_evening = {2, 6}
@@ -579,6 +611,8 @@ def main() -> None:
             ]
         }
     ]
+    # Deterministic pseudo-variation (no RNG) so re-seeds are reproducible
+    # while the charts still look plausibly noisy.
     for days_ago in range(1, 31):
         d = today - timedelta(days=days_ago)
         mood = 6 + (days_ago % 3) - (1 if days_ago % 11 == 0 else 0)
@@ -766,6 +800,8 @@ def main() -> None:
                     "status": "final",
                     "code": {"text": "Routine blood panel"},
                     "subject": subject,
+                    # 10:00 local with that date's correct UTC offset —
+                    # borrow local_dt's suffix so DST transitions stay right.
                     "effectiveDateTime": f"{d_iso}T10:00:00"
                     + local_dt(date.fromisoformat(d_iso), "10:00", tz)[-6:],
                     "result": [ref(e) for e in day_labs],
@@ -798,6 +834,11 @@ def main() -> None:
     log(
         f"transaction ok: {created} created, {existing} already existed, {len(statuses)} total"
     )
+    # ⚠️ Medplum gotcha (CLAUDE.md §9): transaction bundles are NOT
+    # all-or-nothing on per-entry validation errors — valid entries commit
+    # while an invalid one gets a per-entry 400, leaving references dangling.
+    # So: check EVERY entry's response.status and die on any failure so a
+    # partial seed never goes unnoticed.
     bad = [
         (i, e)
         for i, e in enumerate(result.get("entry", []))
@@ -809,15 +850,20 @@ def main() -> None:
     if bad:
         die(f"{len(bad)} bundle entries did not succeed")
 
-    # Conditional create skips existing resources, so upgrades to seed
-    # resources (like the life-critical flag) must be ensured explicitly.
+    # ------------------------- post-transaction fixups -------------------------
+    # ifNoneExist SKIPS existing resources (200 + old body, payload ignored),
+    # so shape upgrades introduced after a resource first seeded must be
+    # applied explicitly with a read-check-PUT. Each fixup below is a former
+    # schema upgrade; all are no-ops once applied.
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/fhir+json",
     }
 
-    # Retire superseded questionnaire versions so `status=active` search
-    # resolves uniquely to the current one (frontend + bot rely on this).
+    # Fixup: retire superseded questionnaire versions so `status=active`
+    # search resolves uniquely to the current one (frontend + QR->Obs bot rely
+    # on this — FHIR-MAPPING.md §2 "Check-in extras"); also backfill the
+    # cadence extension on a current version created before cadences existed.
     old_versions = httpx.get(
         base + "fhir/R4/Questionnaire",
         params={"url": q_url, "_count": 20},
@@ -854,6 +900,8 @@ def main() -> None:
             if put.status_code >= 400:
                 die(f"cadence ext update failed: {put.status_code}")
             log("ensured cadence=D on daily check-in")
+    # Fixup: life-critical flag on sample med A (owner decision 2026-07-13 —
+    # display prominence only, never dose logic; CLAUDE.md §8).
     find_req = httpx.get(
         base + "fhir/R4/MedicationRequest",
         params={

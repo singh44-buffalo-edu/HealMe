@@ -1,3 +1,41 @@
+/**
+ * OverviewPage — the "Health overview" dashboard (route /overview).
+ *
+ * Implements the design handoff's `Web - Dashboard.dc.html` screen: status
+ * strip, 4-card metric sparkline grid, today's medications, latest check-in,
+ * recent symptoms, weight / mood-energy / sleep charts, recent-labs table.
+ * The design's live-glucose tile, dispenser states and AI-insights stack are
+ * deliberately NOT rendered — their backends don't exist yet and screens are
+ * never faked ahead of them (CLAUDE.md §2 "Design system").
+ *
+ * Architecture: leaf route inside App.tsx's shell; reads FHIR via useMedplum()
+ * plus the shared query/derivation helpers in ../fhir.ts. Read-only — this
+ * page never writes; dose logging lives on AdherencePage ("Log now" links there).
+ *
+ * FHIR reads (all bounded, single-user project so one page suffices):
+ * - Observation      date=ge{90d} _count=1000 _sort=date — one search, fanned
+ *   out client-side into weight (LOINC 29463-7), mood/energy/sleep-duration/
+ *   symptom (local CS_OBS codes) and lab rows (category `laboratory`).
+ * - MedicationRequest + Medication + cartridge Devices via loadMeds().
+ * - MedicationAdministration via loadAdmins(30) — last 30 days of dose logs.
+ * - QuestionnaireResponse _sort=-authored _count=1 — the latest check-in.
+ *
+ * Derived-state rules shared with AdherencePage (medical-safety semantics):
+ * - A dose slot with no MedicationAdministration is computed live as
+ *   upcoming/due/overdue from the schedule — absence is NEVER persisted as a
+ *   missed dose (FHIR-MAPPING §3). "due" = past slot within
+ *   OVERDUE_GRACE_MINUTES; "overdue" = beyond it; "skipped"/"missed" exist
+ *   only as explicit not-done logs (statusReason user-skipped /
+ *   user-marked-missed).
+ * - Charts carry no reference bands or targets: thresholds are set with a
+ *   clinician, never fabricated by the UI (spec SR-3). The lab table's
+ *   "Reference" column is the range stated on the source report — the only
+ *   range this page ever shows.
+ * - Weight is a plain 90-day delta — no goal weight or diet framing
+ *   (neutral-weight rule, CLAUDE.md §6).
+ * - Everything here is computed client-side from records; nothing is
+ *   AI-derived, so no indigo/✦ labeling appears (three-data-classes rule).
+ */
 import { Alert, Loader } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import type { MedicationAdministration, Observation, QuestionnaireResponse } from '@medplum/fhirtypes';
@@ -72,6 +110,8 @@ function fmtDay(iso: string): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}${year}`;
 }
 
+// Shared recharts chrome per the design system: mono axis ticks, borderless
+// tooltip on the card shadow (charts get hairlines/whisper grays, never chrome color).
 const AXIS_TICK = { fontFamily: T.mono, fontSize: 10, fill: T.quaternary };
 const CHART_MARGIN = { top: 6, right: 6, left: 0, bottom: 0 };
 const TOOLTIP_STYLE = {
@@ -82,6 +122,13 @@ const TOOLTIP_STYLE = {
   fontSize: 11,
 };
 
+/**
+ * Health-overview dashboard page. Loads everything once on mount (window is a
+ * fixed 90 days — the owner's default review span, CLAUDE.md §8); all cards
+ * below render from that snapshot except TodayMedsCard, which keeps its own
+ * 60s clock for live due/overdue states. Failure mode: any search error
+ * replaces the whole page with a single alert.
+ */
 export function OverviewPage() {
   const medplum = useMedplum();
   const isMobile = useIsMobile();
@@ -101,6 +148,10 @@ export function OverviewPage() {
   useEffect(() => {
     (async () => {
       try {
+        // 90-day query window. The `ge` bound is sliced from UTC ISO, so it can
+        // start up to one local day early — a harmless over-fetch. `_count: 1000`
+        // is Medplum's max page size (CLAUDE.md §5); no pagination needed at
+        // single-user volumes.
         const since = new Date();
         since.setDate(since.getDate() - 90);
         const sinceStr = since.toISOString().slice(0, 10);
@@ -123,6 +174,11 @@ export function OverviewPage() {
         const symptomObs: Observation[] = [];
         const labRows: LabRow[] = [];
 
+        // Fan the single Observation search out by code. Codes per FHIR-MAPPING
+        // §2/§4: weight = verified LOINC 29463-7; mood/energy/sleep-duration/
+        // symptom = project-local CS_OBS codes (never presented as LOINC).
+        // Lab rows = category `laboratory`; their flagged state comes from the
+        // report's own referenceRange — the UI never invents a range (SR-3).
         for (const obs of observations) {
           const coding = obs.code?.coding?.[0];
           const when = (obs.effectiveDateTime ?? obs.effectivePeriod?.end ?? '').slice(0, 10);
@@ -155,6 +211,9 @@ export function OverviewPage() {
           }
         }
 
+        // Presentation windows per the Dashboard design: sleep = last 14
+        // nights; symptoms (8) and labs (12) newest-first — the search returned
+        // oldest-first, hence the reverse().
         setWeight(weightPts);
         setMood(moodPts);
         setEnergy(energyPts);
@@ -436,8 +495,12 @@ export function OverviewPage() {
   );
 }
 
+// Labs table grid template: analyte | date | value | reference.
 const LAB_COLS = 'minmax(0,1.3fr) 80px minmax(0,.8fr) minmax(0,.9fr)';
 
+/** Outer-join mood and energy points by calendar day so recharts can draw both
+ * lines on one chart. A day with only one metric leaves the other undefined —
+ * a gap in that line — rather than fabricating a value. */
 function mergeSeries(mood: Point[], energy: Point[]) {
   const byDate = new Map<string, { date: string; mood?: number; energy?: number }>();
   for (const p of mood) byDate.set(p.date, { ...(byDate.get(p.date) ?? { date: p.date }), mood: p.value });
@@ -445,6 +508,7 @@ function mergeSeries(mood: Point[], energy: Point[]) {
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/** Right-aligned brand-green nav link used in card headers ("All meds →"). */
 function GreenLink({ to, children }: { to: string; children: ReactNode }) {
   return (
     <Link
@@ -463,6 +527,8 @@ function GreenLink({ to, children }: { to: string; children: ReactNode }) {
   );
 }
 
+/** Non-interactive state pill (Upcoming/Taken/…) matching the design's chip
+ * shape — read-only counterpart to the actionable "Log now" link. */
 function StaticChip({ fg, bg, children }: { fg: string; bg: string; children: ReactNode }) {
   return (
     <span
@@ -528,7 +594,12 @@ function MetricCard({
 }
 
 /** Read-only view of today's dose slots derived from already-loaded meds + admins.
- * Logging itself lives on the Medications page — "Log now" links there. */
+ * Logging itself lives on the Medications page — "Log now" links there.
+ * Slot states use the shared vocabulary: taken (completed admin), skipped/missed
+ * (explicit not-done, split on statusReason), due/overdue (unlogged past slot,
+ * split on the 90-min grace), upcoming (future). Life-critical meds get the
+ * CRITICAL tag and a red "Log now" button once overdue — display prominence
+ * only, never dose logic (CLAUDE.md §8). */
 function TodayMedsCard({ meds, admins }: { meds: MedInfo[]; admins: MedicationAdministration[] }) {
   const isMobile = useIsMobile();
   const [now, setNow] = useState(() => new Date());
@@ -726,6 +797,10 @@ function TodayMedsCard({ meds, admins }: { meds: MedInfo[]; admins: MedicationAd
   );
 }
 
+/** Single-series line chart card. `domain` is passed per metric on purpose —
+ * sleep is pinned to an absolute 0–12h scale so night-to-night variation reads
+ * true; weight floats ('auto') around its own range. No reference bands or
+ * target lines here (SR-3: thresholds are set with a clinician, never drawn). */
 function ChartCard(props: {
   title: string;
   range: string;

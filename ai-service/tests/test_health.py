@@ -1,3 +1,7 @@
+"""Smoke-level check of GET /health: answers 200 with medplum/AI configured
+flags on a machine with no .env, no Medplum and no AI key — the endpoint make
+smoke and the frontend banner rely on."""
+
 from fastapi.testclient import TestClient
 
 from app.main import app

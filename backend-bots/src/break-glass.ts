@@ -9,11 +9,25 @@
  * notified via a Communication. A second invocation with action=restore puts
  * the original access[] back from the backup and audits that too.
  *
- * Invoked on demand ($execute) — no Subscription. Input is either a
+ * Invoked on demand ($execute) — no Subscription (deployed by
+ * scripts/deploy_bots.py with subscription=None). Input is either a
  * Parameters resource (parameter 'membership' + optional 'action'/'event-id')
  * or a Communication whose first payload carries the membership id.
  * Defensive: unrecognized input is a logged no-op. This bot never touches
  * clinical data — only access bindings, audit, and notification.
+ *
+ * The backup/restore dance (why a Basic resource): a member's policy binding
+ * lives in ProjectMembership.access[], which activation overwrites. The
+ * original bindings — including the %patient parameter care_circle.py set up
+ * — are serialized into a Basic (identifier break-glass-backup-{eventId},
+ * conditional create so the FIRST backup wins) and put back verbatim on
+ * restore, after which the backup is deleted. The AuditEvents are the
+ * permanent record; the backup is deliberately transient.
+ *
+ * Note the 24h window is advertised, not self-enforcing: nothing expires
+ * server-side. Whatever schedules the restore run (owner action or a cron)
+ * ends the window; the expiry timestamp in the AuditEvent + owner
+ * notification makes an overdue restore auditable.
  */
 
 import { BotEvent, MedplumClient } from '@medplum/core';
@@ -33,9 +47,21 @@ const CS_CARE = `${BASE}/CodeSystem/care-circle`;
 const IDENT_BASIC = `${BASE}/identifier/basic`;
 const EXT_ORIGINAL_ACCESS = `${BASE}/StructureDefinition/break-glass-original-access`;
 
+/**
+ * Name of the shared read-only emergency policy. Looked up by name so every
+ * activation reuses one policy resource (FHIR-MAPPING.md §10 "Break-glass");
+ * the care_circle.py naming convention marks it as care-circle machinery.
+ */
 export const EMERGENCY_POLICY_NAME = 'care-circle/emergency-24h';
+/** Advertised emergency window (owner decision, Phase 9); see file header —
+ * enforcement is the restore invocation, not a server-side timer. */
 export const EMERGENCY_WINDOW_HOURS = 24;
 
+/**
+ * Bot output, recorded in the execution AuditEvent (Medplum logs bot returns
+ * there — that is the operational log). 'noop' + reason is the defensive
+ * path for bad/duplicate input; it is never an error.
+ */
 export interface BreakGlassResult {
   action: 'activated' | 'restored' | 'noop';
   membership?: string;
@@ -48,6 +74,20 @@ interface ParsedInput {
   eventId?: string;
 }
 
+/**
+ * Bot entry point — decodes the input and routes to activate or restore.
+ *
+ * @param medplum - project-scoped client injected by the bot runtime
+ * @param event - `event.input`: Parameters (parameter 'membership' =
+ *   ProjectMembership id or reference; optional 'action' activate|restore;
+ *   optional 'event-id' correlating an activate/restore pair) or a
+ *   Communication whose first payload string names the membership
+ * @returns what happened (see BreakGlassResult); deliberately never throws
+ *   on bad input, so a mis-wired caller cannot leave access half-swapped
+ *
+ * Touches: ProjectMembership (access[] swap), AccessPolicy (find-or-create
+ * emergency policy), Basic (access backup), AuditEvent, Communication.
+ */
 export async function handler(
   medplum: MedplumClient,
   event: BotEvent<Parameters | Communication | Resource>
@@ -72,6 +112,7 @@ export async function handler(
   return activate(medplum, membership, parsed.eventId);
 }
 
+/** Tolerant input decoding — accepted shapes are listed on the handler doc. */
 function parseInput(input: unknown): ParsedInput {
   const resource = input as Resource | undefined;
   if (resource?.resourceType === 'Parameters') {
@@ -95,6 +136,7 @@ function parseInput(input: unknown): ParsedInput {
   return { action: 'activate' };
 }
 
+/** Accept both a bare id and a 'ProjectMembership/{id}' reference. */
 function normalizeMembershipId(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
@@ -102,6 +144,8 @@ function normalizeMembershipId(value: string | undefined): string | undefined {
   return value.startsWith('ProjectMembership/') ? value.split('/')[1] : value;
 }
 
+/** Find-or-create the shared emergency policy (lookup by name keeps repeat
+ * activations from minting duplicates). */
 async function ensureEmergencyPolicy(medplum: MedplumClient): Promise<AccessPolicy> {
   const existing = await medplum.searchOne('AccessPolicy', { name: EMERGENCY_POLICY_NAME });
   if (existing) {
@@ -119,6 +163,9 @@ function memberName(membership: ProjectMembership): string {
   return membership.profile?.display ?? membership.profile?.reference ?? 'A care-circle member';
 }
 
+/** Permanent break-glass AuditEvent: agent = the member whose access changed,
+ * subtype = activate|restore. This is the record the "who looked lately"
+ * page and any future compliance review search for. */
 async function writeAudit(
   medplum: MedplumClient,
   membership: ProjectMembership,
@@ -141,12 +188,22 @@ async function writeAudit(
   });
 }
 
+/**
+ * Grant path: backup access[] -> swap to the emergency policy -> permanent
+ * AuditEvent -> owner Communication. Re-running while already active is a
+ * noop, and the first-write-wins backup means a double activation can never
+ * overwrite the true original bindings. Not transactional: a crash mid-way
+ * leaves at worst a stale backup Basic (harmless — restore consumes it); the
+ * bot execution itself is always logged in Medplum's own AuditEvents.
+ */
 async function activate(
   medplum: MedplumClient,
   membership: ProjectMembership,
   explicitEventId: string | undefined
 ): Promise<BreakGlassResult> {
   const membershipId = membership.id as string;
+  // Default event id = membership id: one outstanding break-glass per member
+  // unless the caller correlates activate/restore pairs explicitly.
   const eventId = explicitEventId ?? membershipId;
   const emergency = await ensureEmergencyPolicy(medplum);
 
@@ -200,6 +257,12 @@ async function activate(
   return { action: 'activated', membership: membershipId };
 }
 
+/**
+ * Revert path: read the backup Basic -> put the original access[] back (or
+ * remove the binding entirely when the member never had one) -> delete the
+ * backup -> audit. Without a matching backup this is a noop: restore is only
+ * meaningful after an activate with the same event id.
+ */
 async function restore(
   medplum: MedplumClient,
   membership: ProjectMembership,

@@ -1,3 +1,27 @@
+/**
+ * CartridgesPage — configure medication cartridges (the pill-dispenser trays
+ * of Phase 8): rack list, per-cartridge settings, stock & refill logging.
+ *
+ * Architecture: routed from App.tsx; talks straight to the Medplum CDR via
+ * MedplumClient. Cartridge parsing lives in ../fhir (loadCartridges /
+ * CartridgeInfo); DevicesPage renders the same Devices read-only.
+ *
+ * FHIR model (FHIR-MAPPING.md §5 — read it before touching shapes):
+ * - One cartridge = one Device (type local code medication-cartridge).
+ *   Capacity / remaining-count / low-stock-threshold are Device.property
+ *   entries; the assigned med is the device-assigned-medication extension.
+ * - NO Device.patient — in R4 that means a device affixed to the body; the
+ *   AccessPolicy grants Device access explicitly instead.
+ * - Refill = SupplyDelivery (with supplydelivery-target-cartridge extension)
+ *   + Device stock reset, committed as ONE transaction Bundle (§6 multi-
+ *   resource writes) with per-entry status checks (Medplum partial-commit
+ *   quirk, CLAUDE.md §9).
+ *
+ * SAFETY INVARIANT (owner-signed, CLAUDE.md §3): inventory is informational
+ * only — stock counts NEVER gate whether a medication may be taken. The only
+ * gating on this page is on *logging a refill* (needs a capacity / not
+ * already full), never on dosing, and even that keeps an explicit override.
+ */
 import { Loader, NumberInput, Select, Switch, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
@@ -41,6 +65,8 @@ const MONO_INPUT_STYLES = {
   input: { fontFamily: T.mono, fontSize: 12.5 },
 } as const;
 
+/** Human label for a Medication reference from the pre-fetched catalog —
+ * undefined when unassigned (callers render "unassigned"). */
 function medDisplay(medications: Medication[], ref?: string | null): string | undefined {
   if (!ref) return undefined;
   return medications.find((m) => `Medication/${m.id}` === ref)?.code?.text ?? 'Unnamed';
@@ -50,6 +76,15 @@ function medDisplay(medications: Medication[], ref?: string | null): string | un
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Cartridge manager: left rail = the rack (one RailCard per Device), right =
+ * the selected cartridge's detail/refill pane.
+ *
+ * FHIR touched: reads Device (cartridges) + Medication catalog; creates a
+ * Device on "Add cartridge"; updates/refills happen in CartridgeDetail.
+ * Failure modes: load errors render the error card; add errors surface as a
+ * notification and change nothing.
+ */
 export function CartridgesPage() {
   const medplum = useMedplum();
   const [cartridges, setCartridges] = useState<CartridgeInfo[]>([]);
@@ -81,6 +116,10 @@ export function CartridgesPage() {
     reload();
   }, [reload]);
 
+  /** Create a fresh cartridge Device with the default properties (capacity 30,
+   * empty, low-stock at 5 — defaults, not clinical values). Identifier is a
+   * new UUID (durable cartridge identity, FHIR-MAPPING.md §7), so a double
+   * click creates two cartridges — acceptable, they're deletable config. */
   const addCartridge = async () => {
     try {
       await medplum.createResource<Device>({
@@ -219,6 +258,10 @@ export function CartridgesPage() {
 // Left-rail cartridge card (disc side view + name + state + meta)
 // ---------------------------------------------------------------------------
 
+/** One rack entry: disc side-view in the cartridge's identity colour, name,
+ * and a state word derived purely from Device data (DISABLED / SPARE / EMPTY
+ * / "N LEFT"). Low stock shows amber on the value only — status colour never
+ * floods the card (DS rule, CLAUDE.md §2). */
 function RailCard({
   cart,
   index,
@@ -329,6 +372,9 @@ interface RingSeg {
   sw: number;
 }
 
+/** SVG path for one donut segment between angles a0→a1 (radians) on the
+ * 220×220 viewBox: outer radius 99, inner 20, centred at (110,110). The
+ * `a0 + 0.01` floor keeps degenerate (zero-width) segments renderable. */
 function donutPath(a0: number, a1: number): string {
   const cx = 110;
   const cy = 110;
@@ -349,6 +395,10 @@ function donutPath(a0: number, a1: number): string {
   );
 }
 
+/** Top-down capacity ring. ≤30 doses ⇒ one wedge per dose (grey consumed →
+ * cartridge-colour "next dose" → green remaining, clockwise from 12); >30 ⇒
+ * two plain arcs, because per-dose wedges become unreadable. Purely visual —
+ * remaining/capacity are clamped defensively, never written back. */
 function CapacityRing({
   capacity,
   remaining,
@@ -479,6 +529,12 @@ function CartridgeDetail({
   const [enabled, setEnabled] = useState(cart.enabled);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * Assemble the updated Device from the form drafts, cloned off the loaded
+   * resource so meta.versionId is preserved (Medplum optimistic locking).
+   * `remaining` is only touched when explicitly passed (refill path) —
+   * a plain settings save never resets stock.
+   */
   const buildDevice = (remaining?: number): Device => {
     const device: Device = structuredClone(cart.device);
     device.status = enabled ? 'active' : 'inactive';
@@ -516,6 +572,14 @@ function CartridgeDetail({
     }
   };
 
+  /**
+   * Log a refill: one transaction Bundle = SupplyDelivery (what went in, how
+   * many doses, when, which cartridge via the target-cartridge extension) +
+   * PUT of the Device with remaining reset to capacity (FHIR-MAPPING.md §5).
+   * The SupplyDelivery identifier is a fresh client UUID (refill = client
+   * event, §7), so retrying after a *reported* failure logs a new event —
+   * fine, since the Device write is what carries the stock truth.
+   */
   const refill = async () => {
     setBusy(true);
     try {
@@ -581,6 +645,8 @@ function CartridgeDetail({
   // Gate the primary refill action with the blocking reason as its label.
   // The at-capacity gate keeps an explicit override below (existing behavior:
   // a refill could always be logged), so no capability is removed.
+  // NB: this gates *logging a refill event* only — never dose-taking
+  // (inventory-never-gates-dosing invariant, FHIR-MAPPING.md §5).
   const capValue = Number(capacity) || 0;
   const gateReason =
     capValue < 1

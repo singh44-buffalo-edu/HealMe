@@ -1,3 +1,26 @@
+/**
+ * CorrelationsPage — correlation explorer (route /correlations).
+ *
+ * Grown from the "correlation callout with honest caveat" element of the
+ * design handoff's `Web - Data Explorer.dc.html` into a full page.
+ *
+ * Architecture: leaf route in App.tsx's shell; read-only, one FHIR read:
+ * - Observation date=ge{365d} _count=1000 _sort=-date. Every coded numeric
+ *   observation becomes a candidate series keyed by its code, reduced to one
+ *   value per LOCAL calendar day (results arrive newest-first, so the newest
+ *   reading of a day wins); series with fewer than 3 logged days are dropped
+ *   from the pickers.
+ *
+ * Honesty rules this page must keep (spec SR-6 — the required framing):
+ * - The "Association, not causation — and not medical advice" card, the
+ *   "computed locally — no AI" subtitle, and the "local · statistical" meta
+ *   line contextualize every Pearson r shown; never remove or soften them.
+ * - r is plain local arithmetic over paired days; the strength words are
+ *   conventional |r| cut points (<0.2 negligible, <0.5 weak, <0.8 moderate,
+ *   else strong) — descriptive vocabulary, not clinical significance.
+ * - Nothing here is AI-derived, so no indigo/✦ treatment appears and strength
+ *   words use the neutral ink scale (three-data-classes rule, CLAUDE.md §2).
+ */
 import { Loader, Select, Switch } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import { useMedplum } from '@medplum/react';
@@ -91,11 +114,14 @@ export function CorrelationsPage() {
           // newest first — keep the latest value per day
           if (!map[key].byDate.has(date)) map[key].byDate.set(date, value);
         }
+        // Require ≥3 distinct logged days before a metric is even offered —
+        // below that, r is pure noise.
         const filtered: SeriesMap = {};
         for (const [key, s] of Object.entries(map)) {
           if (s.byDate.size >= 3) filtered[key] = s;
         }
         setSeriesMap(filtered);
+        // Default pair: the classic sleep→mood question when both exist.
         const keys = Object.keys(filtered);
         setXKey(keys.includes('sleep-duration') ? 'sleep-duration' : (keys[0] ?? null));
         setYKey(keys.includes('mood') ? 'mood' : (keys[1] ?? null));
@@ -105,6 +131,9 @@ export function CorrelationsPage() {
     })();
   }, [medplum]);
 
+  // Pair X and Y by day — or X against Y's NEXT day when the lag toggle is on
+  // ("does today's X go with tomorrow's Y?"). Only days where both metrics
+  // were logged count; r is recomputed locally on every selection change.
   const result = useMemo(() => {
     if (!seriesMap || !xKey || !yKey) return undefined;
     const xs = seriesMap[xKey];
@@ -147,6 +176,8 @@ export function CorrelationsPage() {
   const xSeries = xKey ? seriesMap[xKey] : undefined;
   const ySeries = yKey ? seriesMap[yKey] : undefined;
   const accent = accentFor(xKey, xSeries?.label);
+  // Need ≥3 paired days to show a result at all. |r| buckets: <0.2 negligible,
+  // <0.5 weak, <0.8 moderate, ≥0.8 strong — descriptive, not clinical.
   const hasResult = !!result && result.points.length >= 3;
   const strength = hasResult
     ? Math.abs(result.r) < 0.2
@@ -353,12 +384,18 @@ export function CorrelationsPage() {
   );
 }
 
+/** YYYY-MM-DD ± days in LOCAL calendar terms (noon anchor sidesteps DST edges). */
 function shiftDate(date: string, days: number): string {
   const d = new Date(`${date}T12:00`);
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Plain Pearson product-moment correlation over the paired points. Returns 0
+ * for degenerate input — fewer than 2 points, or a zero-variance series —
+ * rather than NaN, so the UI never renders a bogus coefficient.
+ */
 function pearson(points: { x: number; y: number }[]): number {
   const n = points.length;
   if (n < 2) return 0;

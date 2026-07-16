@@ -1,7 +1,18 @@
-# Application containers on top of the Medplum stack.
+# Application containers on top of the Medplum stack (Phase 9 "containerize").
 # Run combined:  docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d --build
 # (or `make prod-up`). Requires a bootstrapped repo-root .env (make bootstrap).
 # Note: the AI container claims :8000 — stop `make dev`'s uvicorn first.
+#
+# Port map (host): 8080 -> healmedaily-web (nginx serving the built frontend;
+# dev uses Vite on :5173 instead) · 8000 -> healmedaily-ai (FastAPI). The
+# Medplum ports (3000/8103/5432/6379) come from docker-compose.yml.
+#
+# REPO_ROOT quirk (why the /data/secrets mount works): the ai-service derives
+# REPO_ROOT from its own file location; the container image puts the app at
+# /srv/app, so REPO_ROOT resolves to / and relative paths like data/secrets
+# become /data/secrets. Mounting host ../data/secrets there means dev
+# (uvicorn on the host) and this container read/write the SAME BYOK keystore
+# and per-feature AI routing files. Same trick for the /data/inbox watch dir.
 
 services:
   healmedaily-ai:

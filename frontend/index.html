@@ -1,4 +1,12 @@
 <!doctype html>
+<!--
+  Vite entry shell for the HealMeDaily frontend. Dev: served on :5173
+  (`make dev`); prod: built to dist/ and served by nginx (see Dockerfile).
+  The manifest + apple-touch meta make the app Add-to-Home-Screen installable
+  (PWA); the offline service worker (public/sw.js — app shell only, never
+  health data) is registered from src/main.tsx in production builds only.
+  viewport-fit=cover lets the mobile shell pad around iOS safe areas.
+-->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />

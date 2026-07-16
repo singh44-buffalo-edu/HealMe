@@ -1,8 +1,25 @@
-"""Basic ingestion slice: upload a PDF/photo → DocumentReference + Binary →
-extract text (pypdf, OCR fallback) → AI proposes FHIR resources → each
-proposal becomes a Task + proposal Binary in the review queue. Nothing is
-committed as a clinical resource until the owner approves (transaction:
-resource + Provenance + Task completed). AI/OCR never bypasses this gate.
+"""Document ingestion with the human review gate (FHIR-MAPPING §6).
+
+Pipeline: upload a PDF/photo → original stored immutably (Binary +
+DocumentReference) → extract text (pypdf, OCR fallback) → AI proposes FHIR
+resources → each proposal becomes a Task + proposal Binary in the review
+queue. Nothing is committed as a clinical resource until the owner approves
+(one transaction: resource + Provenance + Task completed). AI/OCR never
+bypasses this gate — the central medical-safety invariant of ingestion.
+
+Proposal Task shape (FHIR-MAPPING §6, shared verbatim with assistant.py's
+NL capture — the frontend Review page reads both identically):
+
+    Task.status  = requested → completed | rejected
+    Task.intent  = proposal
+    Task.code    = local `review-ingestion-proposal`
+    Task.for     → Patient, Task.focus → source DocumentReference
+    Task.input   = candidate (proposal Binary ref) + confidence (decimal)
+                   + raw-excerpt (source quote, when useful)
+    Task.output  = final-resource (committed Resource ref, set on approval)
+
+Called by main.py (/ingest/*) and watcher.py (inbox documents); calls the
+provider layer for extraction and medplum for all CDR I/O.
 """
 
 from __future__ import annotations
@@ -18,12 +35,18 @@ from . import fhir_consts as fc
 from .medplum import MedplumFhirClient
 from .providers import ProviderNotConfigured, get_provider
 
+# Upload types the pipeline accepts (MVP slice: PDFs/photos — owner decision,
+# CLAUDE.md §8; structured formats go through importers.py instead).
 ALLOWED_TYPES = {
     "application/pdf": "pdf",
     "image/png": "image",
     "image/jpeg": "image",
 }
 
+# Resource types a proposal may commit as. Deliberately excludes
+# MedicationRequest (historical meds become MedicationStatement — an extraction
+# must never create an active prescription) and anything device/schedule-shaped.
+# assistant.py's NL capture imports and enforces this same list.
 ALLOWED_RESOURCE_TYPES = [
     "Observation",
     "Condition",
@@ -51,6 +74,9 @@ for their personal FHIR R4 health record. Rules:
 - Historical medications become MedicationStatement (never MedicationRequest).
 """
 
+# Structured-output schema for extraction AND NL capture (assistant.py imports
+# it): resource_json is a string (not an object) so providers with shallow
+# schema support can still emit arbitrary FHIR resources inside it.
 PROPOSAL_SCHEMA = {
     "type": "object",
     "properties": {
@@ -122,9 +148,16 @@ def _document_content_blocks(data: bytes, content_type: str, text: str) -> str |
 def ingest_document(
     medplum: MedplumFhirClient, data: bytes, content_type: str, filename: str, patient_id: str
 ) -> dict[str, Any]:
+    """Run the full upload pipeline for one document; returns a summary dict
+    (document id, extraction method, proposal count). FHIR: creates Binary +
+    DocumentReference always, then a proposal Binary + Task per accepted
+    candidate. Degrades gracefully: with no AI provider the document is still
+    stored (proposals_created=0 + a note) — storage never depends on AI."""
     if content_type not in ALLOWED_TYPES:
         raise ValueError(f"unsupported type {content_type} — PDF, PNG or JPEG only")
 
+    # The immutable original, stored before anything can fail downstream
+    # (FHIR-MAPPING §6: extraction output never overwrites the source).
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     binary = medplum.create_binary(data, content_type)
     doc_ref = medplum.create(
@@ -158,6 +191,8 @@ def ingest_document(
         EXTRACTION_SYSTEM, _document_content_blocks(data, content_type, text), PROPOSAL_SCHEMA
     )
 
+    # One review Task per surviving candidate. Server-side re-validation of the
+    # resource type: the schema enum is advisory, this check is authoritative.
     created = 0
     for proposal in result.get("proposals", []):
         try:
@@ -211,6 +246,10 @@ def ingest_document(
 
 
 def list_review_tasks(medplum: MedplumFhirClient) -> list[dict[str, Any]]:
+    """Pending proposals for the Review page: status=requested Tasks with their
+    Task.input decoded (candidate resource fetched from its proposal Binary,
+    confidence, excerpt). A corrupt candidate payload yields resource=None
+    rather than hiding the task — the owner can still reject it."""
     tasks = medplum.search_resources(
         "Task",
         {
@@ -252,10 +291,21 @@ def list_review_tasks(medplum: MedplumFhirClient) -> list[dict[str, Any]]:
 
 
 def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: dict[str, Any] | None) -> dict[str, Any]:
+    """Owner approval — the ONLY path from proposal to clinical resource.
+    `corrected_resource` (when given) is the owner's edited version and
+    replaces the stored candidate; it is re-validated against
+    ALLOWED_RESOURCE_TYPES. Commits atomically per FHIR-MAPPING §6:
+    create resource + create Provenance (naming the source document and
+    confidence) + flip the Task to completed, in one transaction Bundle.
+    Retry-safe via the task-scoped identifier (see inline note)."""
     task = medplum.get(f"Task/{task_id}")
     if task.get("status") != "requested":
+        # Double-click / stale-tab guard: an already-completed or rejected
+        # proposal can never be committed twice.
         raise ValueError(f"task is {task.get('status')}, expected 'requested'")
 
+    # Resolve the resource to commit: owner correction wins, otherwise the
+    # stored candidate payload from the proposal Binary.
     resource = corrected_resource
     if resource is None:
         for item in task.get("input", []):
@@ -289,6 +339,10 @@ def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: d
     ):
         resource["identifier"].append(commit_ident)
 
+    # Assemble the three-entry transaction: resource (conditional create),
+    # Provenance targeting it via urn:uuid, Task completion with the output
+    # reference — all-or-nothing under normal operation, and safe to retry
+    # because entry 1 is conditional (see post_bundle's partial-commit note).
     task_done = {
         **task,
         "status": "completed",
@@ -336,6 +390,8 @@ def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: d
 
 
 def reject_task(medplum: MedplumFhirClient, task_id: str) -> None:
+    """Reject a pending proposal: Task → rejected, no clinical resource is ever
+    created, the proposal Binary and source document remain for audit."""
     task = medplum.get(f"Task/{task_id}")
     if task.get("status") != "requested":
         raise ValueError(f"task is {task.get('status')}, expected 'requested'")

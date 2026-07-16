@@ -1,3 +1,29 @@
+/**
+ * ReviewPage — "Health Review": generate and read the visit-prep summary,
+ * either AI-drafted or the deterministic data-only variant.
+ *
+ * Architecture: routed from App.tsx; generation and retrieval go through the
+ * Python ai-service (../api), which reads the record, drafts the review, and
+ * stores it as DocumentReference + Binary PDF (local type health-review,
+ * FHIR-MAPPING.md §2) — the same shape for both variants. This page never
+ * writes FHIR directly.
+ *
+ * Non-negotiable requirements enforced on this surface:
+ * - PROVIDER PICKER PER RUN (owner decision, CLAUDE.md §8): every generate
+ *   shows an explicit local-vs-cloud choice. The data-only option is ALWAYS
+ *   offered and works with no AI key; the AI option is disabled (never
+ *   hidden) until a provider is configured, and its BoundaryRow names the
+ *   exact recipient (provider + model) — cloud boundaries are amber + named
+ *   recipient, never implicit (boundary copy rule, CLAUDE.md §2).
+ * - Nothing is sent anywhere until the user clicks Generate, and the copy
+ *   says exactly what leaves the machine.
+ * - DISCLAIMER: the "Not medical advice — a discussion aid…" line renders on
+ *   this page unconditionally and is also baked into every generated PDF by
+ *   the service (AI guardrails, CLAUDE.md §6). Reviews organize — they never
+ *   diagnose or dose.
+ * - AI-labeling: AI-drafted output always carries the ✦ AI pill / indigo
+ *   treatment; the data-only summary must NOT (three-data-classes rule).
+ */
 import { Loader, TypographyStylesProvider } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconPrinter } from '@tabler/icons-react';
@@ -113,6 +139,8 @@ function DocThumbnail() {
 const hairline = <div style={{ height: 1, background: '#f4f4f2', flexShrink: 0 }} />;
 
 // Bounds for the custom review window (days). Presets 30/90 bypass the clamp.
+// 90 is the owner-confirmed default window (CLAUDE.md §8); 7/365 are sanity
+// bounds, not clinical values.
 const CUSTOM_DAYS_MIN = 7;
 const CUSTOM_DAYS_MAX = 365;
 
@@ -132,6 +160,17 @@ function clampCustomDays(raw: string): number {
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Health Review generator + viewer. On mount it fetches AI provider status
+ * (unreachable service degrades to the "configure a provider" state, never a
+ * crash) and the latest stored review (absence is fine — empty state).
+ *
+ * FHIR touched (via ai-service): reads the aggregate record for generation;
+ * each generate persists a new DocumentReference + PDF Binary. Generation is
+ * NOT idempotent — every click produces a new stored review, and the page
+ * shows the most recent one. Failure modes: generation errors surface as a
+ * notification with the service's reason; the previous review stays visible.
+ */
 export function ReviewPage() {
   const [ai, setAi] = useState<AiStatus>();
   const [review, setReview] = useState<ReviewResult>();
@@ -163,6 +202,9 @@ export function ReviewPage() {
   const effectiveDays = windowDays === 'custom' ? clampCustomDays(customDays) : Number(windowDays);
   const daysValid = Number.isFinite(effectiveDays);
 
+  /** Kick off a generation run of the picked kind. `kind` is passed
+   * explicitly (not read from state) so the button always generates exactly
+   * what its label promised at click time. */
   const generate = async (kind: 'ai' | 'data') => {
     if (!daysValid) {
       return;
@@ -321,6 +363,10 @@ export function ReviewPage() {
             </div>
           </div>
 
+          {/* Per-run provider picker (owner decision §8). Data-only is always
+              selectable; the AI row is disabled-but-visible when unconfigured
+              so the local path is never the hidden default. The line under the
+              rows restates the boundary in words before anything is sent. */}
           <div role="radiogroup" aria-label="provider" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             <Eyebrow>Provider — choose per run</Eyebrow>
             <PickRow selected={mode === 'data'} onSelect={() => setMode('data')}>
@@ -547,6 +593,8 @@ export function ReviewPage() {
         </DsCard>
       )}
 
+      {/* Mandatory disclaimer (CLAUDE.md §6) — renders on every state of this
+          page, review or not. Do not make it conditional. */}
       <span style={mono(10, 400, T.quaternary)}>
         Not medical advice — a discussion aid generated from your own records; review it with a qualified
         clinician.

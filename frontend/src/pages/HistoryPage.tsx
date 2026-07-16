@@ -1,3 +1,26 @@
+/**
+ * HistoryPage — the transparency log ("nothing happens off the books"):
+ * every sign-in, record change, automation run, and cloud AI request,
+ * rendered in human words.
+ *
+ * Architecture: routed from App.tsx; a pure read-only projection over
+ * Medplum AuditEvents (server-written for auth/CRUD/bots; ai-service-written
+ * for the boundary ledger and assistant deletions). This page writes nothing
+ * and classifies events entirely from their recorded shape — toRow() is
+ * heuristic display logic, not a data model.
+ *
+ * The boundary ledger rows matter most (FHIR-MAPPING.md §11): the ai-service
+ * writes one AuditEvent BEFORE every cloud AI call, entity description
+ * "AI request · <feature> → <provider> · …". Those render amber with the
+ * ☁ CLOUD tag — the Privacy Vault promise that every byte leaving the
+ * machine is named here. If the service's description format changes, the
+ * regex in toRow() must change with it.
+ *
+ * Trust contract surfaced by RulesCard: edits create versions (FHIR history,
+ * nothing lost), assistant-session deletion leaves a note, cloud calls are
+ * always listed. Vocabulary rule: never show backend nouns — RESOURCE_WORD /
+ * ENTITY-style words only.
+ */
 import { Loader } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
@@ -21,6 +44,8 @@ import { useEffect, useState } from 'react';
 import { DsCard, FilterChips, PageHeader, PillButton, StatusDot } from '../components/ds';
 import { mono, T } from '../tokens';
 
+// Events per fetch. Medplum's _count default is 20 (max 1000); 100 keeps
+// "Load earlier" clicks rare without hauling the whole log.
 const PAGE_SIZE = 100;
 
 // ---------------------------------------------------------------------------
@@ -152,6 +177,15 @@ function agentName(event: AuditEvent): string {
   return agent?.name ?? agent?.who?.display ?? '';
 }
 
+/**
+ * Classify one AuditEvent into a display row. Precedence matters: boundary-
+ * ledger description → assistant deletion → break-glass → DICOM auth code
+ * 110114 (Medplum uses the standard audit vocabulary: subtype 110122 login /
+ * 110123 logout) → bot execution → plain REST interactions (subtype
+ * read/create/update/delete or action C/R/U/D). Anything unrecognized
+ * degrades to a generic "Activity recorded" row — unknown events must still
+ * be visible, never dropped. outcome !== '0' marks failure.
+ */
 function toRow(event: AuditEvent, index: number): RowModel {
   const recorded = event.recorded ?? event.meta?.lastUpdated;
   const date = recorded ? new Date(recorded) : undefined;
@@ -417,7 +451,18 @@ function QuietCard({ children }: { children: string }): JSX.Element {
 // Page
 // ---------------------------------------------------------------------------
 
-/** History log: every sign-in, change, and AI request — nothing off the books. */
+/**
+ * History log: every sign-in, change, and AI request — nothing off the books.
+ *
+ * FHIR touched: reads AuditEvent only (newest first, PAGE_SIZE per page,
+ * offset-paginated by "Load earlier" — note Medplum caps _offset at 10 000,
+ * a practical ceiling this single-user log won't hit for years). Rows are
+ * re-sorted client-side by recorded time because the fetch order is
+ * -_lastUpdated (write time), which can differ slightly. Failure modes:
+ * initial-load errors render the error card; pagination errors toast and
+ * keep what's already shown. Dedup by event id guards overlapping pages
+ * (new events shift offsets between clicks).
+ */
 export function HistoryPage(): JSX.Element {
   const medplum = useMedplum();
   const [events, setEvents] = useState<AuditEvent[]>();
@@ -437,6 +482,8 @@ export function HistoryPage(): JSX.Element {
       .catch((err) => setError(normalizeErrorString(err)));
   }, [medplum]);
 
+  /** Fetch the next PAGE_SIZE events at _offset = current length; hasMore is
+   * inferred from a full page coming back (no _total request needed). */
   const loadEarlier = (): void => {
     if (!events || loadingMore) {
       return;

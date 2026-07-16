@@ -1,3 +1,10 @@
+/**
+ * Tests for the symptom follow-up bot (src/symptom-follow-up.ts) against
+ * @medplum/mock's in-memory FHIR repo — no running server needed. Covers:
+ * Task shape (focused on the symptom, due onset + 1 day), idempotency per
+ * source Observation, and the non-symptom-code guard.
+ * Run: `cd backend-bots && npm test` (part of `make check`).
+ */
 import { indexSearchParameterBundle, indexStructureDefinitionBundle } from '@medplum/core';
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { readJson, SEARCH_PARAMETER_BUNDLE_FILES } from '@medplum/definitions';

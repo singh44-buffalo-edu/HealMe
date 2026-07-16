@@ -1,3 +1,48 @@
+/**
+ * AdherencePage — the "Medications" screen and the app's landing route (/).
+ *
+ * Implements the design handoff's `Web - Medications.dc.html`: attention/alert
+ * cards, "Due now" panel, Today/Yesterday dose panels, active-meds table with
+ * 30-day adherence heatstrips, and the 13-week all-meds heatmap. The design's
+ * dark dispenser banner and "is it working?" effect panel are deliberately not
+ * rendered — their backends don't exist yet (CLAUDE.md §2 "Design system").
+ *
+ * Architecture: leaf route in App.tsx's shell; all FHIR access goes through
+ * the shared helpers in ../fhir.ts. This is the ONLY page that writes dose
+ * events — OverviewPage's "Log now" links here.
+ *
+ * FHIR reads (parallel, bounded):
+ * - Patient via getPatient() (stable identifier `healmedaily-user`)
+ * - MedicationRequest + Medication + cartridge Devices via loadMeds()
+ * - MedicationAdministration via loadAdmins(91) — 13 weeks of dose logs
+ * - Questionnaires + current-period QuestionnaireResponses via loadCheckins()
+ * - Task (status=requested, code symptom-follow-up) via loadFollowUps()
+ * FHIR writes:
+ * - logDose(): one logical MedicationAdministration per (request, scheduled
+ *   slot) — conditional create on the slot identifier, update on change, so
+ *   double-taps/retries and skipped→taken corrections land on the SAME event,
+ *   never a duplicate (FHIR-MAPPING §3/§7). Also nudges the cartridge Device
+ *   remaining-count (display-only inventory — never gates taking a med).
+ * - completeFollowUp(): flips a follow-up Task to completed.
+ *
+ * Derived-state vocabulary (medical-safety semantics — changes need owner
+ * sign-off, CLAUDE.md §6/§8):
+ * - taken   = MedicationAdministration status `completed`
+ * - skipped = `not-done` + statusReason `user-skipped` (amber)
+ * - missed  = `not-done` + statusReason `user-marked-missed` (red)
+ * - due     = unlogged past slot within OVERDUE_GRACE_MINUTES (amber)
+ * - overdue = unlogged past slot beyond the grace window (red) — computed live
+ *   from wall-clock; absence of a log is NEVER persisted as a missed dose
+ *   (FHIR-MAPPING §3: no log ⇒ no resource).
+ * - "MISSED TODAY" per-med tag = any slot today explicitly not-done OR
+ *   unlogged past grace; it outranks the 30-day percentage.
+ * - 30-day adherence % counts LOGGED doses only: taken / (taken + notDone);
+ *   thresholds ≥90 on-track (green), ≥70 watch (amber), <70 low (red),
+ *   null = no logs (neutral gray — never a green claim).
+ * - streak = consecutive all-taken days ending today (or yesterday when today
+ *   simply isn't finished yet); computed over the full 91-day window so the
+ *   30-day stats window doesn't cap it (see adherenceStats in ../fhir.ts).
+ */
 import { Loader, Menu } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
@@ -37,6 +82,7 @@ import { T, mono } from '../tokens';
 import { useIsMobile } from '../useIsMobile';
 
 const HEATMAP_DAYS = 91; // 13 weeks
+// The design's "adherence 30D" stat window — also the heatstrip length.
 const STATS_DAYS = 30;
 
 /**
@@ -209,6 +255,13 @@ function monthYear(date: string): string {
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Medications/adherence page. Loads five resource sets in parallel via
+ * reload(), which children call again after every successful write so the
+ * page always re-derives from server state (no optimistic local mutation).
+ * Failure modes: load errors render as a critical alert card; a missing
+ * Patient (fresh install) points at `make seed` instead of crashing.
+ */
 export function AdherencePage() {
   const medplum = useMedplum();
   const isMobile = useIsMobile();
@@ -297,6 +350,9 @@ export function AdherencePage() {
   yesterdayDate.setDate(now.getDate() - 1); // local calendar math — DST safe
   const yesterday = localDateString(yesterdayDate);
 
+  // Life-critical alert (owner decision, CLAUDE.md §8): a critical med's slot
+  // today that is either overdue-unlogged or explicitly not taken surfaces at
+  // the top of the page. Display prominence only — no dosing logic.
   // Split into label + status fragments so only the critical fragment is
   // colored in the alert card; the concatenated text stays byte-identical.
   const criticalProblems: { label: string; status: string }[] = [];
@@ -330,6 +386,8 @@ export function AdherencePage() {
     });
 
   // 30-day per-med heatstrip: taken / missed / partial / no data (oldest→newest).
+  // Red requires an explicit not-done log; unlogged days stay neutral hairline
+  // (no resource ⇒ no missed claim, FHIR-MAPPING §3).
   const stripDaysFor = (med: MedInfo): string[] =>
     days.slice(-STATS_DAYS).map((day) => {
       const slots = slotsForDate([med], day.date);
@@ -528,6 +586,15 @@ export function AdherencePage() {
 // Due panel
 // ---------------------------------------------------------------------------
 
+/**
+ * "Due now" card: check-in questionnaires whose current cadence period (D/W/M)
+ * has no QuestionnaireResponse yet, plus open symptom follow-up Tasks created
+ * by the follow-up Bot. `checkins`/`followUps` arrive pre-loaded from the page;
+ * `onChanged` triggers the page-level reload after a Task completes.
+ * "Resolved" writes Task.status=completed — resolution is always the user's
+ * explicit action, never inferred (FHIR-MAPPING §2, symptom follow-up row).
+ * Renders nothing when there is nothing due.
+ */
 function TodayDuePanel({
   checkins,
   followUps,
@@ -667,6 +734,16 @@ function TodayDuePanel({
 // Day panel (Today / Yesterday) — the only place doses are logged
 // ---------------------------------------------------------------------------
 
+/**
+ * One day's dose slots (Today or Yesterday) with Taken/Skip/Missed actions —
+ * the only UI that calls logDose(). `date` is a LOCAL calendar day; `now`
+ * comes from the parent's 60s ticker so upcoming/overdue states stay live in
+ * an idle tab. Writes are idempotent per slot (logDose does a conditional
+ * create on the slot identifier), so retrying after an error toast is safe;
+ * per-slot `busy` state blocks double submission in the meantime. Already
+ * logged slots keep a quiet "change" menu — corrections update the same
+ * logical event. Renders nothing on days with no scheduled slots.
+ */
 function DayPanel(props: {
   title: string;
   date: string;

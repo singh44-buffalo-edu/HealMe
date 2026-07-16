@@ -1,3 +1,10 @@
+"""Provider adapter layer without any network: request shapes per provider
+(OpenAI vision/schema payloads, Gemini schema stripping + key-in-header,
+Ollama json format + PDF rejection), the error-mapping table (bad key →
+ProviderNotConfigured, 429/5xx/truncation → ProviderError), single retry on
+transport errors, key resolution precedence (keystore beats .env) and
+mask() never revealing a key. httpx.Client.post is monkeypatched throughout."""
+
 import json
 
 import httpx

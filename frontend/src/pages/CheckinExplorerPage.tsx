@@ -1,3 +1,19 @@
+/**
+ * CheckinExplorerPage — read-only archive of every submitted check-in
+ * ("Check-in explorer" nav item), week-grouped like the History Log design.
+ *
+ * Architecture: routed from App.tsx; reads QuestionnaireResponse straight from
+ * the Medplum CDR (newest first) and renders answers exactly as stored — this
+ * page never writes anything. Editing a period's answers happens on
+ * CheckinPage, which updates the same response via its period identifier.
+ *
+ * Data class: everything here is measured/self-reported (ink) — no AI content,
+ * so no indigo/AIPill anywhere (three-data-classes rule, CLAUDE.md §2).
+ *
+ * Search/filter/grouping are all client-side over the single fetched page
+ * (100 responses, _sort=-authored) — acceptable at single-user volume; the
+ * fetch itself is bounded server-side per the never-fetch-all rule.
+ */
 import { Loader } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import type { QuestionnaireResponse } from '@medplum/fhirtypes';
@@ -231,7 +247,15 @@ function LogRow({
 // Page
 // ---------------------------------------------------------------------------
 
-/** Question-response explorer: every check-in, newest first, answers flattened. */
+/**
+ * Question-response explorer: every check-in, newest first, answers flattened.
+ *
+ * FHIR touched: reads QuestionnaireResponse only (one bounded search on
+ * mount). Failure modes: search errors render the error card; an empty
+ * record renders the "no check-ins yet" nudge toward the daily check-in.
+ * Rows group by local Monday-of-week; within a group the server sort order
+ * (-authored) is preserved.
+ */
 export function CheckinExplorerPage(): JSX.Element {
   const medplum = useMedplum();
   const [responses, setResponses] = useState<QuestionnaireResponse[]>();
@@ -306,6 +330,8 @@ export function CheckinExplorerPage(): JSX.Element {
     (r) => (filter === 'all' || filter === `q:${r.slug}`) && (q === '' || r.haystack.includes(q))
   );
 
+  // Single pass over already-sorted rows: a group break happens whenever the
+  // week key changes, so groups come out newest-week-first for free.
   const groups: { key: string; label: string; rows: LogRowModel[] }[] = [];
   for (const row of filtered) {
     const last = groups[groups.length - 1];

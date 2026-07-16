@@ -8,6 +8,17 @@ Backs up, into data/backups/<timestamp>/ (gitignored via data/):
 Both are taken via `docker compose exec` against the running stack, so no
 extra tools are needed on the host. Run with `make backup`.
 
+Together those two artifacts ARE the whole record: all FHIR resources live in
+Postgres (no side database — CLAUDE.md §2) and uploaded originals/generated
+PDFs live in the file binary store. Deliberately NOT included: .env (admin
+password, client secret) and data/secrets/ (BYOK AI keys) — keys never ride
+along with the health record (FHIR-MAPPING.md §11). Restore steps are printed
+at the end of every run.
+
+Caveat: pg_dump runs while the server is live (consistent snapshot, but
+in-flight writes may miss it); for a guaranteed-quiescent dump stop the
+server first: `docker compose -f infra/docker-compose.yml stop medplum-server`.
+
 No scheduling is built in — suggested cron for nightly backups:
   0 2 * * * cd <repo> && make backup >> data/backups/backup.log 2>&1
 """
@@ -35,6 +46,9 @@ def die(msg: str) -> None:
 
 
 def default_backup_dir() -> Path:
+    """HMD_BACKUP_DIR from the environment or .env (parsed by hand — this
+    script has no third-party deps), else data/backups. Relative paths anchor
+    at the repo root so cron's cwd doesn't matter."""
     configured = os.environ.get("HMD_BACKUP_DIR", "")
     if not configured:
         env_path = REPO / ".env"
@@ -49,6 +63,9 @@ def default_backup_dir() -> Path:
 
 
 def run_to_file(cmd: list[str], out_file: Path, what: str) -> None:
+    """Stream a compose-exec command's stdout into out_file. On failure the
+    partial file is deleted before dying — a truncated dump must never be
+    mistaken for a good backup."""
     log(
         f"dumping {what} -> {out_file.relative_to(REPO) if out_file.is_relative_to(REPO) else out_file}"
     )
@@ -63,6 +80,8 @@ def run_to_file(cmd: list[str], out_file: Path, what: str) -> None:
 
 
 def main() -> None:
+    """Dump the CDR + binary store into a fresh timestamped directory and
+    print the matching restore instructions."""
     parser = argparse.ArgumentParser(
         prog="backup.py",
         description=__doc__,

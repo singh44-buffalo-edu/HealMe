@@ -15,6 +15,13 @@
  * slotIdentValue): `{request-slug}-{YYYY-MM-DD}T{HH:MM}` under the
  * medication-administration identifier system, so a dose logged in the UI is
  * always seen here.
+ *
+ * Where it sits: deployed by scripts/deploy_bots.py, which sets
+ * Bot.cronString (every 15 minutes) — Medplum's scheduler invokes it
+ * directly (requires the 'cron' project feature; deploy_bots.py enables it
+ * as super admin). Because every run rescans from scratch and all writes are
+ * conditional creates on stable identifiers, a missed cron tick is harmless:
+ * the next tick produces the identical result.
  */
 
 import { BotEvent, MedplumClient } from '@medplum/core';
@@ -32,8 +39,28 @@ const REQUEST_IDENT_SYSTEM = `${IDENT}/medication-request`;
 const REMINDER_IDENT_SYSTEM = `${IDENT}/communication-request`;
 const CS_MEDIUM = `${BASE}/CodeSystem/communication-medium`;
 
+/**
+ * Grace period after the scheduled slot before a reminder fires. 90 min keeps
+ * ordinary lateness (breakfast at 9:30 for a 9:00 dose) from nagging while
+ * still catching a genuinely forgotten dose the same morning. Exported so the
+ * tests pin the boundary.
+ */
 export const GRACE_MINUTES = 90;
 
+/**
+ * Cron entry point — one full scan per invocation.
+ *
+ * @param medplum - project-scoped client injected by the bot runtime
+ * @param event - cron invocations carry no meaningful input; tests pass a
+ *   Parameters resource with a 'now' valueDateTime to freeze the clock
+ * @returns the CommunicationRequests that now exist for this run — one per
+ *   overdue-and-unlogged slot (created or found by identifier); empty when
+ *   nothing is due
+ *
+ * Touches: reads MedicationRequest + MedicationAdministration, conditionally
+ * creates CommunicationRequest. NEVER writes MedicationAdministration — see
+ * the medical-safety rule in the file header. Idempotent at any frequency.
+ */
 export async function handler(
   medplum: MedplumClient,
   event: BotEvent<Parameters | Resource | undefined>
@@ -42,6 +69,8 @@ export async function handler(
   const today = localDateString(now);
   const created: CommunicationRequest[] = [];
 
+  // Single-user regimen: a handful of active meds, so _count=100 covers the
+  // whole set without pagination (Medplum default _count is only 20).
   const requests = await medplum.searchResources('MedicationRequest', {
     status: 'active',
     _count: '100',
@@ -51,6 +80,8 @@ export async function handler(
     if (!request.id || !request.subject) {
       continue;
     }
+    // authoredOn is the medication start anchor (FHIR-MAPPING.md §2) —
+    // slots only exist from that date forward.
     const startDate = request.authoredOn?.slice(0, 10);
     if (startDate && today < startDate) {
       continue; // med not started yet — no slots today
@@ -124,11 +155,20 @@ function resolveNow(input: unknown): Date {
   return new Date();
 }
 
+/**
+ * Stable per-request slug used in slot identifiers: the project business
+ * identifier when present (survives export/re-import), else the server id.
+ * Must match the frontend's slug derivation or slot identities diverge.
+ */
 function requestSlug(request: MedicationRequest): string {
   const local = request.identifier?.find((i) => i.system === REQUEST_IDENT_SYSTEM);
   return local?.value ?? (request.id as string);
 }
 
+/**
+ * YYYY-MM-DD from the process-local wall clock — deliberately NOT UTC, so
+ * "today" and slot dates line up with what the owner's UI shows.
+ */
 function localDateString(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

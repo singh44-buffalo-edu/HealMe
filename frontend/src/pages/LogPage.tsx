@@ -1,3 +1,26 @@
+/**
+ * LogPage — "Quick add": one-tap manual capture of weight, sleep, mood/energy,
+ * symptoms, vitals, and questions-for-the-prescriber.
+ *
+ * Architecture: routed from App.tsx; writes Observations directly to the
+ * Medplum CDR via MedplumClient (no ai-service involvement — manual entry
+ * never goes through the review queue, that gate is for AI/OCR extractions
+ * only). Codes/identifier systems come from ../fhir constants.
+ *
+ * FHIR shape rules enforced here (FHIR-MAPPING.md §4 + §2 vitals row):
+ * - Verified standard codes only: LOINC for weight/BP/HR/temp/SpO2/glucose,
+ *   UCUM units; everything without a verified code uses the project-local
+ *   CodeSystem (sleep-duration, mood, energy, symptom, rx-question).
+ *   Never invent LOINC/SNOMED codes (CLAUDE.md §3).
+ * - BP is ONE Observation (panel 85354-9) with systolic/diastolic components,
+ *   not two separate results.
+ * - Backdating: the user-picked time lands in effectiveDateTime (clinical
+ *   time); record time stays in meta.lastUpdated (CLAUDE.md §6 timestamps).
+ * - Plausible-range validation only (ingestion spec §12.12) — deliberately no
+ *   clinical thresholds/judgment until set with a clinician (SR-3 deferral).
+ * - Every Observation gets a fresh quick-observation identifier (client event
+ *   UUID, FHIR-MAPPING.md §7) — the manual-entry idempotency convention.
+ */
 import { NumberInput, Slider, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
@@ -19,14 +42,19 @@ import { CS_OBS, IDENT, LOINC, OBS_CATEGORY, UCUM, getPatient } from '../fhir';
 import { T, mono } from '../tokens';
 import { useIsMobile } from '../useIsMobile';
 
+// Identifier system for manually-entered observations (FHIR-MAPPING.md §7:
+// "Quick Observation" → client event UUID).
 const QUICK_IDENT = `${IDENT}/quick-observation`;
 
+/** Current LOCAL time formatted for <input type="datetime-local"> (the
+ * timezone-offset shuffle is needed because toISOString() is UTC). */
 function nowLocalInput(): string {
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
 }
 
+/** Quick-add grid: six independent capture cards (each saves on its own). */
 export function LogPage() {
   const isMobile = useIsMobile();
   return (
@@ -61,6 +89,15 @@ export function LogPage() {
   );
 }
 
+/**
+ * Shared save path for every card: resolves the (single) Patient, lets the
+ * caller build one or more Observations against it, then creates them each
+ * stamped with a fresh quick-observation identifier. Note: multiple
+ * observations are created sequentially, NOT in a transaction Bundle — a
+ * mid-list failure leaves earlier ones committed (acceptable for independent
+ * quick-add values; the error notification tells the user the save failed).
+ * Throws (for useSubmit to catch) when no Patient exists yet.
+ */
 function useSaveObservation() {
   const medplum = useMedplum();
   return async (build: (patientRef: string) => Observation[]) => {
@@ -75,6 +112,7 @@ function useSaveObservation() {
   };
 }
 
+/** datetime-local input value → UTC ISO instant for effectiveDateTime. */
 function toIso(local: string): string {
   return new Date(local).toISOString();
 }
@@ -214,6 +252,8 @@ function WhenInput(props: { value: string; onChange: (v: string) => void }) {
   );
 }
 
+/** Busy-flag + success/error notification wrapper around a card's save().
+ * Validation errors thrown by save() surface as the red notification too. */
 function useSubmit(save: () => Promise<void>, label: string) {
   const [busy, setBusy] = useState(false);
   const submit = async () => {
@@ -230,6 +270,8 @@ function useSubmit(save: () => Promise<void>, label: string) {
   return { busy, submit };
 }
 
+/** Weight in kg (owner decision §8: units kg) — verified LOINC 29463-7,
+ * vital-signs category, UCUM kg. Range gate 0–400 is plausibility only. */
 function WeightCard() {
   const saveObs = useSaveObservation();
   const [kg, setKg] = useState<number | string>('');
@@ -273,6 +315,8 @@ function WeightCard() {
   );
 }
 
+/** Hours slept — local code sleep-duration (no verified instrument yet,
+ * FHIR-MAPPING.md §4 Observation rules), survey category, UCUM hours. */
 function SleepCard() {
   const saveObs = useSaveObservation();
   const [hours, setHours] = useState<number | string>('');
@@ -316,6 +360,8 @@ function SleepCard() {
   );
 }
 
+/** Mood + energy 1–10 sliders — two Observations per save (local codes mood /
+ * energy, valueInteger). Saved together but as independent resources. */
 function MoodEnergyCard() {
   const saveObs = useSaveObservation();
   const [mood, setMood] = useState(5);
@@ -384,6 +430,9 @@ const VITALS = [
   { key: 'glucose', label: 'Glucose (mg/dL)', min: 40, max: 500 },
 ] as const;
 
+/** Vitals entry — all fields optional, but BP must be entered as a pair
+ * (a lone systolic/diastolic is rejected because the BP panel Observation
+ * needs both components). Saves only the fields that were filled in. */
 function VitalsCard() {
   const saveObs = useSaveObservation();
   const [values, setValues] = useState<Record<string, number | string>>({});
@@ -486,6 +535,10 @@ function VitalsCard() {
   );
 }
 
+/** Question for the prescriber (spec Q-MED-09) — local code rx-question,
+ * valueString. Surfaced later under "Questions for the prescriber" in both
+ * the AI Health Review and the data-only summary (FHIR-MAPPING.md §2). Not
+ * backdatable on purpose: the ask-time is "now" by definition. */
 function RxQuestionCard() {
   const saveObs = useSaveObservation();
   const [text, setText] = useState('');
@@ -530,6 +583,9 @@ function RxQuestionCard() {
   );
 }
 
+/** Free-text symptom/side effect — local code symptom, valueString. Symptoms
+ * are Observations, not Conditions (FHIR-MAPPING.md §4); any symptom↔med link
+ * (Observation.focus) is user-asserted elsewhere, never inferred here. */
 function SymptomCard() {
   const saveObs = useSaveObservation();
   const [text, setText] = useState('');

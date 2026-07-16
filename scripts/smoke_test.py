@@ -1,12 +1,23 @@
 #!/usr/bin/env python
-"""End-to-end smoke test for the walking skeleton.
+"""End-to-end smoke test — the "phase is done" gate (CLAUDE.md: a phase is
+done only when builds, starts, smoke passes; never advance on red).
 
-Checks: Medplum healthcheck -> ai-service /health -> OAuth token -> Patient
-read -> Observation write + read-back + delete -> ai-service Medplum
-round-trip -> frontend dev server. Exits non-zero on the first failure.
+Checks, in dependency order: Medplum healthcheck -> ai-service /health ->
+OAuth token -> Patient read -> Observation write + read-back + delete ->
+ai-service Medplum round-trip -> frontend dev server -> ingestion review
+queue -> health-review degradation contract -> both Subscription/Bot
+pipelines -> CSV importer dedup. A failing step marks the run failed but
+later steps still execute, so one run shows the full health picture; the
+exit code is non-zero if ANY step failed.
+
+What each step proves is documented on the check_* functions inside main().
+Every FHIR artifact a step creates is deleted even on failure — smoke runs
+never pollute the record.
 
 Run while the stack is up: `make up && make dev` (in another terminal), then
-`make smoke`.
+`make smoke`. Uses the ai-service's client credentials from .env, so it also
+exercises the least-privilege AccessPolicy (scripts/bootstrap.py) — a 403
+here usually means a missing SERVICE_POLICY_RESOURCES entry.
 """
 
 from __future__ import annotations
@@ -29,6 +40,8 @@ def env(key: str, default: str = "") -> str:
 
 
 def step(name: str, fn):
+    """Run one check: print PASS/FAIL (+ the check's return value as detail),
+    record failure, keep going — see module docstring for why we don't stop."""
     global FAILED
     try:
         detail = fn()
@@ -39,6 +52,7 @@ def step(name: str, fn):
 
 
 def main() -> None:
+    """Run every check via step(); exit 1 if any failed."""
     base = env("MEDPLUM_BASE_URL", "http://localhost:8103/")
     if not base.endswith("/"):
         base += "/"
@@ -47,15 +61,22 @@ def main() -> None:
     token: dict = {}
 
     def check_server():
+        """Proves: the Medplum stack is up and healthy (postgres + redis +
+        server booted; port 8103 reachable)."""
         resp = httpx.get(base + "healthcheck", timeout=5)
         assert resp.status_code == 200, f"status {resp.status_code}"
 
     def check_ai_health():
+        """Proves: the FastAPI service is running and has loaded its config
+        (medplum_configured=False means .env lacks client credentials)."""
         resp = httpx.get(ai_base + "health", timeout=5)
         assert resp.status_code == 200, f"status {resp.status_code}"
         return f"medplum_configured={resp.json().get('medplum_configured')}"
 
     def get_token():
+        """Proves: the ClientApplication from bootstrap still exists and its
+        client-credentials grant works. All later FHIR steps ride this token
+        (and therefore the service AccessPolicy)."""
         cid, secret = env("MEDPLUM_CLIENT_ID"), env("MEDPLUM_CLIENT_SECRET")
         assert cid and secret, "no client credentials in .env (run make bootstrap)"
         resp = httpx.post(
@@ -77,6 +98,8 @@ def main() -> None:
         }
 
     def read_patient():
+        """Proves: seeding ran (the owner Patient exists under its business
+        identifier) and the least-privilege policy grants Patient read."""
         ident = env("HMD_PATIENT_IDENTIFIER", "healmedaily-user")
         resp = httpx.get(
             base + "fhir/R4/Patient",
@@ -93,6 +116,9 @@ def main() -> None:
         return f"Patient/{entries[0]['resource']['id']}"
 
     def write_read_delete_observation():
+        """Proves: the full write path — the service can create clinical data
+        (policy grants Observation write), read its own write back, and clean
+        up. The finally-delete keeps the record smoke-free on any outcome."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         ident = env("HMD_PATIENT_IDENTIFIER", "healmedaily-user")
         patient = httpx.get(
@@ -149,11 +175,16 @@ def main() -> None:
         return f"Observation/{obs_id} created+verified+deleted"
 
     def check_ai_medplum_roundtrip():
+        """Proves: the ai-service ITSELF can reach Medplum — /medplum/status
+        makes a server-side FHIR read with the service's own token cache
+        (distinct from this script's direct calls above)."""
         resp = httpx.get(ai_base + "medplum/status", timeout=10)
         assert resp.status_code == 200, f"status {resp.status_code}: {resp.text[:200]}"
         return f"patients={resp.json().get('patients')}"
 
     def check_frontend():
+        """Proves: the Vite dev server is up AND the app actually compiles —
+        not just that something answers on :5173."""
         resp = httpx.get(frontend, timeout=5)
         assert resp.status_code == 200, f"status {resp.status_code}"
         assert "HealMeDaily" in resp.text, "index.html does not look like the app"
@@ -165,12 +196,18 @@ def main() -> None:
         )
 
     def check_ingest_queue():
+        """Proves: the ingestion review queue is reachable — the endpoint the
+        human-in-the-loop gate lives behind (proposal Tasks, FHIR-MAPPING §6).
+        Read-only: nothing is enqueued or committed here."""
         resp = httpx.get(ai_base + "ingest/tasks", timeout=15)
         assert resp.status_code == 200, f"status {resp.status_code}: {resp.text[:200]}"
         assert isinstance(resp.json(), list), "expected a list of review tasks"
         return f"{len(resp.json())} task(s) awaiting review"
 
     def check_health_review_endpoint():
+        """Proves: the no-AI-key degradation contract (CLAUDE.md §6 — the app
+        must boot with no AI key). Without a configured provider the endpoint
+        must refuse with a clean 503, never crash and never call out."""
         health = httpx.get(ai_base + "health", timeout=5).json()
         configured = health.get("ai", {}).get("configured")
         latest = httpx.get(ai_base + "health-review/latest", timeout=15)
@@ -189,6 +226,10 @@ def main() -> None:
         return f"provider configured ({health['ai'].get('provider')}); latest={latest.status_code}"
 
     def check_bot_roundtrip():
+        """Proves: the whole event pipeline — Subscription fires on QR create,
+        the project has bots enabled, the deployed QR->Observation bot runs
+        and its derived Observation appears. Polling is required because bot
+        execution is async (and remember: a failed bot run never retries)."""
         import time
         import uuid
 
@@ -251,6 +292,9 @@ def main() -> None:
             )
 
     def check_followup_bot():
+        """Proves: the second Subscription/Bot pair — a symptom-coded
+        Observation yields the next-day follow-up Task (idempotent identifier
+        task|symptom-follow-up-{obsId})."""
         import time
         import uuid as uuid_mod
 
@@ -318,6 +362,9 @@ def main() -> None:
     )
 
     def check_csv_import():
+        """Proves: the deterministic importer path (Phase 4 — direct commit,
+        no review queue) AND its content-hash dedup: importing the same CSV
+        twice must report already_existed and leave exactly one Observation."""
         import uuid as uuid_mod
 
         marker = uuid_mod.uuid4().hex[:8]

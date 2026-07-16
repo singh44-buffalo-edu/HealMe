@@ -17,6 +17,21 @@ Commands:
 add-* / set-scopes are idempotent (re-runs update instead of duplicating) and
 accept --dry-run, which prints the planned resources as JSON without touching
 the network (usable with no .env and no running Medplum).
+
+How the pieces fit:
+  - %patient: policy criteria say e.g. `Observation?subject=%patient`; the
+    VALUE comes from ProjectMembership.access[].parameter (name 'patient') —
+    see access_binding(). Policy documents therefore contain no patient id.
+  - Expiry is encoded twice: human-readable date in the policy NAME
+    (`...|expires=YYYY-MM-DD`, parsed back by parse_bound_policy_name) and
+    the exact instant in a Basic resource (code share-expiry, extension
+    share-expiry valueDateTime) that `expire-shares` sweeps.
+  - Locked areas in the caretaker UI are a presentation of server-side
+    denial — the policy is the ONLY enforcement (FHIR-MAPPING.md §10).
+
+Run with the venv python: `ai-service/.venv/bin/python scripts/care_circle.py
+<command> ...`. Requires admin credentials in .env (from `make bootstrap`),
+except --dry-run.
 """
 
 from __future__ import annotations
@@ -40,10 +55,15 @@ EXT_EXPIRY = BASE_URL + "/StructureDefinition/share-expiry"
 ROLE_CARETAKER = "caretaker"
 ROLE_CLINICIAN = "clinician-share"
 
-# Scope -> read-only resource rules. Criteria pin every patient-scoped type to
-# the member's %patient parameter; Medication/Device have no patient reference
+# Scope -> read-only resource rules: the single source of truth for what a
+# UI "scope toggle" grants. Criteria pin every patient-scoped type to the
+# member's %patient parameter; Medication/Device have no patient reference
 # by design (FHIR-MAPPING.md §5: Device.patient is never used for ownership),
-# so they are plain read-only rules.
+# so they are plain read-only rules — acceptable exposure: med catalog +
+# cartridge levels, no clinical events. Observation scopes slice one resource
+# type by category (vitals/labs/survey) or code (symptom); a member with
+# several scopes gets the union (deduped in build_policy). Anything not
+# listed is denied — AccessPolicy is an allowlist.
 SCOPE_RULES: dict[str, list[tuple[str, str | None]]] = {
     "meds": [
         ("Medication", None),
@@ -98,6 +118,8 @@ def read_env(key: str, default: str = "") -> str:
 
 
 def parse_scopes(raw: str) -> list[str]:
+    """Validate a comma-separated scope list against SCOPE_RULES (die on typo
+    — a silently dropped scope would under- or over-share)."""
     scopes = [s.strip() for s in raw.split(",") if s.strip()]
     if not scopes:
         die("no scopes given")
@@ -108,6 +130,10 @@ def parse_scopes(raw: str) -> list[str]:
 
 
 def policy_name(role: str, email: str, expires: str | None = None) -> str:
+    """Policy name doubles as metadata: 'care-circle/{role}/{email}' plus an
+    optional '|expires=YYYY-MM-DD' suffix for clinician shares. list/set-scopes
+    parse it back via parse_bound_policy_name; ensure_policy matches on the
+    role/email prefix so a renewed expiry updates rather than duplicates."""
     name = f"care-circle/{role}/{email}"
     if expires:
         name += f"|expires={expires}"
@@ -117,6 +143,11 @@ def policy_name(role: str, email: str, expires: str | None = None) -> str:
 def build_policy(
     role: str, email: str, scopes: list[str], expires: str | None = None
 ) -> dict:
+    """Assemble the member's read-only AccessPolicy: always a Patient rule
+    pinned to %patient (so the member can render the owner's name), then the
+    union of the chosen scopes' rules, deduped. The scopes string rides along
+    in an extension purely so `list` can display it without reverse-mapping
+    rules back to scope names."""
     resource: list[dict] = [
         {
             "resourceType": "Patient",
@@ -143,6 +174,8 @@ def build_policy(
 
 
 def access_binding(policy_ref: str, patient_ref: str) -> dict:
+    """ProjectMembership.access entry: binds the policy AND supplies the value
+    every %patient placeholder in that policy's criteria resolves to."""
     return {
         "policy": {"reference": policy_ref},
         "parameter": [
@@ -159,6 +192,11 @@ def build_invite(
     policy_ref: str,
     patient_ref: str,
 ) -> dict:
+    """Body for Medplum's project-admin invite API, which creates the User,
+    the profile resource (RelatedPerson for caretakers, Practitioner for
+    clinicians — FHIR-MAPPING.md §10) and the ProjectMembership in one call.
+    sendEmail=False because this private instance has no SMTP; the owner
+    shares credentials out of band."""
     return {
         "resourceType": profile_type,
         "firstName": first,
@@ -170,6 +208,11 @@ def build_invite(
 
 
 def build_expiry_basic(email: str, expires_at: str, membership_ref: str) -> dict:
+    """Machine-readable expiry record for a clinician share: a Basic (local
+    code share-expiry) pointing at the membership, exact instant in the
+    share-expiry extension. `expire-shares` scans these; the policy-name
+    suffix is only the human-readable copy. Identifier is per-email, so
+    re-inviting the same clinician replaces rather than stacks expiries."""
     return {
         "resourceType": "Basic",
         "code": {
@@ -198,7 +241,12 @@ def placeholder_patient_ref() -> str:
 
 
 class Session:
-    """Admin-password session (same flow as deploy_bots.py)."""
+    """Admin-password session (same flow as deploy_bots.py).
+
+    Die-fast semantics: any 4xx/5xx aborts the whole script (except 404,
+    which returns None so callers can branch on absence) — membership/policy
+    edits must never half-apply silently.
+    """
 
     def __init__(self) -> None:
         import httpx  # imported lazily so --dry-run has zero deps
@@ -248,6 +296,8 @@ class Session:
         self.request("DELETE", path)
 
     def patient_ref(self) -> str:
+        """The single owner Patient (the %patient value): .env id when
+        present, else lookup by the seeded business identifier."""
         pid = read_env("MEDPLUM_PATIENT_ID")
         if pid:
             return f"Patient/{pid}"
@@ -266,6 +316,10 @@ class Session:
 
 
 def find_membership_by_email(sess: Session, email: str) -> dict | None:
+    """Locate a member by email across the three places Medplum may keep it:
+    user.display, the resolved User resource, or the profile's telecom.
+    Fetching all memberships (_count=1000) is fine — a single-household
+    project stays tiny; there is no email search parameter to lean on."""
     bundle = sess.get("fhir/R4/ProjectMembership", {"_count": "1000"}) or {}
     email_lc = email.lower()
     for entry in bundle.get("entry", []):
@@ -317,6 +371,8 @@ def ensure_policy(sess: Session, policy: dict, role: str, email: str) -> str:
 def upsert_expiry_basic(
     sess: Session, email: str, expires_at: str, membership_ref: str
 ) -> None:
+    """Create or replace the member's share-expiry Basic (found by its
+    per-email identifier) so renewals extend rather than stack."""
     basic = build_expiry_basic(email, expires_at, membership_ref)
     ident = basic["identifier"][0]
     bundle = (
@@ -337,6 +393,14 @@ def upsert_expiry_basic(
 
 
 def add_member(args: argparse.Namespace, role: str, profile_type: str) -> None:
+    """add-caretaker / add-clinician-share implementation.
+
+    Order matters: policy first (so the invite can bind it), then invite or
+    rebind, then the expiry Basic. Idempotent throughout — an existing
+    member's binding is rewritten in place; the policy is created-or-updated.
+    Clinician shares compute expiry as now + --days (UTC). --dry-run prints
+    the planned resources and never opens a network connection.
+    """
     scopes = parse_scopes(args.scopes)
     expires_at: str | None = None
     if role == ROLE_CLINICIAN:
@@ -414,6 +478,9 @@ def parse_bound_policy_name(name: str) -> tuple[str, str | None]:
 
 
 def cmd_set_scopes(args: argparse.Namespace) -> None:
+    """Rewrite an existing member's policy rules in place, preserving role
+    and expiry (both recovered from the bound policy's name). Refuses to
+    touch non-care-circle members — the owner/admin binding is off limits."""
     scopes = parse_scopes(args.scopes)
     if args.dry_run:
         policy = build_policy("<current-role>", args.email, scopes)
@@ -442,6 +509,9 @@ def cmd_set_scopes(args: argparse.Namespace) -> None:
 
 
 def revoke_member(sess: Session, membership: dict, email: str) -> None:
+    """Deleting the ProjectMembership ends access immediately (no membership,
+    no project entry). The AccessPolicy is deliberately left behind as an
+    audit artifact of what was shared; the expiry Basic is cleaned up."""
     sess.delete(f"fhir/R4/ProjectMembership/{membership['id']}")
     log(
         f"revoked ProjectMembership/{membership['id']} ({email}) — AccessPolicy kept for audit"
@@ -462,6 +532,8 @@ def cmd_revoke(args: argparse.Namespace) -> None:
 
 
 def cmd_list(_args: argparse.Namespace) -> None:
+    """Table of human members (bot/service memberships filtered out) with
+    role, expiry and scopes — all reconstructed from the bound policy."""
     sess = Session()
     bundle = sess.get("fhir/R4/ProjectMembership", {"_count": "1000"}) or {}
     rows: list[tuple[str, str, str, str]] = []
@@ -501,6 +573,10 @@ def cmd_list(_args: argparse.Namespace) -> None:
 
 
 def cmd_expire_shares(_args: argparse.Namespace) -> None:
+    """Cron-able sweep (see epilog): every share-expiry Basic past its instant
+    revokes the membership and removes the Basic. Naive timestamps are read
+    as UTC — the same convention add_member writes. Nothing auto-expires
+    server-side; this sweep IS the enforcement of clinician-share expiry."""
     sess = Session()
     bundle = (
         sess.get("fhir/R4/Basic", {"code": f"{CS_CARE}|share-expiry", "_count": "100"})
@@ -537,6 +613,7 @@ def cmd_expire_shares(_args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """CLI wiring — subcommands documented in the module docstring."""
     parser = argparse.ArgumentParser(
         prog="care_circle.py",
         description=__doc__,

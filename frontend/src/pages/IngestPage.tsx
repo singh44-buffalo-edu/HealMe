@@ -1,3 +1,33 @@
+/**
+ * IngestPage — "Documents": document upload + AI extraction, the review
+ * queue, deterministic structured importers, NL quick capture, and export.
+ *
+ * Architecture: routed from App.tsx. Unlike most pages this one talks to the
+ * Python ai-service (../api → FastAPI :8000) for everything heavy — upload,
+ * extraction, import, approve/reject — because AI/OCR/PDF work lives there
+ * (CLAUDE.md §2 rule of thumb). MedplumClient is used only to fetch source
+ * documents for display.
+ *
+ * THE REVIEW-QUEUE INVARIANT (FHIR-MAPPING.md §6 — the load-bearing safety
+ * rule of this page): AI/OCR output NEVER becomes a clinical resource on its
+ * own. Uploading stores the original (DocumentReference + Binary, immutable)
+ * and creates proposal Binaries (application/fhir+json) + review Tasks
+ * (intent=proposal). Only an explicit "Approve & commit" — after the owner
+ * has had the chance to inspect/edit the JSON — turns a proposal into a real
+ * resource, and that commit is one server-side transaction (resource +
+ * Provenance + Task completed). Reject creates nothing. If you're adding a
+ * new ingestion path here, it must feed this gate, not bypass it.
+ *
+ * Two deliberate exceptions that do NOT go through the queue (Phase 4,
+ * CLAUDE.md §7): the deterministic structured importers (FHIR bundle / CSV /
+ * Apple Health / C-CDA / HL7v2 — no AI involved, dedup by content-hash
+ * identifier, tagged `imported` + Provenance, committed directly) and manual
+ * entry (LogPage). The queue is for AI-extracted content only.
+ *
+ * AI labeling: every AI-touched surface here carries the indigo ✦ AI pill +
+ * confidence bar (three-data-classes rule, CLAUDE.md §2); cloud-extraction
+ * data flow is disclosed in copy before upload.
+ */
 import { FileInput, Loader, Modal, Select, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
@@ -170,6 +200,16 @@ const LINK_BUTTON: CSSProperties = {
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Documents page shell: upload + quick capture, the review queue, structured
+ * import, export. All ai-service backed; queue state lives server-side in
+ * Tasks, so a reload is always safe.
+ *
+ * FHIR touched (via ai-service): DocumentReference/Binary on upload, Task +
+ * proposal Binaries for the queue; approve commits the target resource +
+ * Provenance + Task update in one transaction. Failure modes: queue-load
+ * errors render an error card but leave upload/import/export usable.
+ */
 export function IngestPage() {
   const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
@@ -195,6 +235,10 @@ export function IngestPage() {
     reload();
   }, [reload]);
 
+  /** Ship the PDF/photo to ai-service /ingest/document. The original is
+   * stored unchanged whatever happens next; extraction (if a provider is
+   * routed) yields proposals that appear in the queue below — never
+   * committed resources. Errors leave the picked file in place for retry. */
   const upload = async () => {
     if (!file) return;
     setUploading(true);
@@ -445,6 +489,14 @@ const IMPORT_KIND_OPTIONS: { value: 'auto' | ImportKind; label: string }[] = [
   { value: 'hl7', label: 'HL7v2 ORU (.hl7)' },
 ];
 
+/**
+ * Deterministic importer card (Phase 4) — the no-AI path that bypasses the
+ * review queue BY DESIGN: FHIR bundles, CSV, Apple Health, C-CDA, HL7v2.
+ * Idempotent server-side via content-hash identifiers (FHIR-MAPPING.md §7
+ * "Structured import"), so re-importing the same file reports
+ * `already_existed` instead of duplicating; everything lands tagged
+ * `imported` with Provenance. Format defaults to by-extension detection.
+ */
 function ImportCard() {
   const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
@@ -565,6 +617,16 @@ function AiSettingsNote({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * NL quick capture (Phase 7): free text → ai-service /assistant/nl-import →
+ * proposal Binaries + review Tasks. Rides the §6 proposal gate verbatim
+ * (FHIR-MAPPING.md §11) — the raw note is stored as an immutable Binary and
+ * NOTHING commits until approved in the queue; `onProposals` just reloads it.
+ * The BoundaryRow shows where the note goes per the nl-import routing (local
+ * = stays on device; cloud = amber + named provider — boundary copy rule).
+ * A 503 "provider not configured" flips to the AI-settings nudge instead of
+ * an error toast (app must work with no AI key, CLAUDE.md §6).
+ */
 function QuickCaptureCard({ onProposals }: { onProposals: () => void }) {
   const isMobile = useIsMobile();
   const [text, setText] = useState('');
@@ -693,6 +755,19 @@ function QuickCaptureCard({ onProposals }: { onProposals: () => void }) {
 // Queue card — one AI-extracted proposal, approve/reject gate
 // ---------------------------------------------------------------------------
 
+/**
+ * One review-queue proposal: AI-labeled header (✦ pill, confidence bar,
+ * AWAITING REVIEW), the source excerpt, an editable JSON view of the proposed
+ * FHIR resource, and the approve/reject gate.
+ *
+ * Approve gating: the button is disabled while the edited JSON does not
+ * parse, and approve() re-validates before calling the service — the possibly
+ * owner-edited resource is what gets committed (human-in-the-loop, never the
+ * raw AI output unseen). Approve → ai-service commits resource + Provenance +
+ * Task completion atomically; reject marks the Task rejected and creates no
+ * clinical resource. Both are server-side state changes, so a retry after a
+ * network error is safe (an already-completed task simply errors).
+ */
 function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void }) {
   const isMobile = useIsMobile();
   const medplum = useMedplum();
@@ -755,6 +830,10 @@ function TaskCard({ task, onChanged }: { task: ReviewTask; onChanged: () => void
     }
   };
 
+  /** Open the immutable original behind this proposal. Attachment.url comes
+   * back presigned/rewritten by Medplum (CLAUDE.md §9) — browser-side
+   * medplum.download(url) handles that correctly, so no Binary-id surgery
+   * here (that trick is only needed server-side inside the compose network). */
   const openSource = async () => {
     try {
       if (!task.document_reference) throw new Error('no source document');

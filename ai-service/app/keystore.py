@@ -1,10 +1,20 @@
 """Local secret storage for AI provider API keys (BYOK).
 
-Backends, picked automatically:
+Consumed by providers.resolve_key (KeyStore beats the .env fallback) and the
+/ai/keys endpoints in ai_settings.py. Backends, picked automatically per call:
 - macOS Keychain via the `security` CLI (service "healmedaily-ai", one item
   per provider) when running on Darwin with `security` available.
 - Fallback: JSON file at {repo}/data/secrets/ai-keys.json created 0o600
-  (data/ is gitignored).
+  (data/ is gitignored). This is the backend inside the Docker container
+  (no Keychain there); compose bind-mounts data/secrets so host and container
+  share the same keys.
+
+WHY KEYS ARE NEVER STORED IN FHIR (FHIR-MAPPING §11): the record is designed
+to be exported, backed up, and shared (export.py full-record bundle,
+scripts/backup.py, care-circle read access). A key stored as any FHIR resource
+would ride along with every one of those flows. Keeping keys in the OS
+keychain / a 0600 local file keeps them out of the record, out of git, and out
+of every export — same reason they are kept out of .env dumps and logs.
 
 Keys are never logged and never returned unmasked by any endpoint — callers
 that need to display a key use mask().
@@ -26,14 +36,19 @@ _KEYS_FILENAME = "ai-keys.json"
 
 
 def _use_keychain() -> bool:
+    """Backend switch, evaluated per call (tests monkeypatch this to force the
+    file backend and stay away from the real Keychain)."""
     return platform.system() == "Darwin" and shutil.which("security") is not None
 
 
 def _keys_path():
+    # Function (not constant) so tests can monkeypatch SECRETS_DIR.
     return SECRETS_DIR / _KEYS_FILENAME
 
 
 def _read_file_store() -> dict[str, str]:
+    """File-backend read: {provider: key}. Any unreadable/corrupt file degrades
+    to "no keys stored" rather than crashing key resolution."""
     path = _keys_path()
     if not path.exists():
         return {}
@@ -45,6 +60,9 @@ def _read_file_store() -> dict[str, str]:
 
 
 def _write_file_store(store: dict[str, str]) -> None:
+    """File-backend write. The file is opened with mode 0o600 at creation (not
+    chmod-after-write) so the key bytes are never world-readable, even briefly;
+    the directory is tightened to 0o700."""
     SECRETS_DIR.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(SECRETS_DIR, 0o700)
@@ -60,6 +78,8 @@ def _write_file_store(store: dict[str, str]) -> None:
 
 
 def get_key(provider: str) -> str | None:
+    """The stored key for a provider name, or None. Never raises — a missing
+    Keychain item or unreadable file simply means "not configured"."""
     provider = provider.strip().lower()
     if _use_keychain():
         result = subprocess.run(
@@ -75,6 +95,9 @@ def get_key(provider: str) -> str | None:
 
 
 def set_key(provider: str, key: str) -> None:
+    """Store/overwrite a provider key (`security -U` updates in place; the file
+    backend rewrites the whole store). Raises on Keychain write failure with a
+    message that deliberately excludes the key and stderr."""
     provider = provider.strip().lower()
     key = key.strip()
     if not provider or not key:
@@ -96,6 +119,8 @@ def set_key(provider: str, key: str) -> None:
 
 
 def delete_key(provider: str) -> None:
+    """Remove a stored key. Idempotent — deleting an absent key is a no-op
+    (note: an .env fallback key may still make the provider "configured")."""
     provider = provider.strip().lower()
     if _use_keychain():
         subprocess.run(

@@ -1,4 +1,9 @@
-"""Shared FHIR fixtures for the dispenser tests (seed.py shapes)."""
+"""Shared FHIR fixture builders for the dispenser tests.
+
+Deliberately shaped like scripts/seed.py output (identifier systems, timing
+with seconds, device-assigned-medication extension, Device.parent) so the
+tests exercise the exact resource shapes the live system produces — if
+seed.py's shapes change, these must change with them."""
 
 from pi_dispenser.consts import CS_DEVICE, EXT_DEVICE_MED, IDENT_DEVICE, IDENT_REQUEST
 

@@ -1,3 +1,29 @@
+/**
+ * TrendsPage — multi-signal trends (route /trends): one chart card per signal
+ * (weight/sleep/mood/energy), a 30D/90D/1Y window switcher, removable signal
+ * chips, preset "Views", a per-window summary card, and CSV export.
+ *
+ * Adopts the chart-explorer parts of the design handoff's
+ * `Web - Data Explorer.dc.html` (signal chips with ✕ / "＋ Add signal" menu,
+ * saved-views list). Deliberately NOT built from that screen: the
+ * natural-language query bar and the indigo "AI-noticed" window — AI features
+ * are never faked ahead of their backend (CLAUDE.md §2); the design's
+ * correlation callout grew into its own page (CorrelationsPage).
+ *
+ * Architecture: leaf route in App.tsx's shell; read-only. One FHIR read per
+ * window change: Observation date=ge{window} _count=1000 _sort=date, fanned
+ * client-side into the four series (weight = verified LOINC 29463-7;
+ * sleep-duration/mood/energy = project-local CS_OBS codes — FHIR-MAPPING §2/§4).
+ *
+ * Chart contract (a known restyle trap — do not "fix"):
+ * - Absolute Y domains per metric (mood/energy 0–10, sleep 0–12 h, weight
+ *   auto); signals are never normalized onto a shared scale — the subtitle
+ *   promises "every signal on its own scale".
+ * - Every observation is plotted at its own timestamp; same-day readings are
+ *   never collapsed or averaged, and the CSV export mirrors that raw grain.
+ * - No reference bands, targets or goal lines: thresholds are for clinicians
+ *   to set (SR-3), and weight carries no goal (neutral framing, CLAUDE.md §6).
+ */
 import { Alert, Loader, Menu } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import { useMedplum } from '@medplum/react';
@@ -95,6 +121,8 @@ const METRICS: MetricDef[] = [
   },
 ];
 
+/** Preset signal combinations rendered as the "Views" card — clicking one
+ * hides every other signal (pure client state, nothing persisted). */
 const VIEWS: { name: string; keys: MetricKey[] }[] = [
   { name: 'All signals', keys: ['weight', 'sleep', 'mood', 'energy'] },
   { name: 'Weight × sleep', keys: ['weight', 'sleep'] },
@@ -134,6 +162,13 @@ function fmtVal(v: number, decimals: number): string {
   return Number(v.toFixed(decimals)).toString();
 }
 
+/**
+ * Trends page. Refetches whenever the window changes; the `cancelled` flag
+ * discards a stale response that lands after a newer request, so rapid window
+ * switching can't paint old data. Chip hiding and Views are client state over
+ * the loaded series. Failure modes: a search error renders a page alert; an
+ * empty window renders per-card empty states (never a fabricated line).
+ */
 export function TrendsPage() {
   const medplum = useMedplum();
   const [windowDays, setWindowDays] = useState('90');
@@ -154,6 +189,8 @@ export function TrendsPage() {
           _count: '1000',
           _sort: 'date',
         });
+        // Fan one bounded search into the four series by code (see header);
+        // observations with other codes are simply ignored here.
         const next: Series = { weight: [], sleep: [], mood: [], energy: [] };
         for (const obs of observations) {
           const coding = obs.code?.coding?.[0];
@@ -190,6 +227,8 @@ export function TrendsPage() {
   const shownMetrics = METRICS.filter((m) => !hidden.includes(m.key));
   const hiddenMetrics = METRICS.filter((m) => hidden.includes(m.key));
 
+  // Per-metric count/min–max/latest for the "In this window" card —
+  // descriptive numbers only, no judgment attached.
   const stats = useMemo(() => {
     if (!series) {
       return undefined;
@@ -230,7 +269,10 @@ export function TrendsPage() {
     [xDomain]
   );
 
-  /** One CSV row per observation, full timestamp as stored — never collapsed by day. */
+  /** One CSV row per observation, full timestamp as stored — never collapsed
+   * by day. Hidden signals are excluded (it exports the VIEW, not the record —
+   * full-record export lives elsewhere). Built in-memory via a Blob URL, so
+   * the export never leaves the device (privacy promise, CLAUDE.md §2). */
   function exportView(): void {
     if (!series) {
       return;

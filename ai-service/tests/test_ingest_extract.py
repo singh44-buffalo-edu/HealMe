@@ -1,3 +1,8 @@
+"""ingest.extract_text: digital PDFs use the pypdf text layer, near-empty
+(scanned) PDFs fall back to OCR, and extraction failure degrades to
+("", "failed") instead of raising — document storage must never depend on
+extraction success. Exercises the real pypdf/tesseract path."""
+
 import io
 
 from pypdf import PdfWriter

@@ -1,11 +1,18 @@
 """AI Health Review pipeline: FHIR window query → compact context →
 grounded summary via the configured provider → markdown + PDF stored back
-into the CDR as a DocumentReference.
+into the CDR as a DocumentReference (local type `health-review`).
+
+Called from main.py (/health-review*); collect_context is also reused by
+assistant.py for its adherence aggregates. Two variants share the storage
+path: run_health_review (AI-generated) and run_data_summary (deterministic,
+zero AI — works with no provider configured, spec FR-RPT-1/2).
 
 Guardrails (non-negotiable, see CLAUDE.md §6): organizes and summarizes the
 owner's own data only — no diagnosis, prescribing or treatment advice;
 concerning patterns are framed as "to discuss with your clinician"; the
-disclaimer rides on every summary and PDF.
+disclaimer rides on every summary and PDF; life-critical medication gaps are
+listed first (owner decision, CLAUDE.md §8); weight is framed neutrally
+(trends only, no targets).
 """
 
 from __future__ import annotations
@@ -51,11 +58,19 @@ record. Rules you must follow strictly:
 
 
 def _iso_date(days_ago: int) -> str:
+    """UTC date N days back — the `ge` bound for all window searches."""
     return (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%d")
 
 
 def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, Any]:
-    """Query the CDR and reduce to compact aggregates — not raw resource dumps."""
+    """Query the CDR and reduce to compact aggregates — not raw resource dumps
+    (keeps the prompt small AND limits what ever leaves the device on cloud
+    routes). Reads MedicationRequest(+Medication via _include),
+    MedicationAdministration, Observation, Condition, DiagnosticReport count.
+
+    Adherence semantics (FHIR-MAPPING §3): only logged events exist —
+    'completed' = taken, 'not-done' = skipped/missed; no log means no resource,
+    so percentages are "of logged doses", never of the theoretical schedule."""
     since = _iso_date(window_days)
 
     requests = medplum.search_resources(
@@ -97,8 +112,13 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
                 "not_taken_dates": missed_dates,
             }
         )
+    # Life-critical meds first — mirrored by the prompt rule so gaps on them
+    # top the "notable items" section (medical-safety behavior, CLAUDE.md §8).
     medications.sort(key=lambda m: not m["life_critical"])
 
+    # Bucket observations into named series by this app's tracker codes
+    # (FHIR-MAPPING §4): LOINC 29463-7 = weight, local mood/energy/
+    # sleep-duration/symptom/rx-question, plus any laboratory-category value.
     observations = medplum.search_resources("Observation", {"date": f"ge{since}", "_count": 1000})
     series: dict[str, list[tuple[str, Any]]] = defaultdict(list)
     symptoms = []
@@ -122,6 +142,8 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
             )
 
     def summarize_series(values: list[tuple[str, Any]]) -> dict[str, Any] | None:
+        """(date, value) series → count/first/latest/average, or None when empty
+        — first vs latest lets the model state trends without raw dumps."""
         clean = sorted((d, v) for d, v in values if v is not None)
         if not clean:
             return None
@@ -235,6 +257,9 @@ def _store_review(
     patient_id: str,
     description: str,
 ) -> dict[str, Any]:
+    """Persist a finished review: markdown Binary + PDF Binary + one
+    DocumentReference (type `health-review`) carrying both attachments.
+    Each run appends a new document — history is kept, nothing overwritten."""
     pdf_bytes = markdown_to_pdf(markdown, title="HealMeDaily Health Review")
     md_binary = medplum.create_binary(markdown.encode(), "text/markdown")
     pdf_binary = medplum.create_binary(pdf_bytes, "application/pdf")
@@ -267,7 +292,9 @@ def _store_review(
 
 
 def run_data_summary(medplum: MedplumFhirClient, window_days: int, patient_id: str) -> dict[str, Any]:
-    """Clinician summary without any AI provider — FR-RPT-1/2 style."""
+    """Clinician summary without any AI provider — FR-RPT-1/2 style.
+    Deterministic render of collect_context; same storage/PDF path as the AI
+    review so both appear identically in the documents list."""
     context = collect_context(medplum, window_days)
     markdown = (
         f"> **{fc.DISCLAIMER}**\n>\n"
@@ -280,6 +307,10 @@ def run_data_summary(medplum: MedplumFhirClient, window_days: int, patient_id: s
 
 
 def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: str) -> dict[str, Any]:
+    """The AI review: aggregates → provider.generate → header (disclaimer +
+    window + provider attribution) prepended → stored via _store_review.
+    Provider errors propagate (main._wrap → 502/503); nothing is stored on
+    failure, so a broken run leaves no half-written review behind."""
     provider = get_provider()  # raises ProviderNotConfigured with a friendly reason
     context = collect_context(medplum, window_days)
 
@@ -302,6 +333,9 @@ def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: 
 
 
 def latest_review(medplum: MedplumFhirClient) -> dict[str, Any] | None:
+    """Newest `health-review` DocumentReference with its markdown body, or
+    None. Uses medplum.read_attachment because Attachment.url comes back as a
+    presigned /storage URL (see medplum.py)."""
     docs = medplum.search_resources(
         "DocumentReference",
         {"type": f"{fc.CS_DOC}|health-review", "_sort": "-date", "_count": 1},
@@ -327,6 +361,8 @@ def latest_review(medplum: MedplumFhirClient) -> dict[str, Any] | None:
 
 
 def review_pdf(medplum: MedplumFhirClient, doc_id: str) -> bytes:
+    """PDF bytes of one review document. KeyError (→ HTTP 400) when the
+    document has no PDF attachment."""
     doc = medplum.get(f"DocumentReference/{doc_id}")
     pdf_url = next(
         (

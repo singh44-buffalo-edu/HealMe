@@ -1,4 +1,10 @@
-/* HealMeDaily design tokens — source: design_handoff_healmedaily (Design System v2) */
+/*
+ * HealMeDaily design tokens as CSS custom properties + the few global
+ * element styles. Source of truth: design_handoff_healmedaily (README token
+ * tables / "Design System v2"). Mirrored 1:1 by src/tokens.ts (T) for
+ * JS/SVG — change both files together. Imported once from main.tsx, after
+ * the Mantine/Medplum stylesheets so these rules win.
+ */
 
 :root {
   /* surfaces */
@@ -23,7 +29,7 @@
   --hmd-watch: #c7811b;
   --hmd-out-of-range: #d64545;
 
-  /* AI class */
+  /* AI class — indigo marks AI-derived content ONLY (three-data-classes rule) */
   --hmd-ai: #5e5ce6;
   --hmd-ai-deep: #4b49c8;
   --hmd-ai-bg: #efeffc;
@@ -79,7 +85,8 @@ a:hover {
   color: var(--hmd-green-hover);
 }
 
-/* live-device pulse — live status dots only */
+/* live-device pulse — live status dots only (the animation is part of the
+   data-class language; never attach it to measured or AI values) */
 @keyframes hmdPulse {
   0%,
   100% {

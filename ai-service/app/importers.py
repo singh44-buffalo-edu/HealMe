@@ -1,6 +1,7 @@
 """Structured importers: FHIR R4 bundles, observations CSV (our own export
 format round-trips), Apple Health export XML, C-CDA documents, and HL7v2
-ORU result messages.
+ORU result messages. Phase 4; called from main.py (/import/{kind}) and
+watcher.py (inbox files).
 
 Design: pure `prepare_*` functions turn source data into transaction-bundle
 entries (unit-testable, no I/O); `commit_entries` posts them in chunks. Every
@@ -8,7 +9,20 @@ imported resource carries a deterministic import identifier so re-importing
 the same file is a no-op (dedup), an `imported` meta tag, and a Provenance
 records the batch. These importers are deterministic transforms of records
 that already exist elsewhere — no AI is involved, so they commit directly
-rather than through the AI-extraction review queue.
+rather than through the AI-extraction review queue (Phase 4 rule; the queue
+gates AI/OCR output only).
+
+Two invariants an external developer must preserve:
+- CONTENT-HASH DEDUP (FHIR-MAPPING §7 "import"): each prepared resource gets
+  identifier {system .../identifier/import, value = first 32 hex of the
+  sha256 of its distinguishing content} and is created with If-None-Exist on
+  that identifier. Re-running a file, overlapping exports, or retrying after
+  a partial transaction commit all converge instead of duplicating.
+- VERIFIED CODE SYSTEMS ONLY (CLAUDE.md §3 "never invent codes"): source
+  codes keep a `coding` entry only when their code system is positively
+  identified (C-CDA: OID in OID_TO_SYSTEM; HL7v2: 'LN' = LOINC). Anything
+  else degrades to text-only / our local system — a code is never presented
+  under a system URI we cannot verify.
 """
 
 from __future__ import annotations
@@ -27,12 +41,17 @@ from . import fhir_consts as fc
 from .medplum import MedplumFhirClient
 
 IMPORT_IDENT = f"{fc.IDENT}/import"
+# meta.tag marking imported records so dashboards/UI can distinguish them from
+# data captured in-app (Phase 4 requirement).
 IMPORT_TAG = {"system": f"{fc.BASE}/tags", "code": "imported", "display": "Imported record"}
 
 SNOMED = "http://snomed.info/sct"
 RXNORM = "http://www.nlm.nih.gov/research/umls/rxnorm"
 OBS_CATEGORY = "http://terminology.hl7.org/CodeSystem/observation-category"
 
+# Record-shaped resources a FHIR-bundle import may carry over. Excludes
+# Patient (the single owner Patient already exists), device/schedule resources
+# and MedicationRequest (an import must never create an active prescription).
 ALLOWED_IMPORT_TYPES = {
     "Observation",
     "Condition",
@@ -47,14 +66,24 @@ ALLOWED_IMPORT_TYPES = {
 }
 
 PATIENT_REF_FIELDS = {"subject", "patient"}
+# Transaction-bundle batch size: keeps each POST well under request-size and
+# per-transaction limits even for huge Apple Health exports.
 CHUNK = 100
 
 
 def _hash_ident(payload: str) -> dict[str, str]:
+    """The content-hash dedup identifier (FHIR-MAPPING §7): sha256 of the
+    caller-chosen distinguishing string, truncated to 32 hex chars. Callers
+    pick payloads that identify the logical record (e.g. "csv|code|date|value")
+    so the same fact from two runs hashes identically."""
     return {"system": IMPORT_IDENT, "value": hashlib.sha256(payload.encode()).hexdigest()[:32]}
 
 
 def _entry(resource: dict[str, Any], ident: dict[str, str], full_url: str | None = None) -> dict[str, Any]:
+    """Wrap a prepared resource as a transaction-bundle POST entry: attach the
+    dedup identifier + `imported` tag and set If-None-Exist on the identifier
+    so the server returns the existing resource (200) instead of duplicating.
+    `full_url` enables intra-bundle references (DiagnosticReport.result)."""
     resource.setdefault("identifier", [])
     if isinstance(resource["identifier"], list):  # Encounter etc. all use lists here
         if not any(i.get("system") == IMPORT_IDENT for i in resource["identifier"]):
@@ -101,6 +130,11 @@ def _scrub_refs(node: Any, local_ids: set[str], patient_ref: str) -> Any:
 
 
 def prepare_fhir_entries(bundle: dict[str, Any], patient_id: str) -> tuple[list[dict], dict[str, int]]:
+    """FHIR bundle (any type — our own export or another system's) → prepared
+    entries + {skipped-type: count}. Strips source id/meta, retargets patient
+    references to the owner, keeps intra-bundle references, drops dangling
+    external ones. The dedup hash covers the cleaned resource minus its
+    identifiers, so the same record exported twice dedups."""
     if bundle.get("resourceType") != "Bundle":
         raise ValueError("file is not a FHIR Bundle")
     patient_ref = f"Patient/{patient_id}"
@@ -138,6 +172,10 @@ def prepare_fhir_entries(bundle: dict[str, Any], patient_id: str) -> tuple[list[
 
 
 def prepare_csv_entries(text: str, patient_id: str) -> tuple[list[dict], dict[str, int]]:
+    """Observations CSV → prepared entries. The format is this app's own
+    export (export.py column layout) so export → import round-trips. Numeric
+    values become valueQuantity, anything else valueString; rows missing
+    value/effective/code are counted in skipped, never guessed."""
     reader = csv.DictReader(io.StringIO(text))
     required = {"effective", "code", "display", "value"}
     if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
@@ -184,6 +222,9 @@ def prepare_csv_entries(text: str, patient_id: str) -> tuple[list[dict], dict[st
 # --- Apple Health export.xml ------------------------------------------------------
 
 
+# HK type -> (loinc code, display, target unit, category). Only mappings with
+# verified LOINC codes are listed — unmapped HK types are counted as skipped,
+# never imported with guessed codes.
 APPLE_QUANTITY_MAP = {
     # HK type -> (loinc code, display, target unit, category)
     "HKQuantityTypeIdentifierBodyMass": ("29463-7", "Body weight", "kg", "vital-signs"),
@@ -193,8 +234,11 @@ APPLE_QUANTITY_MAP = {
 
 
 def prepare_apple_entries(xml_bytes: bytes, patient_id: str) -> tuple[list[dict], dict[str, int]]:
-    """Stream-parse Apple Health export.xml. Point-in-time vitals import
-    directly; steps and sleep are aggregated per local date."""
+    """Stream-parse Apple Health export.xml (iterparse + elem.clear() — these
+    files reach hundreds of MB). Point-in-time vitals import directly with
+    unit normalization (lb→kg per the kg owner decision, SpO2 fraction→%);
+    steps and sleep are aggregated per local date because Apple logs them as
+    many tiny intervals that would be noise as individual Observations."""
     patient_ref = f"Patient/{patient_id}"
     entries: list[dict] = []
     skipped: dict[str, int] = defaultdict(int)
@@ -314,8 +358,10 @@ CDA_NS = "urn:hl7-org:v3"
 _V = f"{{{CDA_NS}}}"
 XSI_TYPE = "{http://www.w3.org/2001/XMLSchema-instance}type"
 
-# Code-system OIDs we can verify → canonical URIs. Anything else degrades to
-# text-only — never present a code under a system we cannot verify.
+# Code-system OIDs we can verify → canonical URIs (the verified-OID-only
+# rule): LOINC, SNOMED CT, RxNorm, ICD-10-CM, CVX, UCUM. Anything else
+# degrades to text-only — never present a code under a system we cannot
+# verify (CLAUDE.md §3).
 OID_TO_SYSTEM = {
     "2.16.840.1.113883.6.1": fc.LOINC,
     "2.16.840.1.113883.6.96": SNOMED,
@@ -325,6 +371,9 @@ OID_TO_SYSTEM = {
     "2.16.840.1.113883.6.8": fc.UCUM,
 }
 
+# C-CDA section templateId roots → handler kind (_CCDA_HANDLERS below).
+# Sections outside this map are skipped silently — narrative-only content is
+# out of scope for the deterministic importer.
 CCDA_SECTIONS = {
     "2.16.840.1.113883.10.20.22.2.3.1": "results",
     "2.16.840.1.113883.10.20.22.2.5.1": "problems",
@@ -401,10 +450,14 @@ def _cda_quantity(el: ElementTree.Element | None) -> dict[str, Any] | None:
 
 
 def _concept_key(concept: dict[str, Any]) -> str:
+    # Canonical JSON of a concept — the stable ingredient for dedup hashes.
     return json.dumps(concept, sort_keys=True)
 
 
 def _ccda_results(section: ElementTree.Element, patient_ref: str, entries: list[dict], skipped: dict[str, int]):
+    """Results section → laboratory Observations (PQ→valueQuantity,
+    CD→valueCodeableConcept, text fallback; referenceRange carried over).
+    Dedup hash = code concept + time + value."""
     for obs_el in section.iter(f"{_V}observation"):
         concept = _cda_concept(obs_el.find(f"{_V}code"))
         value_el = obs_el.find(f"{_V}value")
@@ -459,6 +512,7 @@ def _ccda_results(section: ElementTree.Element, patient_ref: str, entries: list[
 
 
 def _ccda_problems(section: ElementTree.Element, patient_ref: str, entries: list[dict], skipped: dict[str, int]):
+    """Problems section → problem-list-item Conditions (uncoded entries skip)."""
     for obs_el in section.iter(f"{_V}observation"):
         concept = _cda_concept(obs_el.find(f"{_V}value"))
         if concept is None:
@@ -486,6 +540,8 @@ def _ccda_problems(section: ElementTree.Element, patient_ref: str, entries: list
 
 
 def _ccda_medications(section: ElementTree.Element, patient_ref: str, entries: list[dict], skipped: dict[str, int]):
+    """Medications section → MedicationStatements (historical record — never
+    MedicationRequest, an import must not create an active prescription)."""
     status_map = {"active": "active", "completed": "completed", "aborted": "stopped", "suspended": "on-hold"}
     for sa in section.iter(f"{_V}substanceAdministration"):
         concept = _cda_concept(sa.find(f".//{_V}manufacturedMaterial/{_V}code"))
@@ -519,6 +575,7 @@ def _ccda_medications(section: ElementTree.Element, patient_ref: str, entries: l
 
 
 def _ccda_allergies(section: ElementTree.Element, patient_ref: str, entries: list[dict], skipped: dict[str, int]):
+    """Allergies section → AllergyIntolerances keyed on the allergen code."""
     for obs_el in section.iter(f"{_V}observation"):
         concept = _cda_concept(obs_el.find(f".//{_V}playingEntity/{_V}code"))
         if concept is None:
@@ -536,6 +593,7 @@ def _ccda_allergies(section: ElementTree.Element, patient_ref: str, entries: lis
 
 
 def _ccda_immunizations(section: ElementTree.Element, patient_ref: str, entries: list[dict], skipped: dict[str, int]):
+    """Immunizations section → Immunizations (negationInd=true → not-done)."""
     for sa in section.iter(f"{_V}substanceAdministration"):
         concept = _cda_concept(sa.find(f".//{_V}manufacturedMaterial/{_V}code"))
         if concept is None:
@@ -565,6 +623,7 @@ _CCDA_HANDLERS = {
 
 
 def _looks_xml(data: bytes) -> bool:
+    # Cheap sniff for the "you gave the JSON importer an XML file" error hint.
     return data.lstrip()[:1] == b"<"
 
 
@@ -603,6 +662,9 @@ def prepare_ccda_entries(xml_bytes: bytes, patient_id: str) -> tuple[list[dict],
 
 
 def _split_hl7_messages(text: str) -> list[list[str]]:
+    """Split raw ER7 text into messages (each a list of segment strings).
+    Segments are normally \\r-separated; \\n and \\r\\n are tolerated because
+    files get re-saved by editors. A new MSH starts a new message."""
     lines = [ln.strip() for ln in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
     messages: list[list[str]] = []
     for line in lines:
@@ -620,7 +682,12 @@ def _split_hl7_messages(text: str) -> list[list[str]]:
 def prepare_hl7_entries(text: str, patient_id: str) -> tuple[list[dict], dict[str, int]]:
     """Parse HL7v2 ORU^R01 result messages: each OBX becomes an Observation
     and each OBR a DiagnosticReport referencing its Observations. Non-ORU
-    messages are rejected."""
+    messages are rejected. Encoding characters (MSH-2) are honored per
+    message; only OBX value types NM/ST/TX/FT are imported (others counted in
+    skipped). Verified-code rule: coding system 'LN' → LOINC, anything else
+    keeps the raw code under our local system. Observation fullUrls are
+    urn:uuids derived deterministically from the dedup hash so the report's
+    `result` references stay stable across retries."""
     patient_ref = f"Patient/{patient_id}"
     entries: list[dict] = []
     skipped: dict[str, int] = defaultdict(int)
@@ -767,6 +834,11 @@ def prepare_hl7_entries(text: str, patient_id: str) -> tuple[list[dict], dict[st
 
 
 def commit_entries(medplum: MedplumFhirClient, entries: list[dict], source_label: str) -> dict[str, Any]:
+    """POST prepared entries as transaction bundles of CHUNK, then one
+    Provenance over everything newly created (the batch audit trail).
+    Returns {imported, already_existed}: 201 = new, 200 = the conditional
+    create matched an existing resource (dedup hit). Retry-safe end to end —
+    replaying after a partial failure only fills in the gaps."""
     imported = existing = 0
     committed_refs: list[str] = []
     for i in range(0, len(entries), CHUNK):
@@ -799,6 +871,10 @@ def commit_entries(medplum: MedplumFhirClient, entries: list[dict], source_label
 
 
 def run_import(medplum: MedplumFhirClient, kind: str, data: bytes, patient_id: str) -> dict[str, Any]:
+    """Entry point (main.py, watcher.py): dispatch to the right prepare_*,
+    commit, and return {imported, already_existed, prepared, skipped}.
+    ValueError (→ HTTP 400) for wrong-format files, with hints for the common
+    mixups. utf-8-sig decoding tolerates Windows BOMs on CSV/HL7."""
     if kind in ("apple", "fhir") and is_clinical_document(data):
         kind = "ccda"  # .xml files default to apple/fhir upstream — sniff and reroute C-CDA
     if kind == "fhir":

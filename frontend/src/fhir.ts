@@ -1,7 +1,27 @@
 /**
- * FHIR helpers for the HealMeDaily frontend. Canonical mapping: FHIR-MAPPING.md.
- * Every write is idempotent (stable identifier + search-before-create) so
- * retries and double-taps never double-log.
+ * FHIR helpers for the HealMeDaily frontend — the heart of the app's data
+ * layer. Canonical resource shapes live in FHIR-MAPPING.md (read §3
+ * meds/adherence, §7 identifiers, §8 dashboard read model before changing
+ * anything here).
+ *
+ * Where this sits: every page component (Adherence, Overview, Check-in, …)
+ * calls these helpers with the MedplumClient obtained from useMedplum().
+ * This module talks straight to the Medplum FHIR REST API — there is no app
+ * server in between and no side database; dashboards are projections over
+ * bounded FHIR searches, recomputed at render time.
+ *
+ * Invariants enforced here:
+ * - Every write is idempotent (stable business identifier + conditional
+ *   create / update-in-place) so retries and double-taps never double-log.
+ * - Dose-slot identity: one logical scheduled dose = identifier value
+ *   `{request-slug}-{date}T{HH:MM}` (see slotIdentValue). Taken → skipped →
+ *   taken all rewrite that ONE MedicationAdministration.
+ * - "No log ⇒ no resource": a dose the user never acted on has NO
+ *   MedicationAdministration. Dashboards compute due/overdue/unlogged from
+ *   the MedicationRequest schedule; absence is never persisted as "missed"
+ *   (owner-approved medical-safety rule — FHIR-MAPPING §3 and §12).
+ * - All searches are server-side filtered and bounded (`_count`, date
+ *   ranges) — never fetch-all-and-filter-in-JS (CLAUDE.md §5 Search).
  */
 
 import { MedplumClient } from '@medplum/core';
@@ -17,11 +37,16 @@ import type {
   Task,
 } from '@medplum/fhirtypes';
 
+// Project-local systems for identifiers, CodeSystems and extensions
+// (FHIR-MAPPING §1). These URLs are IDENTITY, not locations — never "fix"
+// them to a resolvable host, and never present local codes as LOINC/SNOMED.
 export const BASE = 'https://healmedaily.local/fhir';
 export const IDENT = `${BASE}/identifier`;
 export const CS_OBS = `${BASE}/CodeSystem/observation`;
 export const CS_ADHERENCE = `${BASE}/CodeSystem/adherence-reason`;
 export const CS_DEVICE = `${BASE}/CodeSystem/device`;
+// Owner-set only, never inferred; drives display prominence, never dose
+// logic (owner decision 2026-07-13, CLAUDE.md §8).
 export const EXT_LIFE_CRITICAL = `${BASE}/StructureDefinition/medicationrequest-life-critical`;
 export const EXT_DEVICE_MED = `${BASE}/StructureDefinition/device-assigned-medication`;
 export const EXT_SUPPLY_TARGET = `${BASE}/StructureDefinition/supplydelivery-target-cartridge`;
@@ -29,21 +54,39 @@ export const Q_URL = `${BASE}/Questionnaire/daily-check-in`;
 export const EXT_CADENCE = `${BASE}/StructureDefinition/questionnaire-cadence`;
 export const CS_TASK = `${BASE}/CodeSystem/task`;
 export const QR_IDENT_SYSTEM = `${IDENT}/questionnaire-response`;
+// Standard terminologies — used only with VERIFIED codes (CLAUDE.md §3).
 export const OBS_CATEGORY = 'http://terminology.hl7.org/CodeSystem/observation-category';
 export const LOINC = 'http://loinc.org';
 export const UCUM = 'http://unitsofmeasure.org';
+// system|value search token for the one-and-only owner Patient (seeded).
 export const PATIENT_IDENT = `${IDENT}/patient|healmedaily-user`;
 
+// Identifier system for dose events — one value per logical scheduled dose.
 const ADMIN_IDENT_SYSTEM = `${IDENT}/medication-administration`;
 
+/**
+ * How long after its scheduled time an unlogged dose stays merely "due"
+ * before dashboards escalate it to "overdue" (red). Display urgency ONLY:
+ * crossing the threshold never writes anything — absence of a log is never
+ * persisted as a missed dose (FHIR-MAPPING §3/§12). 90 min encodes a
+ * realistic "with breakfast / before bed" flexibility window, not a
+ * clinical rule; changing it is adherence-display behavior → ask the owner.
+ */
 export const OVERDUE_GRACE_MINUTES = 90;
 
 // ---------------------------------------------------------------------------
 
+/**
+ * UI projection of one cartridge `Device` (type medication-cartridge,
+ * FHIR-MAPPING §5). Counts are unpacked from Device.property; `low` is
+ * derived (remaining <= threshold) and display-only — inventory NEVER gates
+ * whether a med may be taken.
+ */
 export interface CartridgeInfo {
   device: Device;
   name: string;
   enabled: boolean;
+  /** Literal `Medication/{id}` reference from the device-assigned-medication extension. */
   medicationRef?: string;
   capacity?: number;
   remaining?: number;
@@ -51,11 +94,20 @@ export interface CartridgeInfo {
   low: boolean;
 }
 
+/**
+ * One active medication as the UI sees it: the MedicationRequest joined with
+ * its Medication (display name), SIG text, life-critical flag, scheduled
+ * times, and the enabled cartridge assigned to the same Medication (if any).
+ */
 export interface MedInfo {
   request: MedicationRequest;
   name: string;
   instructions: string;
+  /** Owner-set medicationrequest-life-critical extension: sorts missed-dose
+   * warnings first and flags the med — display prominence only, no dose logic. */
   lifeCritical: boolean;
+  /** dosageInstruction.timing.repeat.timeOfDay — FHIR `time` values always
+   * carry seconds ("09:00:00", never "09:00"; see CLAUDE.md §9 gotchas). */
   times: string[]; // HH:MM:SS
   cartridge?: CartridgeInfo;
   /** First day this request is in effect (authoredOn, else record creation).
@@ -64,15 +116,21 @@ export interface MedInfo {
   startDate: string;
 }
 
+/** The single owner Patient, found by its stable seed identifier (this is a
+ * one-patient app — there is no patient picker anywhere). Resolves undefined
+ * until `make seed` has run; callers treat that as "not set up yet". */
 export function getPatient(medplum: MedplumClient): Promise<Patient | undefined> {
   return medplum.searchOne('Patient', { identifier: PATIENT_IDENT });
 }
 
+// One numeric Device.property by local code (capacity / remaining-count /
+// low-stock-threshold — FHIR-MAPPING §5 cartridge fields).
 function deviceProp(device: Device, code: string): number | undefined {
   const prop = device.property?.find((p) => p.type?.coding?.some((c) => c.code === code));
   return prop?.valueQuantity?.[0]?.value;
 }
 
+/** Flatten a cartridge Device into CartridgeInfo (read-only projection). */
 export function toCartridgeInfo(device: Device): CartridgeInfo {
   const capacity = deviceProp(device, 'capacity');
   const remaining = deviceProp(device, 'remaining-count');
@@ -89,6 +147,9 @@ export function toCartridgeInfo(device: Device): CartridgeInfo {
   };
 }
 
+/** All cartridge Devices, any status (disabled ones still render, grayed).
+ * The fleet is intentionally tiny, so one bounded search + client-side
+ * property parsing is acceptable here (FHIR-MAPPING §8). */
 export async function loadCartridges(medplum: MedplumClient): Promise<CartridgeInfo[]> {
   const devices = await medplum.searchResources('Device', {
     type: `${CS_DEVICE}|medication-cartridge`,
@@ -97,6 +158,13 @@ export async function loadCartridges(medplum: MedplumClient): Promise<CartridgeI
   return devices.map(toCartridgeInfo);
 }
 
+/**
+ * Every ACTIVE MedicationRequest joined with its Medication and assigned
+ * cartridge — the med list all adherence surfaces build on. Uses
+ * `_include=MedicationRequest:medication` so it is one round trip (plus the
+ * cartridge fleet). Stopped/inactive meds vanish from dashboards; their
+ * historical MedicationAdministrations remain untouched in the record.
+ */
 export async function loadMeds(medplum: MedplumClient): Promise<MedInfo[]> {
   const bundle = await medplum.search('MedicationRequest', {
     status: 'active',
@@ -141,27 +209,58 @@ export async function loadMeds(medplum: MedplumClient): Promise<MedInfo[]> {
 
 // --- Dose slots & logging ---------------------------------------------------
 
+/**
+ * One expected dose occurrence ("slot"): a (medication, date, time-of-day)
+ * triple computed from the schedule — NOT a stored resource. `identValue` is
+ * the stable identity that links the slot to its MedicationAdministration,
+ * if the user ever logged one ("no log ⇒ no resource").
+ */
 export interface DoseSlot {
   med: MedInfo;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM:SS
   identValue: string;
+  /** Slot time as a Date in the browser's LOCAL timezone (wall-clock dosing). */
   scheduled: Date;
 }
 
+// The per-request half of the slot identity: the request's local business
+// identifier (stable across export/reimport), falling back to server id.
 function requestSlugBase(request: MedicationRequest): string {
   const local = request.identifier?.find((i) => i.system === `${IDENT}/medication-request`);
   return local?.value ?? (request.id as string);
 }
 
+/**
+ * THE dose-slot identity scheme: `{request-slug}-{date}T{HH:MM}`.
+ * Seconds are deliberately dropped — slot identity is minute-grained even
+ * though FHIR `time` values carry seconds. This is the identifier value in
+ * the `medication-administration` system (FHIR-MAPPING §7, "request +
+ * scheduled occurrence"). The frontend, the Pi dispenser scheduler and the
+ * reminders bot all derive this SAME value, so a retry, a correction, or a
+ * different writer for the same slot converges on ONE
+ * MedicationAdministration instead of creating duplicates.
+ */
 export function slotIdentValue(med: MedInfo, date: string, time: string): string {
   return `${requestSlugBase(med.request)}-${date}T${time.slice(0, 5)}`;
 }
 
+/**
+ * Calendar date (YYYY-MM-DD) in the browser's LOCAL timezone. Deliberately
+ * not `toISOString().slice(0, 10)`: a UTC slice taken near midnight lands on
+ * the wrong day, which would shift dose slots, period identifiers and
+ * adherence stats by one day.
+ */
 export function localDateString(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Expand the schedules into concrete slots for one calendar date, sorted by
+ * time of day. Days before a med's startDate yield no slots — a med added
+ * today must not rewrite past days as "unlogged". Pure function; the same
+ * inputs always regenerate identical identValues.
+ */
 export function slotsForDate(meds: MedInfo[], date: string): DoseSlot[] {
   const slots: DoseSlot[] = [];
   for (const med of meds) {
@@ -181,6 +280,13 @@ export function slotsForDate(meds: MedInfo[], date: string): DoseSlot[] {
   return slots.sort((a, b) => a.time.localeCompare(b.time));
 }
 
+/**
+ * Dose events logged in the trailing `days` window. Matched to slots by
+ * identifier (adminForSlot), never by fuzzy timestamp comparison.
+ * Server-side date filter + `_count=1000` (Medplum's hard page max) keeps
+ * this a single bounded request — a much longer window would need
+ * searchResourcePages.
+ */
 export async function loadAdmins(
   medplum: MedplumClient,
   days: number
@@ -193,6 +299,9 @@ export async function loadAdmins(
   });
 }
 
+/** The logged event for a slot, if any — strict identifier match only.
+ * `undefined` means unlogged: a real, meaningful state (no resource exists),
+ * not an error. */
 export function adminForSlot(
   admins: MedicationAdministration[],
   slot: DoseSlot
@@ -202,14 +311,30 @@ export function adminForSlot(
   );
 }
 
+/** The three explicit user actions on a slot. "Did nothing" is deliberately
+ * not an action — it leaves no resource behind (FHIR-MAPPING §3). */
 export type DoseAction = 'taken' | 'skipped' | 'missed';
 
+// statusReason codings for not-done outcomes (adherence-reason CodeSystem):
+// skipped = deliberate choice, missed = forgot/unable. Both user-asserted.
 const REASON_CODE: Record<Exclude<DoseAction, 'taken'>, { code: string; display: string }> = {
   skipped: { code: 'user-skipped', display: 'Skipped by user' },
   missed: { code: 'user-marked-missed', display: 'Marked missed by user' },
 };
 
-/** Log (or change) one logical dose event. Idempotent per (request, slot). */
+/**
+ * Log (or change) one logical dose event. Idempotent per (request, slot):
+ * the slot identifier makes retries, double-taps and corrections converge on
+ * a single MedicationAdministration — update-in-place, never a duplicate.
+ *
+ * Writes: MedicationAdministration `completed` (taken) or `not-done` +
+ * statusReason (skipped/missed), plus a display-only cartridge
+ * remaining-count adjustment when the med has one assigned.
+ *
+ * `takenAt` supports backdating: clinical time lives in effectiveDateTime
+ * while meta.lastUpdated keeps the record-write time (CLAUDE.md §6).
+ * Skips/misses pin effectiveDateTime to the scheduled slot time instead.
+ */
 export async function logDose(
   medplum: MedplumClient,
   patientId: string,
@@ -217,6 +342,7 @@ export async function logDose(
   action: DoseAction,
   takenAt?: Date
 ): Promise<MedicationAdministration> {
+  // One identifier search decides create-vs-correct for this slot.
   const existing = await medplum.searchOne('MedicationAdministration', {
     identifier: `${ADMIN_IDENT_SYSTEM}|${slot.identValue}`,
   });
@@ -240,6 +366,8 @@ export async function logDose(
     base.device = [{ reference: `Device/${slot.med.cartridge.device.id}` }];
   }
 
+  // Capture the prior state first — the inventory delta below depends on the
+  // TRANSITION (taken↔not-taken), not on the final status alone.
   const wasTaken = existing?.status === 'completed';
   const result = existing
     ? await medplum.updateResource({ ...base, id: existing.id, meta: existing.meta })
@@ -249,6 +377,9 @@ export async function logDose(
 
   // Display-only inventory (never gates taking a med): decrement on a new
   // "taken", restore when a taken dose is corrected to skipped/missed.
+  // Fresh read + clamp to [0, capacity]; no ifMatch here (unlike the
+  // dispenser's decrement path) because a lost race only skews a cosmetic
+  // count that the next refill resets.
   const delta = action === 'taken' && !wasTaken ? -1 : action !== 'taken' && wasTaken ? +1 : 0;
   if (delta !== 0 && slot.med.cartridge?.remaining !== undefined) {
     const cart = slot.med.cartridge;
@@ -274,6 +405,8 @@ export async function logDose(
 
 // --- Check-in cadence engine (spec §11-lite: D / W / M periods) ---------------
 
+/** Cadence codes from the questionnaire-cadence extension (owner spec §11):
+ * Daily / Weekly / Monthly check-in periods. */
 export type Cadence = 'D' | 'W' | 'M';
 
 export const CADENCE_LABEL: Record<Cadence, string> = { D: 'Daily', W: 'Weekly', M: 'Monthly' };
@@ -286,13 +419,17 @@ export function mondayOf(d: Date): string {
 }
 
 /** Stable per-period identifier value: retries and resubmits within the same
- * period update the same QuestionnaireResponse instead of duplicating. */
+ * period update the same QuestionnaireResponse instead of duplicating.
+ * Formats (FHIR-MAPPING §2): `{key}-{YYYY-MM-DD}` (D), `{key}-week-{monday}`
+ * (W), `{key}-month-{YYYY-MM}` (M) — all derived from LOCAL calendar time. */
 export function periodIdentValue(questionnaireKey: string, cadence: Cadence, today: Date): string {
   if (cadence === 'D') return `${questionnaireKey}-${localDateString(today)}`;
   if (cadence === 'W') return `${questionnaireKey}-week-${mondayOf(today)}`;
   return `${questionnaireKey}-month-${localDateString(today).slice(0, 7)}`;
 }
 
+/** One due-panel entry: a cadence-tagged Questionnaire plus this period's
+ * identifier and existing response (present ⇒ already done, still editable). */
 export interface CheckinDef {
   questionnaire: Questionnaire;
   cadence: Cadence;
@@ -301,7 +438,9 @@ export interface CheckinDef {
 }
 
 /** Every active questionnaire carrying a cadence tag, with its current-period
- * response (if any) — the "what is due now" list. */
+ * response (if any) — the "what is due now" list, sorted D → W → M.
+ * Superseded questionnaire versions are `retired` in the CDR, so filtering on
+ * status=active resolves each form uniquely (FHIR-MAPPING §2). */
 export async function loadCheckins(medplum: MedplumClient, today: Date = new Date()): Promise<CheckinDef[]> {
   const questionnaires = await medplum.searchResources('Questionnaire', { status: 'active', _count: '50' });
   const defs: CheckinDef[] = [];
@@ -323,6 +462,12 @@ export async function loadCheckins(medplum: MedplumClient, today: Date = new Dat
 
 // --- Follow-up tasks (event-triggered cadence) --------------------------------
 
+/**
+ * Open symptom follow-up Tasks (status=requested, newest first) — created by
+ * the symptom→follow-up bot with idempotent identifiers (FHIR-MAPPING §2).
+ * Display-only workflow: resolution is always the user's action, never
+ * automatic escalation or clinical logic.
+ */
 export function loadFollowUps(medplum: MedplumClient): Promise<Task[]> {
   return medplum.searchResources('Task', {
     status: 'requested',
@@ -332,14 +477,20 @@ export function loadFollowUps(medplum: MedplumClient): Promise<Task[]> {
   });
 }
 
+/** Mark a follow-up handled (status flip only; re-running is harmless). */
 export async function completeFollowUp(medplum: MedplumClient, task: Task): Promise<void> {
   await medplum.updateResource({ ...task, status: 'completed' });
 }
 
 // --- Adherence aggregates ----------------------------------------------------
 
+/** Whole-day adherence classification. 'unlogged' (scheduled, nothing
+ * recorded) is deliberately distinct from 'none-taken' (explicit skips or
+ * misses): under no-log⇒no-resource, silence and refusal are different facts
+ * and must never be conflated in a dashboard. */
 export type DayStatus = 'all-taken' | 'partial' | 'none-taken' | 'unlogged' | 'no-doses';
 
+/** Per-day rollup consumed by the calendar Heatmap and adherence stats. */
 export interface DaySummary {
   date: string;
   scheduled: number;
@@ -348,6 +499,11 @@ export interface DaySummary {
   status: DayStatus;
 }
 
+/**
+ * Roll up the trailing `days` calendar days (oldest first, ending `today`)
+ * by regenerating each day's slots and matching logged admins by identifier.
+ * Pure function of its inputs — tests pass a fixed `today`.
+ */
 export function summarizeDays(
   meds: MedInfo[],
   admins: MedicationAdministration[],

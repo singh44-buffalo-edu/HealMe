@@ -1,3 +1,9 @@
+"""AI Settings router + routing model: legacy AI_PROVIDER fallback vs settings
+file precedence, per-feature local/cloud/off routing (get_provider_for), BYOK
+key endpoints returning masked keys only, the /ai/test connectivity probe, and
+the boundary-ledger AuditEvent shape. Keystore and settings paths are isolated
+to tmp_path — the real Keychain and data/secrets are never touched."""
+
 import httpx
 import pytest
 from fastapi import FastAPI

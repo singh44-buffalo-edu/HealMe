@@ -1,5 +1,20 @@
 # Medplum full stack (postgres + redis + server + app), pinned to 5.1.26.
 #
+# Based on Medplum's official docker-compose.full-stack.yml (CLAUDE.md §5)
+# with local edits: pinned image tags, Google/recaptcha auth disabled, the
+# registration-hardening note below. Start via `make up` (waits for the
+# healthcheck — the FIRST boot does one-time setup and can take minutes).
+#
+# Port map (host):
+#   3000  medplum-app     — built-in admin UI (resource browser, bot logs);
+#                           never rebuild admin, use this
+#   8103  medplum-server  — FHIR R4 API + OAuth + /healthcheck + /storage
+#   5432  postgres        — the ENTIRE CDR lives here (no side database);
+#                           scripts/backup.py pg_dumps it
+#   6379  redis           — server cache/queues, no persistent app data
+# The custom frontend (:5173 dev / :8080 prod) and ai-service (:8000) are NOT
+# in this file — see docker-compose.app.yml and `make dev`.
+#
 # Phase 9 hardening note: open self-registration MUST stay enabled for the
 # very first boot (scripts/bootstrap.py registers the owner account through
 # it). Once `make bootstrap` has run, uncomment MEDPLUM_REGISTER_ENABLED
@@ -72,6 +87,9 @@ services:
       MEDPLUM_REDIS_PORT: 6379
       MEDPLUM_REDIS_PASSWORD: 'medplum'
 
+      # File-based binary store INSIDE the container (uploaded PDFs/photos,
+      # generated review PDFs). backup.py tars this dir; note attachment URLs
+      # are rewritten to presigned /storage/ links on read (CLAUDE.md §9).
       MEDPLUM_BINARY_STORAGE: 'file:./binary/'
       MEDPLUM_SUPPORT_EMAIL: '\"Medplum\" <support@medplum.com>'
       # Google login + recaptcha intentionally disabled for this private single-user
@@ -84,8 +102,11 @@ services:
       MEDPLUM_MAX_BATCH_SIZE: '50mb'
       MEDPLUM_BOT_LAMBDA_ROLE_ARN: ''
       MEDPLUM_BOT_LAMBDA_LAYER_NAME: 'medplum-bot-layer'
+      # Bots run in-process (vmcontext) — no AWS Lambda. Server-level switch
+      # only: each project ALSO needs the 'bots' feature (deploy_bots.py).
       MEDPLUM_VM_CONTEXT_BOTS_ENABLED: 'true'
       MEDPLUM_DEFAULT_BOT_RUNTIME_VERSION: 'vmcontext'
+      # Dev-open CORS; tighten to explicit origins during hardening (CLAUDE.md §5).
       MEDPLUM_ALLOWED_ORIGINS: '*'
       MEDPLUM_INTROSPECTION_ENABLED: 'true'
       MEDPLUM_SHUTDOWN_TIMEOUT_MILLISECONDS: 30000

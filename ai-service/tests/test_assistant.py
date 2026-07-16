@@ -1,3 +1,10 @@
+"""Assistant router invariants against a fake in-memory Medplum: citations are
+server-verified (hallucinated [n] tags never reach the client), the boundary
+AuditEvent is written BEFORE any cloud call and never for local/unconfigured
+routes, session listing/deletion only ever touches assistant-qa Communications
+(deletion leaves an audit stub), and NL import creates review Tasks — never
+committed clinical resources. No network, no real Medplum."""
+
 import json
 
 import pytest

@@ -1,3 +1,13 @@
+/**
+ * Tests for the dose-reminders cron bot (src/reminders-runner.ts) against
+ * @medplum/mock's in-memory FHIR repo, with the clock frozen via the bot's
+ * Parameters{now} test hook. Covers: reminder only after slot + 90min grace,
+ * neutral "not logged" wording (never "missed"), idempotent identifiers,
+ * suppression when the slot already has ANY MedicationAdministration (taken
+ * or skipped), the medical-safety invariant that the bot never writes dose
+ * status, and the authoredOn start anchor.
+ * Run: `cd backend-bots && npm test` (part of `make check`).
+ */
 import { indexSearchParameterBundle, indexStructureDefinitionBundle } from '@medplum/core';
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { readJson, SEARCH_PARAMETER_BUNDLE_FILES } from '@medplum/definitions';

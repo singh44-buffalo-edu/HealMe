@@ -1,6 +1,21 @@
 /* oxlint-disable react/only-export-components --
    NAV / NAV_SETTINGS / count hooks are intentionally shared with MorePage
    (mobile hub needs full nav parity); cost is full-reload HMR for this file. */
+/**
+ * App shell: auth gate, navigation registry, and the desktop/mobile split.
+ * Mounted by main.tsx inside the Medplum/Mantine providers.
+ *
+ * Shell contract:
+ * 1. Medplum session still restoring → full-screen loader.
+ * 2. No profile → sign-in card (local Medplum account; registration happens
+ *    in the Medplum app at :3000, never here).
+ * 3. Signed in → useIsMobile() (767px breakpoint) picks the chrome:
+ *    MobileShell (slim header + floating MobileTabBar) or the desktop
+ *    sidebar grid. BOTH render the same <AppRoutes/> — pages are shared
+ *    across shells and must stay responsive; only the chrome differs. The
+ *    switch is live: resizing across the breakpoint swaps shells without
+ *    losing route state (the router sits above this component).
+ */
 import { Center, Loader, Stack, Text, Title } from '@mantine/core';
 import { SignInForm, useMedplum, useMedplumProfile } from '@medplum/react';
 import {
@@ -51,6 +66,8 @@ import { TimelinePage } from './pages/TimelinePage';
 import { TrendsPage } from './pages/TrendsPage';
 import { VitalsPage } from './pages/VitalsPage';
 
+/** One nav entry. `ai: true` renders it indigo — the AI-surface identity
+ * color, reserved for AI features only (three-data-classes rule). */
 export interface NavItem {
   to: string;
   label: string;
@@ -59,6 +76,9 @@ export interface NavItem {
   badge?: number;
 }
 
+/** Primary nav in display order. The mobile More hub (MorePage) renders this
+ * same list, so adding a page here registers it for BOTH shells — but the
+ * route itself must also be added to AppRoutes below. */
 export const NAV: NavItem[] = [
   { to: '/overview', label: 'Dashboard', icon: IconLayoutDashboard },
   { to: '/', label: 'Medications', icon: IconPill },
@@ -84,6 +104,12 @@ export const NAV_SETTINGS: NavItem[] = [
   { to: '/ai-settings', label: 'AI settings', icon: IconSettings },
 ];
 
+/**
+ * Pending ingestion-review-queue size from the ai-service, refetched on every
+ * route change (cheap; keeps the badge honest right after approvals).
+ * Swallows failures and shows no badge when the ai-service is down — nav
+ * must keep working without it (app boots with no AI configured).
+ */
 export function useReviewQueueCount(): number {
   const [count, setCount] = useState(0);
   const location = useLocation();
@@ -105,6 +131,9 @@ export function useReviewQueueCount(): number {
   return count;
 }
 
+/** Total Observation count for the sidebar footer. `_total=accurate` is
+ * required — Medplum defaults `_total` to none, so Bundle.total would
+ * otherwise be undefined (CLAUDE.md §5 Search). */
 export function useRecordCount(): number | undefined {
   const medplum = useMedplum();
   const [count, setCount] = useState<number>();
@@ -145,7 +174,10 @@ function AppRoutes() {
   );
 }
 
-/** Mobile shell (design 2a/4d): slim top row, full-width main, floating tab bar. */
+/** Mobile shell (design Mobile 2a/4d): slim top row, full-width main,
+ * floating tab bar. Main's bottom padding reserves room for the fixed tab
+ * bar plus the iOS safe-area inset so content never hides beneath it; the
+ * header keeps the VaultChip + review badge visible on every mobile screen. */
 function MobileShell() {
   const reviewCount = useReviewQueueCount();
   return (
@@ -204,6 +236,9 @@ function MobileShell() {
   );
 }
 
+/** Desktop sidebar: brand, VaultChip (the privacy promise appears on every
+ * surface), full nav with review-queue badge, and a footer with record count,
+ * the not-medical-advice disclaimer and sign-out. */
 function Sidebar() {
   const medplum = useMedplum();
   const profile = useMedplumProfile();
@@ -332,6 +367,8 @@ function Sidebar() {
   );
 }
 
+/** Root component — implements the shell contract described in the file
+ * header (loader → sign-in → mobile or desktop shell). */
 export function App() {
   const medplum = useMedplum();
   const profile = useMedplumProfile();

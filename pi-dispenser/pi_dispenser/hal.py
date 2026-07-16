@@ -14,8 +14,17 @@ Two backends:
   hx711 are imported lazily *inside* methods so this module imports cleanly
   off-Pi; touching hardware off-Pi raises a clear error.
 
+Called only by agent.DispenserAgent (via cli.py wiring); calls nothing else
+in this package. The backend contract — the exact duck-typed surface both
+backends must implement — is spelled out in the "Device interfaces" section
+below. Any third backend (e.g. a different mechanism) implements that same
+surface and the agent works unchanged.
+
 Safety: the HAL moves plastic and reads sensors. It never contains dosing
-logic — whether a medication may be taken is never decided here.
+logic — whether a medication may be taken is never decided here. It also
+never talks FHIR: sensor readings are hardware telemetry, and telemetry
+never reaches the record (FHIR-MAPPING.md §9) — only agent.py's dose events
+do.
 """
 
 from __future__ import annotations
@@ -37,6 +46,11 @@ class SimClock:
     scheduled sim time. Pacing: each hop real-sleeps
     ``min(sim_delta / speed, max_real_pause)`` seconds; ``speed <= 0``
     disables real sleeping entirely (as fast as possible).
+
+    Event sources register via ``subscribe`` (SimulatedBackend does) and must
+    provide ``next_event_at() -> datetime | None`` and ``fire_due(now)``.
+    Firing events at their exact sim timestamp — not at the jump target — is
+    what makes assertions like "pickup at 09:04:00" exact in tests.
     """
 
     def __init__(self, start: datetime, speed: float = 60.0, max_real_pause: float = 1.0) -> None:
@@ -58,6 +72,10 @@ class SimClock:
             _time.sleep(min(delta.total_seconds() / self.speed, self.max_real_pause))
 
     def sleep_until(self, target: datetime) -> None:
+        # Hop event-to-event: advance sim time to each pending scenario event
+        # at or before `target`, fire it, repeat; then land on `target`.
+        # Events fire AFTER _now is advanced so their callbacks see the
+        # correct current time.
         target = max(target, self._now)
         while True:
             upcoming = [t for t in (s.next_event_at() for s in self._sources) if t is not None]  # type: ignore[attr-defined]
@@ -84,6 +102,9 @@ class RealClock:
         return datetime.now(self._tz)
 
     def sleep_until(self, target: datetime) -> None:
+        # 30s cap keeps the loop responsive to NTP corrections / DST shifts:
+        # the wall clock is re-read every hop instead of trusting one long
+        # sleep computed from a possibly-stale clock.
         while True:
             remaining = (target - self.now()).total_seconds()
             if remaining <= 0:
@@ -95,18 +116,33 @@ class RealClock:
 # Device interfaces (duck-typed; both backends implement the same surface)
 # ---------------------------------------------------------------------------
 #
-#   SpindleMotor: rotate_to_tray(tray: int), open_wedge(wedge: int)
-#   LoadCell:     available: bool, read_grams() -> float,
-#                 on_change(cb: (grams: float, at: datetime) -> None)
-#   ChimeRing:    ring(pattern: str = "gentle")
-#   BayCamera:    available: bool, capture() -> bytes | None
-#   LidSensor:    is_closed() -> bool
+# THE BACKEND CONTRACT. There is deliberately no ABC — the agent only uses
+# what is listed here, so any object exposing this surface is a backend:
+#
+#   backend.spindle    SpindleMotor: rotate_to_tray(tray: int), open_wedge(wedge: int)
+#   backend.load_cell  LoadCell:     available: bool, read_grams() -> float,
+#                                    on_change(cb: (grams: float, at: datetime) -> None)
+#   backend.chime      ChimeRing:    ring(pattern: str = "gentle")
+#   backend.camera     BayCamera:    available: bool, capture() -> bytes | None
+#   backend.lid        LidSensor:    is_closed() -> bool
 #
 # A Backend bundles the five devices plus retract_base_tray() (the T+2h
-# final-rung actuator from the Dose Ritual design).
+# final-rung actuator from the Dose Ritual design). SimulatedBackend adds an
+# optional on_user_tap() hook (the agent probes for it with getattr) that
+# models the app's "Taken" tap reaching the agent over the LAN.
+#
+# `available` flags matter: the agent uses them to pick its pickup-detection
+# strategy (load cell -> camera polling -> self-report only), which in turn
+# decides the administration-verification code (weight > camera > self, §9).
 
+# Tray/wedge geometry is fixed by the physical design ("Web - Dispenser
+# Suite"): 8 stacked trays (= up to 8 meds), 7 wedges each (one per weekday;
+# open_wedge is keyed by datetime.weekday()).
 TRAY_COUNT = 8
 WEDGES_PER_TRAY = 7
+# Below this the base tray counts as empty (= dose picked up). Not zero:
+# load cells drift/vibrate around 0, and 0.05 g is far below any pill
+# (sim default wedge is 0.62 g). Sim + real hardware share this threshold.
 PICKUP_EMPTY_GRAMS = 0.05  # readings at/below this mean "base tray is empty"
 
 
@@ -119,6 +155,11 @@ def simulated_frame_shows_empty(frame: bytes) -> bool:
 # ---------------------------------------------------------------------------
 # Simulated backend
 # ---------------------------------------------------------------------------
+#
+# The _Sim* device classes below are one-liner views over SimulatedBackend's
+# shared state (tray weight, availability flags, callback lists) — the
+# backend object is the single source of truth, the devices just present the
+# contract surface.
 
 
 class _SimSpindle:
@@ -185,7 +226,10 @@ class _SimLid:
 class SimulatedBackend:
     """Deterministic backend scripted by a scenario dict.
 
-    Scenario keys used here:
+    SCENARIO FORMAT (scenarios/day.json is the reference sample). One JSON
+    file scripts a whole day; the keys split across two consumers:
+
+    Read HERE (hardware behaviour):
       hardware.load_cell (bool, default true)   — load cell present
       hardware.camera (bool, default true)      — bay camera present
       hardware.wedge_grams (float, default 0.62)— weight one wedge adds
@@ -193,6 +237,17 @@ class SimulatedBackend:
       pickups: [{"at": "HH:MM:SS", "via": "sensor"|"tap"}]
         "sensor": the tray physically empties; whichever sensors exist notice.
         "tap": the user taps "Taken" in the app (self-report path).
+        Each pickup empties the tray of EVERYTHING dropped so far. Times are
+        local to the scenario's day + timezone and need seconds (FHIR-style).
+
+    Read by cli._scenario_slots (the day's regimen, dry-run stand-in for a
+    live Medplum fetch — real FHIR shapes, same as seed.py produces):
+      date "YYYY-MM-DD" · timezone (IANA name or "local") · patient_id
+      dispenser (Device) · medications ([Medication]) ·
+      medication_requests ([MedicationRequest]) · cartridges ([Device])
+
+    Toggling hardware.* is how the verification-fallback paths are tested:
+    no load cell -> camera polling; neither -> "tap" self-report only.
     """
 
     def __init__(self, scenario: dict, clock: SimClock, day: date, out: Callable[[str], None] = print) -> None:
@@ -232,10 +287,14 @@ class SimulatedBackend:
     # -- backend surface ----------------------------------------------------
 
     def retract_base_tray(self) -> None:
+        """T+2h final-rung actuator (Dose Ritual design). State is kept so
+        tests can assert the tray physically closed."""
         self.base_tray_retracted = True
         self._log("base tray: retracted (final escalation rung)")
 
     def on_user_tap(self, callback: Callable[[datetime], None]) -> None:
+        """Register for `"via": "tap"` pickups — the sim's stand-in for the
+        app's manual "Taken" tap reaching the agent."""
         self._tap_callbacks.append(callback)
 
     # -- scenario event source (SimClock protocol) --------------------------
@@ -258,6 +317,8 @@ class SimulatedBackend:
         self._out(f"[hw {self._clock.now().strftime('%H:%M:%S')}] {msg}")
 
     def _drop_pills(self) -> None:
+        # Weight accumulates: two unpicked doses = two wedges on the load
+        # cell, matching the physical funnel-into-one-tray design.
         self.tray_grams += self.wedge_grams
         self.tray_has_pills = True
         if self.load_cell_available:
@@ -265,6 +326,9 @@ class SimulatedBackend:
                 cb(self.tray_grams, self._clock.now())
 
     def _pickup(self, at: datetime, via: str) -> None:
+        # Which callback fires decides the agent's verification code:
+        # weight change -> "weight"; tap -> re-check sensors then "self" at
+        # worst; no sensor at all -> the camera poll finds the empty tray.
         self.tray_grams = 0.0
         self.tray_has_pills = False
         self._log(f"scenario: pickup ({via})")
@@ -296,7 +360,9 @@ class SimulatedBackend:
 #   CAMERA            = CSI ribbon (picamera2), not a GPIO pin
 #
 # CALIBRATION CONSTANTS — placeholders, NOT verified facts. Every rig
-# differs; measure on your hardware (see README "Calibration") before use:
+# differs; measure on your hardware (see README "Calibration") before use.
+# The 1.0/2.0 ms values are only the generic hobby-servo range; running a
+# servo to these limits against a mechanical stop can strip its gears.
 
 WEDGE_SERVO_MIN_PULSE_MS = 1.0  # CALIBRATE: closed position — find by slow sweep
 WEDGE_SERVO_MAX_PULSE_MS = 2.0  # CALIBRATE: open position — find by slow sweep
@@ -305,6 +371,8 @@ TRAY_SERVO_MAX_PULSE_MS = 2.0  # CALIBRATE: retracted
 STEPS_PER_TRAY = 25  # CALIBRATE: (steps/rev x microstepping x gear ratio) / TRAY_COUNT
 LOADCELL_SCALE = 1.0  # CALIBRATE: raw_units / gram, from a known mass
 LOADCELL_OFFSET = 0  # CALIBRATE: raw reading with empty base tray
+# Not a calibration value: how often the HX711 poll thread samples. 0.5s is
+# plenty — pickup detection only needs sub-minute latency vs 15-min rungs.
 LOADCELL_POLL_SECONDS = 0.5
 
 _OFF_PI_HINT = (
@@ -314,10 +382,19 @@ _OFF_PI_HINT = (
 
 
 def _require(module: str):
+    """Lazy import of a Pi-only hardware library; off-Pi the ImportError is
+    rewritten into an actionable "run the simulator instead" hint."""
     try:
         return __import__(module)
     except ImportError as exc:  # pragma: no cover - only reachable off-Pi
         raise RuntimeError(_OFF_PI_HINT.format(dep=module)) from exc
+
+
+# Bring-up status: chime + lid switch work today; spindle, servos, load cell
+# and camera raise NotImplementedError with the exact calibration step needed
+# (deliberate — a loud failure beats silently pretending hardware moved).
+# `available` properties probe by import so the agent can degrade gracefully
+# (camera fallback / self-report) on partially-equipped rigs.
 
 
 class _GpioSpindle:

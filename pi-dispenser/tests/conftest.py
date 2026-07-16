@@ -1,3 +1,6 @@
+"""Pytest bootstrap: path setup only — no fixtures live here (shared FHIR
+fixture builders are in fixtures.py, imported explicitly by tests)."""
+
 import sys
 from pathlib import Path
 

@@ -1,3 +1,8 @@
+"""Deterministic importers (FHIR bundle / CSV / Apple Health): pure prepare_*
+functions only — patient retargeting, content-hash dedup identifiers +
+If-None-Exist, unit conversions and per-date aggregation, and rejection of
+wrong-format files. No I/O, no Medplum."""
+
 from app import importers
 
 PATIENT = "p-123"

@@ -1,3 +1,31 @@
+/**
+ * TimelinePage — symptom-vs-medication timeline (route /timeline).
+ *
+ * Implements the design handoff's `Web - Timeline.dc.html`: density scrubber,
+ * filter chips, and the day-grouped event spine (time column, ringed dot on a
+ * vertical rule, event cards), plus a per-med lanes card on a shared day axis.
+ * The design's ✦ AI / REVIEWED class tags are deliberately absent — no AI
+ * events are plotted here, and the ✦ treatment is never applied to non-AI
+ * content (three-data-classes rule, CLAUDE.md §2). Only CRITICAL remains.
+ *
+ * Architecture: leaf route in App.tsx's shell; a read-only projection over
+ * three bounded reads (dashboards are projections, never stored aggregates —
+ * FHIR-MAPPING §8):
+ * - MedicationRequest + Medication + cartridge Devices via loadMeds()
+ * - MedicationAdministration via loadAdmins(90)
+ * - Observation code=CS_OBS|symptom date=ge{90d} _count=500 _sort=date
+ *
+ * Event derivation rules:
+ * - "missed" lane events come ONLY from explicit not-done administrations:
+ *   statusReason `user-marked-missed` reads "missed", anything else
+ *   "skipped". An unlogged slot is NOT an event (no log ⇒ no resource ⇒ no
+ *   claim, FHIR-MAPPING §3) — unlike AdherencePage's live due/overdue states,
+ *   which are wall-clock projections rather than records.
+ * - "med-start" markers come from MedicationRequest.authoredOn — the med
+ *   start anchor (FHIR-MAPPING §2) — falling back to record creation time.
+ * - Symptom↔med correlation reading is left entirely to the human; the page
+ *   draws no causal link between lanes and the footer says so (SR-6 framing).
+ */
 import { Alert, Loader } from '@mantine/core';
 import { normalizeErrorString } from '@medplum/core';
 import { useMedplum } from '@medplum/react';
@@ -8,6 +36,8 @@ import type { MedInfo } from '../fhir';
 import { CS_OBS, loadAdmins, loadMeds, localDateString } from '../fhir';
 import { T, mono } from '../tokens';
 
+// Fixed 90-day span — the app's default review window (owner decision,
+// CLAUDE.md §8), matching OverviewPage and the Health Review default.
 const WINDOW_DAYS = 90;
 
 type EventKind = 'symptom' | 'missed' | 'med-start';
@@ -124,6 +154,10 @@ export function TimelinePage() {
           }),
         ]);
 
+        // One lane per active med — kept even with zero events so the human
+        // can see quiet meds alongside busy ones: a start marker when the med
+        // began inside the window, plus every explicit skipped/missed dose
+        // matched to this med via MedicationAdministration.request.
         const medLanes: Lane[] = meds.map((med: MedInfo) => {
           const events: TimelineEvent[] = [];
           const startedRaw = med.request.authoredOn ?? med.request.meta?.lastUpdated ?? '';

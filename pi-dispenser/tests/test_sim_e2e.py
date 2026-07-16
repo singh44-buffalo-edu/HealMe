@@ -1,4 +1,12 @@
-"""End-to-end: the sample scenario through the agent, dry-run captured."""
+"""End-to-end: full simulated days through the real agent/HAL/ladder stack,
+FHIR output captured via DryRunSink (nothing written anywhere).
+
+Covers the safety-critical behaviors as whole-day sequences: the expected
+event order for the sample day, the full ladder walk with the default
+missed log, NO resource when the owner's config says not to log, family
+alert only when explicitly configured, the weight > camera > self
+verification fallbacks, and webhook failures never affecting the FHIR
+stream. speed=0 means zero real sleeping — a "day" runs in milliseconds."""
 
 import json
 from copy import deepcopy

@@ -1,3 +1,31 @@
+/**
+ * AiSettingsPage — BYOK provider setup and per-feature AI routing (Phase 7).
+ *
+ * Architecture: routed from App.tsx; every read/write goes to the Python
+ * ai-service /ai endpoints (../api) — the frontend never sees a full API key
+ * after save (only the service's masked echo) and never touches FHIR here.
+ *
+ * BYOK STORAGE STORY (FHIR-MAPPING.md §11 — "not FHIR" by design): keys the
+ * owner pastes here are stored by the ai-service in the macOS Keychain, with
+ * a 0600 owner-only file under data/secrets/ as the fallback. They are never
+ * written to the FHIR record, never appear in exports/backups of the record,
+ * and never round-trip to this UI. Removing a key here empties the keystore
+ * entry, but a key present in .env can still configure the provider — the
+ * remove flow refetches and says so explicitly.
+ *
+ * Routing model: four features (health-review / ingest-extraction /
+ * assistant / nl-import) × three routes (local | cloud | off), persisted
+ * service-side so all clients agree. Local (Ollama) is ALWAYS offered — even
+ * unconfigured it renders as "not configured", never disappears (owner
+ * decision, CLAUDE.md §8). "Off" is a real state: the feature does nothing.
+ *
+ * BOUNDARY COPY RULES (CLAUDE.md §2/§6): anything cloud is amber and names
+ * the recipient — the route segment's "☁ your key", the per-row note
+ * "☁ <Provider> · leaves this machine", and the footer reminder that every
+ * cloud call lands in the boundary ledger (an AuditEvent written BEFORE the
+ * call — see HistoryPage). Local is green "stays home". Never present a
+ * cloud path in neutral colors and never omit the provider name.
+ */
 import { Loader } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCloud, IconHome } from '@tabler/icons-react';
@@ -184,6 +212,16 @@ function RouteSegment({
 
 type TestState = Record<string, { testing: boolean; result?: AiTestResult }>;
 
+/**
+ * AI settings screen: local (Ollama) card, cloud BYOK card with provider
+ * picker + key field + connectivity test, and the feature-routing table.
+ *
+ * Backend: ai-service /ai/settings (GET/PUT), /ai/keys (PUT/DELETE),
+ * /ai/test. All state is service-persisted; this component only holds
+ * transient drafts (key input, in-flight flags, test outcomes). Failure
+ * modes: a failed initial load renders a retry card; every mutation error
+ * surfaces as a notification and rolls back the optimistic bit it touched.
+ */
 export function AiSettingsPage() {
   const [settings, setSettings] = useState<AiSettings>();
   const [loading, setLoading] = useState(true);
@@ -230,6 +268,10 @@ export function AiSettingsPage() {
     );
   };
 
+  /** Switch the active cloud provider (persisted service-side so every
+   * feature routed "cloud" moves with it). Optimistic; reverts on failure.
+   * Clears the key draft/confirm state so a half-typed key for provider A
+   * can't be saved to provider B. */
   const pickProvider = async (name: string) => {
     if (name === selProvider || switching) {
       return;
@@ -253,6 +295,10 @@ export function AiSettingsPage() {
     }
   };
 
+  /** Persist the pasted key into the keystore (Keychain / 0600 fallback —
+   * see file header). The service replies with configured + a masked echo;
+   * the raw key is dropped from React state immediately after. Replacing an
+   * existing key is the same call. Any previous test result is invalidated. */
   const saveKey = async () => {
     const key = keyDraft.trim();
     if (!key || savingKey) {
@@ -279,6 +325,10 @@ export function AiSettingsPage() {
     }
   };
 
+  /** Two-step key removal (first click arms the confirm label). Deletes the
+   * keystore entry; note the provider can REMAIN configured via an .env key,
+   * which is why the truth is refetched and the amber notification calls the
+   * .env case out — never tell the owner cloud is off when it isn't. */
   const removeKey = async () => {
     if (!confirmRemove) {
       setConfirmRemove(true);
@@ -317,6 +367,9 @@ export function AiSettingsPage() {
     }
   };
 
+  /** Connectivity probe via ai-service /ai/test — deliberately a tiny
+   * no-record-data request, so testing a key never crosses the data
+   * boundary. Failures are rendered inline, not toasted. */
   const runTest = async (name: string) => {
     setTests((t) => ({ ...t, [name]: { testing: true } }));
     let result: AiTestResult;
@@ -328,6 +381,9 @@ export function AiSettingsPage() {
     setTests((t) => ({ ...t, [name]: { testing: false, result } }));
   };
 
+  /** Persist one feature's route (local|cloud|off). Not optimistic: the
+   * segment stays put until the service confirms, because a wrongly-shown
+   * "local" while the service still routes cloud would be a boundary lie. */
   const setRoute = async (feature: AiFeature, route: AiRoute) => {
     if (!settings || settings.routing[feature] === route || savingRoute) {
       return;

@@ -1,8 +1,13 @@
+# pi-dispenser packaging. Installed as a real package ONLY on the Pi
+# (`pip install .` per README "Pi setup"); on dev machines it runs uninstalled
+# via PYTHONPATH (make pi-sim / pi-test use ai-service's venv for pytest+httpx).
 [project]
 name = "pi-dispenser"
 version = "0.1.0"
 description = "HealMeDaily Raspberry Pi pill-dispenser agent (Phase 8) - simulator-first"
 requires-python = ">=3.12"
+# Deliberately minimal: stdlib + httpx only. Hardware libs (gpiozero, hx711,
+# picamera2) are NOT dependencies — hal.py imports them lazily on the Pi.
 dependencies = ["httpx"]
 
 [build-system]
@@ -12,9 +17,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["pi_dispenser"]
 
+# pythonpath lets `pytest` find pi_dispenser without installing the package
+# (mirrors tests/conftest.py, which covers repo-root invocations).
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 
+# 120 matches ai-service's ruff config — one line-length across the repo's
+# Python (`make check` lints both with the same ruff).
 [tool.ruff]
 line-length = 120

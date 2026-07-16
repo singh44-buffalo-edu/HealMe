@@ -1,3 +1,12 @@
+/**
+ * Tests for the break-glass bot (src/break-glass.ts) against @medplum/mock's
+ * in-memory FHIR repo — no running server needed. Covers the full
+ * activate/restore dance: emergency-policy shape (full read, nothing else),
+ * access[] swap + first-write-wins backup, AuditEvent + owner Communication,
+ * idempotent double-activation, restore-without-activate noop, both input
+ * shapes (Parameters and Communication), and defensive noops on bad input.
+ * Run: `cd backend-bots && npm test` (part of `make check`).
+ */
 import { indexSearchParameterBundle, indexStructureDefinitionBundle } from '@medplum/core';
 import type { BotEvent, MedplumClient } from '@medplum/core';
 import { readJson, SEARCH_PARAMETER_BUNDLE_FILES } from '@medplum/definitions';

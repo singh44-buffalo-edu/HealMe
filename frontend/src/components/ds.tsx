@@ -1,7 +1,19 @@
 /**
- * HealMeDaily design-system primitives.
- * Source of truth: design_handoff_healmedaily / "HealMeDaily Design System v2".
- * Pixel values are intentional — do not round to Mantine spacing tokens.
+ * HealMeDaily design-system primitives — the ONLY place component styles
+ * live: pages compose these, never fork the styles (CLAUDE.md §2 — extend
+ * here instead). Source of truth: design_handoff_healmedaily / "HealMeDaily
+ * Design System v2" (.dc.html component catalog). Pixel values are
+ * intentional — do not round to Mantine spacing tokens.
+ *
+ * Non-negotiable rules these primitives encode:
+ * - Three data classes stay unmistakable: measured = ink · live device =
+ *   green + pulsing StatusDot · AI-derived = indigo + AIPill + ConfidenceBar.
+ *   AI output is NEVER shown without its pill; indigo appears NOWHERE else.
+ * - Cards are borderless on a soft shadow; hairline dividers inside only.
+ * - Status color lives on values/dots — it never floods a card.
+ * - Numbers/units/timestamps/codes render in IBM Plex Mono (mono()).
+ * - Every surface carries VaultChip ("On this device"); any cloud boundary
+ *   is amber with a named recipient (BoundaryRow).
  */
 import type { CSSProperties, ReactNode } from 'react';
 import { T, mono } from '../tokens';
@@ -10,6 +22,8 @@ import { T, mono } from '../tokens';
 // Card
 // ---------------------------------------------------------------------------
 
+/** The base card surface: borderless white on soft shadow (dividers belong
+ * INSIDE, via TableRow hairlines — never a border on the card itself). */
 export function DsCard({
   children,
   ai = false,
@@ -80,6 +94,8 @@ export function CardTitle({ children, size = 15 }: { children: ReactNode; size?:
 // Page header
 // ---------------------------------------------------------------------------
 
+/** Page title row: 26px sans title, mono subtitle (data voice), right-aligned
+ * action cluster. Every page opens with one. */
 export function PageHeader({
   title,
   subtitle,
@@ -108,6 +124,9 @@ export function PageHeader({
 // Status & data-class primitives
 // ---------------------------------------------------------------------------
 
+/** Round status indicator. `pulse` (hmdPulse keyframes) is reserved for LIVE
+ * device data — the animation is part of the data-class language, so never
+ * pulse a measured or AI value. */
 export function StatusDot({
   color,
   size = 7,
@@ -132,7 +151,9 @@ export function StatusDot({
   );
 }
 
-/** Mandatory AI label — every AI-derived value/card carries this. */
+/** Mandatory AI label — every AI-derived value/card carries this (the
+ * AI-labeling rule: no unlabeled AI output, ever). Pair with ConfidenceBar
+ * when the source provides a confidence. */
 export function AIPill({ label = 'AI' }: { label?: string }) {
   return (
     <span
@@ -179,7 +200,8 @@ export function Chip({
   );
 }
 
-/** VaultChip — the privacy promise, on every screen. */
+/** VaultChip — the "On this device" privacy promise, present on every
+ * screen (both shells render it in their chrome). */
 export function VaultChip({ suffix, fullWidth = false }: { suffix?: string; fullWidth?: boolean }) {
   return (
     <span
@@ -200,7 +222,10 @@ export function VaultChip({ suffix, fullWidth = false }: { suffix?: string; full
   );
 }
 
-/** DataBoundaryNotice row — local (green, stays home) vs cloud (amber, leaves device). */
+/** DataBoundaryNotice row — local (green, "stays home") vs cloud (amber,
+ * "leaves device"). Cloud boundaries are ALWAYS amber and always name the
+ * recipient in `name`/`detail` — disclosure is part of the AI guardrails
+ * (CLAUDE.md §6), not decoration. */
 export function BoundaryRow({
   local,
   name,
@@ -235,6 +260,8 @@ export function BoundaryRow({
 // Controls
 // ---------------------------------------------------------------------------
 
+/** iOS-style segmented control (chart ranges, small mode switches) — active
+ * segment lifts on a white pill with the segment shadow. */
 export function SegmentedPills<V extends string>({
   options,
   value,
@@ -362,6 +389,9 @@ const BTN: Record<PillButtonVariant, CSSProperties> = {
   },
 };
 
+/** Rounded-pill button. When disabled with `disabledReason`, the reason
+ * REPLACES the label so a blocked action explains itself in place (used for
+ * gates like "configure a provider" or an empty review queue). */
 export function PillButton({
   variant = 'secondary',
   children,

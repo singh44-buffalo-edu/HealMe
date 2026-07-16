@@ -2,14 +2,40 @@
 
 Anthropic uses its existing SDK; OpenAI, Gemini and Ollama speak plain httpx —
 no extra dependencies. Every provider exposes the same interface used by
-health_review.py and ingest.py:
+health_review.py, ingest.py, assistant.py:
 
     provider.generate(system, user_content, max_tokens=..., output_schema=...)
     provider.generate_json(system, user_content, schema, max_tokens=...)
     provider.name / provider.model / provider.is_local
 
-`user_content` is a string or a list of Anthropic-style content blocks
-(text / image / document with base64 source) — each adapter translates.
+Adapter contract:
+- `user_content` is a string or a list of Anthropic-style content blocks
+  (text / image / document with base64 source) — each adapter translates to
+  its wire shape, and raises ProviderError for blocks it cannot carry
+  (e.g. PDFs to Ollama). This lets scanned documents flow to vision models
+  without callers knowing which provider is active.
+- `output_schema` requests structured output; adapters use the strongest
+  native mechanism available (see per-provider sections) and generate_json
+  parses the result. Constructors raise ProviderNotConfigured when no key is
+  resolvable, BEFORE any network I/O.
+- `is_local` marks the privacy-preserving path (Ollama). ai_settings uses it
+  to decide whether a cloud-boundary AuditEvent must be written.
+
+Error mapping — every adapter normalizes failures onto two exceptions, which
+main._wrap / assistant._wrap turn into HTTP statuses:
+
+    ProviderNotConfigured (→ 503, "configure a provider" UI state):
+      no provider selected · unknown name · missing key · key rejected
+      (HTTP 401/403, Anthropic AuthenticationError, Gemini 400 "api key",
+      Ollama connection refused = not running)
+    ProviderError (→ 502, transient/upstream):
+      rate limit (429) · provider 5xx · network/transport failure ·
+      truncated output (stop max_tokens / length / MAX_TOKENS) ·
+      safety refusal (refusal stop / content_filter / SAFETY...) ·
+      empty or unparseable response · unsupported content block
+
+Truncation is a hard error on purpose: a silently cut-off summary must never
+be stored as an official record.
 
 Guardrails: never send data to an unconfigured provider (ProviderNotConfigured
 before any network call); the app must run fully with AI disabled. Keys resolve
@@ -41,8 +67,11 @@ DEFAULT_MODELS = {
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
+# Generous ceiling: a 90-day Health Review over a scanned PDF can legitimately
+# take a minute or two on slower models.
 REQUEST_TIMEOUT_SECONDS = 120.0
 
+# Shared user-facing messages so all four adapters fail identically.
 _TRUNCATED_MSG = "Model output was truncated (max tokens) — try a smaller window"
 _DECLINED_MSG = "The model declined this request (safety refusal)"
 
@@ -56,6 +85,7 @@ class ProviderError(RuntimeError):
 
 
 def env_key(name: str) -> str:
+    """The .env fallback key for a provider ("" when unset or unknown name)."""
     return {
         "anthropic": settings.anthropic_api_key,
         "openai": settings.openai_api_key,
@@ -110,6 +140,10 @@ def _check_response(resp: httpx.Response, label: str) -> dict[str, Any]:
 
 
 class _BaseProvider:
+    """Adapter base: subclasses set name/is_local, resolve their key in
+    __init__ (raising ProviderNotConfigured when absent) and implement
+    generate(). Callers depend only on this interface."""
+
     name = ""
     is_local = False
     model = ""
@@ -121,6 +155,9 @@ class _BaseProvider:
         max_tokens: int = 16000,
         output_schema: dict[str, Any] | None = None,
     ) -> str:
+        """One system+user completion → text. `output_schema` constrains the
+        reply to a JSON schema where the provider supports it. Raises
+        ProviderError / ProviderNotConfigured per the module error table."""
         raise NotImplementedError
 
     def generate_json(
@@ -130,13 +167,21 @@ class _BaseProvider:
         schema: dict[str, Any],
         max_tokens: int = 16000,
     ) -> Any:
+        """generate() + json.loads. A malformed-JSON reply surfaces as
+        json.JSONDecodeError → ValueError → HTTP 400 via the _wrap helpers."""
         return json.loads(self.generate(system, user_content, max_tokens, output_schema=schema))
 
 
 # --- Anthropic (SDK) ----------------------------------------------------------
+# API shape: official `anthropic` SDK, Messages API. Content blocks pass
+# through natively (they ARE Anthropic-shaped); structured output via
+# output_config json_schema; refusal/truncation read from stop_reason.
 
 
 class AnthropicProvider(_BaseProvider):
+    """Cloud adapter over the Anthropic SDK — the owner's primary provider
+    (CLAUDE.md §8). SDK exception classes map onto the module error table."""
+
     name = "anthropic"
     is_local = False
 
@@ -193,9 +238,15 @@ class AnthropicProvider(_BaseProvider):
 
 
 # --- OpenAI (httpx) -----------------------------------------------------------
+# API shape: POST {base}/chat/completions with system+user messages. Content
+# blocks translate to image_url / file parts carrying data: URLs; structured
+# output via response_format json_schema; refusal/truncation read from
+# finish_reason and message.refusal.
 
 
 def _openai_content(user_content: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
+    """Anthropic-style blocks → OpenAI chat content parts (images and PDFs
+    become data: URLs). Raises ProviderError on block types OpenAI lacks."""
     if isinstance(user_content, str):
         return user_content
     parts: list[dict[str, Any]] = []
@@ -216,6 +267,9 @@ def _openai_content(user_content: str | list[dict[str, Any]]) -> str | list[dict
 
 
 class OpenAIProvider(_BaseProvider):
+    """Cloud adapter speaking the Chat Completions REST API via httpx (no SDK
+    dependency). OPENAI_BASE_URL supports proxies/Azure-style gateways."""
+
     name = "openai"
     is_local = False
 
@@ -276,6 +330,10 @@ class OpenAIProvider(_BaseProvider):
 
 
 # --- Gemini (httpx) -----------------------------------------------------------
+# API shape: POST {base}/models/{model}:generateContent with
+# systemInstruction / contents / generationConfig. Content blocks translate to
+# inline_data parts; structured output via responseMimeType+responseSchema;
+# refusal read from promptFeedback.blockReason and candidate finishReason.
 
 # Gemini's responseSchema is an OpenAPI subset — strip JSON-schema keywords it
 # rejects (additionalProperties, $schema, ...) and uppercase type names.
@@ -283,6 +341,8 @@ _GEMINI_SCHEMA_KEYS = {"type", "format", "description", "enum", "items", "proper
 
 
 def _gemini_schema(schema: Any) -> Any:
+    """Recursively project a JSON schema onto the keyword subset Gemini's
+    responseSchema accepts (see _GEMINI_SCHEMA_KEYS above)."""
     if isinstance(schema, list):
         return [_gemini_schema(item) for item in schema]
     if not isinstance(schema, dict):
@@ -303,6 +363,8 @@ def _gemini_schema(schema: Any) -> Any:
 
 
 def _gemini_parts(user_content: str | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Anthropic-style blocks → Gemini `parts` (images/PDFs both ride as
+    inline_data with their mime type)."""
     if isinstance(user_content, str):
         return [{"text": user_content}]
     parts: list[dict[str, Any]] = []
@@ -326,6 +388,8 @@ def _gemini_parts(user_content: str | list[dict[str, Any]]) -> list[dict[str, An
 
 
 class GeminiProvider(_BaseProvider):
+    """Cloud adapter speaking the generateContent REST API via httpx."""
+
     name = "gemini"
     is_local = False
 
@@ -385,9 +449,16 @@ class GeminiProvider(_BaseProvider):
 
 
 # --- Ollama (httpx, local) ----------------------------------------------------
+# API shape: POST {base}/api/chat with stream:false. Images ride as a base64
+# list on the user message; PDFs are rejected (no document support) — local
+# text extraction must succeed first. Structured output: format:"json"
+# guarantees syntax only, so the schema itself is appended to the prompt.
+# Truncation read from done_reason.
 
 
 def _ollama_content(user_content: str | list[dict[str, Any]]) -> tuple[str, list[str]]:
+    """Anthropic-style blocks → (joined text, base64 image list) for Ollama.
+    Document blocks raise ProviderError with routing advice."""
     if isinstance(user_content, str):
         return user_content, []
     texts: list[str] = []
@@ -409,6 +480,9 @@ def _ollama_content(user_content: str | list[dict[str, Any]]) -> tuple[str, list
 
 
 class OllamaProvider(_BaseProvider):
+    """Local adapter (no API key). ai_settings routes features here for the
+    "local" privacy path; is_local=True means no boundary AuditEvent is due."""
+
     name = "ollama"
     is_local = True  # the privacy-preserving path: data never leaves this machine
 
@@ -461,6 +535,8 @@ class OllamaProvider(_BaseProvider):
 
 # --- Factory / status ---------------------------------------------------------
 
+# Registry keyed by the canonical provider names used across AI Settings,
+# routing files and .env — extend here when adding an adapter.
 PROVIDER_CLASSES: dict[str, type[_BaseProvider]] = {
     "anthropic": AnthropicProvider,
     "openai": OpenAIProvider,

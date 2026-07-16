@@ -1,4 +1,10 @@
-"""Slot building from fixture MedicationRequests + cartridge Devices."""
+"""schedule.py: slot building from fixture MedicationRequests + cartridges.
+
+The first test pins the CROSS-PACKAGE identifier convention (`ident_value`
+must equal frontend slotIdentValue / seed.py exactly — see schedule.py's
+module docstring); the rest cover tray mapping via extension + Device.parent,
+the authoredOn start anchor, seconds-required timeOfDay, and the owner-set
+life-critical flag passthrough."""
 
 from datetime import date, timezone
 

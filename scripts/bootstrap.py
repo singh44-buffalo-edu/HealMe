@@ -1,12 +1,26 @@
 #!/usr/bin/env python
 """One-time bootstrap of the local self-hosted Medplum.
 
+Run via `make bootstrap` after `make up` (waits for the server healthcheck —
+first boot does one-time setup and can take minutes). Everything downstream
+reads what this writes into the repo-root .env: seed.py, deploy_bots.py,
+care_circle.py, smoke_test.py, and the ai-service's client-credentials login
+(CLAUDE.md §5 "Auth"). Requires open self-registration, so keep
+MEDPLUM_REGISTER_ENABLED commented out in infra/docker-compose.yml until this
+has run once (hardening note there).
+
 Creates (idempotently):
   1. The first user + the "HealMeDaily" Project (via the registration API)
   2. A ClientApplication for the Python service
   3. A least-privilege AccessPolicy ('service/healmedaily-ai') bound to the
      ClientApplication's ProjectMembership (Phase 9 hardening)
 and persists ids/secrets into the repo-root .env.
+
+⚠️ Least-privilege consequence: AccessPolicy is an allowlist. When the
+ai-service gains a NEW resource type (or a write path to a currently
+read-only one), add it to SERVICE_POLICY_RESOURCES below and re-run
+`make bootstrap` — otherwise the service's first touch of that type is a 403.
+Safe to re-run any time: the policy is updated in place.
 
 Local-dev posture: the admin password is generated once and stored in .env
 (gitignored) so re-runs and scripts can log in. Change it later in the
@@ -43,6 +57,8 @@ def die(msg: str) -> None:
 
 
 def ensure_env_file() -> None:
+    """Materialize .env from .env.example on first run (.env is gitignored —
+    the only place secrets may live, CLAUDE.md §6)."""
     if not ENV_PATH.exists():
         example = REPO / ".env.example"
         ENV_PATH.write_text(example.read_text())
@@ -50,14 +66,21 @@ def ensure_env_file() -> None:
 
 
 def env(key: str, default: str = "") -> str:
+    """Read a key from .env (re-parsed each call so mid-run saves are seen)."""
     return (dotenv_values(ENV_PATH).get(key) or default).strip()
 
 
 def save(key: str, value: str) -> None:
+    """Persist a key into .env (unquoted — values are ids/secrets, never shell)."""
     set_key(ENV_PATH, key, value, quote_mode="never")
 
 
 def wait_for_server(base: str) -> None:
+    """Block until the Medplum healthcheck passes; give up after ~5 minutes.
+
+    First boot runs migrations/seeding before the healthcheck goes green
+    (CLAUDE.md §5: "wait minutes, don't panic").
+    """
     log(f"waiting for {base}healthcheck ...")
     for _ in range(150):
         try:
@@ -79,6 +102,11 @@ def make_pkce() -> tuple[str, str]:
 
 
 def exchange_code(base: str, code: str, verifier: str) -> str:
+    """Second half of PKCE: trade the auth code + verifier for an access token.
+
+    Forgetting the verifier is the classic "Missing verification context"
+    error (CLAUDE.md §9).
+    """
     resp = httpx.post(
         base + "oauth2/token",
         data={
@@ -94,7 +122,13 @@ def exchange_code(base: str, code: str, verifier: str) -> str:
 
 
 def password_login(base: str, email: str, password: str) -> str | None:
-    """Returns an access token, or None if login failed."""
+    """Email/password login via the auth API (PKCE required).
+
+    Returns an access token, or None if login failed — callers treat None as
+    "user does not exist yet" (register) or "wrong .env credentials" (die).
+    Also imported by seed.py / deploy_bots.py / care_circle.py as THE shared
+    admin-login helper.
+    """
     verifier, challenge = make_pkce()
     resp = httpx.post(
         base + "auth/login",
@@ -129,6 +163,13 @@ def password_login(base: str, email: str, password: str) -> str | None:
 def register_first_user(
     base: str, email: str, password: str, given: str, family: str
 ) -> str:
+    """Register the owner account + the HealMeDaily Project via the open
+    registration API, then return an admin token for that project.
+
+    Only works while registerEnabled is on (empty recaptchaToken is fine
+    because the compose file blanks the recaptcha keys). This user becomes
+    the project admin — the account you sign into :3000 and :5173 with.
+    """
     verifier, challenge = make_pkce()
     resp = httpx.post(
         base + "auth/newuser",
@@ -157,6 +198,7 @@ def register_first_user(
 
 
 def fhir_get(base: str, token: str, path: str, params: dict | None = None) -> dict:
+    """GET fhir/R4/<path>; any 4xx/5xx aborts the bootstrap (fail loudly)."""
     resp = httpx.get(
         base + "fhir/R4/" + path,
         params=params,
@@ -169,6 +211,11 @@ def fhir_get(base: str, token: str, path: str, params: dict | None = None) -> di
 
 
 def find_project_id(base: str, token: str) -> str:
+    """Resolve the Project id by name, else 'the only project I can see'.
+
+    The fallback covers a renamed project on this single-project instance;
+    with several visible projects and no name match we cannot guess — die.
+    """
     bundle = fhir_get(base, token, "Project", {"name": PROJECT_NAME, "_count": 5})
     for entry in bundle.get("entry", []):
         if entry["resource"].get("name") == PROJECT_NAME:
@@ -183,6 +230,12 @@ def find_project_id(base: str, token: str) -> str:
 
 
 def ensure_client_app(base: str, token: str, project_id: str) -> tuple[str, str]:
+    """Find-or-create the service ClientApplication; returns (id, secret).
+
+    Created through the project-admin API (which also mints its
+    ProjectMembership). The secret lands in .env for the ai-service's
+    client-credentials grant — it is never stored anywhere else.
+    """
     bundle = fhir_get(
         base, token, "ClientApplication", {"name": CLIENT_NAME, "_count": 5}
     )
@@ -213,8 +266,14 @@ SERVICE_POLICY_NAME = "service/healmedaily-ai"
 # is an allowlist by nature: any resource type not listed is denied. Read-only
 # types cover lookups the service needs but must never alter (the regimen, the
 # question bank, raw check-in answers, the Patient). AuditEvent is create-only
-# (boundary-ledger writes). Everything read/write is what ingestion, Health
-# Review and reminders actually touch today (see ai-service/app).
+# (boundary-ledger writes — a ledger entry must never be updatable). Everything
+# read/write is what ingestion, Health Review and reminders actually touch
+# today (see ai-service/app).
+#
+# ⚠️ Maintenance rule: a new ai-service write path needs its resource type
+# added here + `make bootstrap` re-run, or the service gets 403s. Symptom in
+# the wild: httpx.HTTPStatusError 403 on a single resource type while
+# everything else works.
 SERVICE_POLICY_RESOURCES: list[dict] = [
     {"resourceType": "Patient", "readonly": True},
     {"resourceType": "Medication", "readonly": True},
@@ -245,7 +304,14 @@ SERVICE_POLICY_RESOURCES: list[dict] = [
 
 def ensure_service_access_policy(base: str, token: str, client_id: str) -> None:
     """Create/update the ai-service AccessPolicy and bind it to the
-    ClientApplication's ProjectMembership.access. Idempotent."""
+    ClientApplication's ProjectMembership.access. Idempotent.
+
+    The update-in-place PUT is what makes re-running bootstrap the official
+    way to roll out SERVICE_POLICY_RESOURCES changes. Binding goes on the
+    membership (not the client) because that is where Medplum evaluates
+    access[] (CLAUDE.md §5 "Auth"). An unbound membership would mean
+    project-admin-level access for the service — never leave it that way.
+    """
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/fhir+json",
@@ -309,6 +375,9 @@ def ensure_service_access_policy(base: str, token: str, client_id: str) -> None:
 
 
 def verify_client_credentials(base: str, client_id: str, client_secret: str) -> None:
+    """Prove the freshly written credentials work end-to-end: token grant +
+    a policy-scoped FHIR read. Fails here, loudly, rather than at the
+    ai-service's first real call."""
     resp = httpx.post(
         base + "oauth2/token",
         data={
@@ -328,6 +397,7 @@ def verify_client_credentials(base: str, client_id: str, client_secret: str) -> 
 
 
 def main() -> None:
+    """Full bootstrap sequence; every step is idempotent, so re-run freely."""
     ensure_env_file()
     base = env("MEDPLUM_BASE_URL", "http://localhost:8103/")
     if not base.endswith("/"):

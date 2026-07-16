@@ -43,6 +43,8 @@ ASSISTANT_QA = "assistant-qa"
 NL_IMPORT_IDENT = f"{fc.IDENT}/nl-import"
 OBS_CATEGORY = "http://terminology.hl7.org/CodeSystem/observation-category"
 
+# One year of record context: wide enough for "since my last visit" questions
+# while keeping the prompt within every provider's context budget.
 CONTEXT_WINDOW_DAYS = 365
 MAX_OBS_PER_CODE = 6  # newest per measure — keeps the context block compact
 
@@ -166,6 +168,7 @@ def _cite(
 
 
 def _obs_label(obs: dict[str, Any]) -> str:
+    """Human label for an Observation: code.text, else first coding display/code."""
     code = obs.get("code") or {}
     if code.get("text"):
         return code["text"]
@@ -174,6 +177,7 @@ def _obs_label(obs: dict[str, Any]) -> str:
 
 
 def _obs_value(obs: dict[str, Any]) -> str:
+    """Render any value[x] variant this app writes as a compact display string."""
     if "valueQuantity" in obs:
         q = obs["valueQuantity"]
         return f"{q.get('value')} {q.get('unit') or q.get('code') or ''}".strip()
@@ -189,6 +193,7 @@ def _obs_value(obs: dict[str, Any]) -> str:
 
 
 def _obs_date(obs: dict[str, Any]) -> str:
+    """Clinical date (YYYY-MM-DD) from effectiveDateTime or the period bounds."""
     period = obs.get("effectivePeriod") or {}
     when = obs.get("effectiveDateTime") or period.get("end") or period.get("start") or ""
     return when[:10]
@@ -276,6 +281,11 @@ class AskRequest(BaseModel):
 
 
 def _ask(question: str) -> dict[str, Any]:
+    """Core Q&A flow: build citation-tagged context → boundary ledger (cloud
+    only) → structured model call → server-side citation verification → log
+    the exchange as a Communication. FHIR touched: reads MedicationRequest/
+    Observation/Condition (+ health_review aggregates); writes Communication
+    and, for cloud routes, one AuditEvent."""
     patient_id = _patient_id()
     provider = get_provider_for("assistant")  # ProviderNotConfigured → 503 before any read
     context_block, index = _build_context(medplum)
@@ -340,6 +350,11 @@ def _ask(question: str) -> dict[str, Any]:
 
 @router.post("/ask")
 def ask(body: AskRequest) -> dict[str, Any]:
+    """Answer one question strictly from the owner's record. Returns grounded
+    markdown + server-verified citations + provider info + disclaimer. Reads
+    the CDR; writes only the Communication Q&A log (and the boundary
+    AuditEvent when routed to a cloud provider). 503 when the 'assistant'
+    feature is off/unconfigured."""
     question = body.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="question must not be blank")
@@ -350,6 +365,8 @@ def ask(body: AskRequest) -> dict[str, Any]:
 
 
 def _is_assistant_session(comm: dict[str, Any]) -> bool:
+    """True only for Communications carrying our local assistant-qa category —
+    the guard that keeps DELETE /sessions from touching anything else."""
     return any(
         coding.get("system") == CS_COMM and coding.get("code") == ASSISTANT_QA
         for cat in comm.get("category", [])
@@ -359,6 +376,8 @@ def _is_assistant_session(comm: dict[str, Any]) -> bool:
 
 @router.get("/sessions")
 def sessions() -> list[dict[str, Any]]:
+    """List past Q&A sessions (newest first, capped at 50) for the Assistant
+    page sidebar. Payload positions are contractual: [0]=question, [1]=answer."""
     comms = _wrap(
         medplum.search_resources,
         "Communication",
@@ -381,6 +400,9 @@ def sessions() -> list[dict[str, Any]]:
 
 @router.delete("/sessions/{session_id}")
 def delete_session(session_id: str) -> dict[str, Any]:
+    """Hard-delete one Q&A session (owner's right to forget a conversation).
+    Only assistant-qa Communications qualify — anything else 404s. Leaves an
+    AuditEvent stub: content gone, the deletion itself stays on record."""
     try:
         comm = medplum.get(f"Communication/{session_id}")
     except MedplumError as err:
@@ -445,6 +467,11 @@ def _create_with_ident(client: Any, resource: dict[str, Any], ident: dict[str, s
 
 
 def _nl_import(text: str) -> dict[str, Any]:
+    """Core NL-capture flow: boundary ledger (cloud only) → structured model
+    call → store raw note (Binary + DocumentReference `nl-capture`) → one
+    proposal Binary + review Task per candidate. All writes are conditional
+    creates on content-hash identifiers, so replaying the same note is a
+    no-op. Nothing clinical commits here — approval does that (ingest.py)."""
     patient_id = _patient_id()
     provider = get_provider_for("nl-import")  # ProviderNotConfigured → 503 before any write
     if not provider.is_local:
@@ -534,6 +561,10 @@ def _nl_import(text: str) -> dict[str, Any]:
 
 @router.post("/nl-import")
 def nl_import(body: NlImportRequest) -> dict[str, Any]:
+    """Natural-language quick capture → review-queue proposals (never direct
+    commits — the FHIR-MAPPING §6 gate verbatim). Returns proposal count and
+    Task ids; the owner approves/rejects them on the Review page exactly like
+    document extractions. Replay-safe via content-hash identifiers."""
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text must not be blank")

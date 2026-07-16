@@ -1,3 +1,12 @@
+/**
+ * Tests for the QuestionnaireResponse -> Observations bot
+ * (src/questionnaire-response-to-observations.ts) against @medplum/mock's
+ * in-memory FHIR repo — no running server needed. Covers: one Observation
+ * per numeric answer (strings skipped), UCUM-coded sleep hours, derivedFrom +
+ * effectiveDateTime propagation, idempotent re-runs via the stable
+ * responseId-linkId identifier, and the missing-questionnaire guard.
+ * Run: `cd backend-bots && npm test` (part of `make check`).
+ */
 import { MockClient } from '@medplum/mock';
 import { indexSearchParameterBundle, indexStructureDefinitionBundle } from '@medplum/core';
 import type { BotEvent, MedplumClient } from '@medplum/core';

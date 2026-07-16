@@ -1,3 +1,11 @@
+/**
+ * Mantine theme — bridges the design handoff to the @medplum/react
+ * components we don't hand-roll (SignInForm, QuestionnaireForm, tables).
+ * Our own DS primitives (components/ds.tsx) style themselves from tokens.ts
+ * instead. Each 10-step scale is built so index 6 = the exact design token
+ * (Mantine's default primary shade), lighter above, darker below.
+ * Loaded by main.tsx via <MantineProvider theme={theme}>.
+ */
 import { createTheme, type MantineColorsTuple } from '@mantine/core';
 
 // Health green scale centered on brand #0F8A63 (index 6 = primary shade)
@@ -41,6 +49,8 @@ const hmdAmber: MantineColorsTuple = [
   '#6a450e',
 ];
 
+// AI-class indigo (anchored at design #5e5ce6) — for AI surfaces ONLY, never
+// decoration on measured data (three-data-classes rule, CLAUDE.md §2).
 const hmdIndigo: MantineColorsTuple = [
   '#efeffc',
   '#deddf9',
@@ -71,6 +81,8 @@ export const theme = createTheme({
       h3: { fontSize: '15px', lineHeight: '22px' },
     },
   },
+  // radius/shadow scales map to handoff shape tokens: lg=card 18px,
+  // md=inner 12px, xl=pill 20px; shadows sm/md/lg = segment/card/card-hover.
   defaultRadius: 'md',
   radius: { xs: '8px', sm: '10px', md: '12px', lg: '18px', xl: '20px' },
   shadows: {

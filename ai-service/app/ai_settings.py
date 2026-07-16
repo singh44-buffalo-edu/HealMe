@@ -1,16 +1,30 @@
 """Per-feature AI routing, BYOK key endpoints and the privacy-boundary ledger.
 
-Each AI feature routes to "local" (Ollama — data never leaves this machine),
-"cloud" (the single globally-chosen cloud provider) or "off". Routing, the
-cloud provider choice and per-provider model overrides persist in
-{repo}/data/secrets/ai-settings.json (0o600, gitignored). While that file is
-absent, everything follows the legacy AI_PROVIDER env var — backward compat.
+Routing model: each AI feature (FEATURES below) routes independently to
+"local" (Ollama — data never leaves this machine), "cloud" (the single
+globally-chosen cloud provider: exactly one of anthropic/openai/gemini is the
+cloud choice at a time) or "off". Per-provider model-name overrides sit
+alongside. Everything persists in {repo}/data/secrets/ai-settings.json
+(0o600, gitignored). While that file is absent, the legacy AI_PROVIDER env
+var drives everything — backward compat with the pre-Phase-7 setup
+(AI_PROVIDER=ollama means route all features local).
 
-Other modules import get_provider_for(feature). Cloud calls are identifiable
-via provider.is_local / provider.name, and every request whose data leaves the
-device gets an AuditEvent via log_boundary_event.
+CONTAINER QUIRK: inside the Docker image REPO_ROOT resolves to "/" (see
+config.py), so SETTINGS_FILE becomes /data/secrets/ai-settings.json —
+docker-compose bind-mounts the repo's data/secrets there, which is how the
+containerized service and the host share one AI configuration (`make
+prod-up`, CLAUDE.md §7 phase 9 note).
 
-API keys are never logged and never returned unmasked by any endpoint.
+Other modules import get_provider_for(feature) — the ONLY sanctioned way to
+obtain a provider for a routed feature. BOUNDARY-LEDGER REQUIREMENT: every
+request whose data leaves this device must be preceded by an AuditEvent via
+log_boundary_event — call sites check provider.is_local and write the event
+BEFORE the provider call, so the ledger can never miss a disclosure because
+a call failed midway (FHIR-MAPPING §11; the Privacy Vault UI is a search
+over these events).
+
+API keys are never logged and never returned unmasked by any endpoint
+(see keystore.py for storage and the why-not-FHIR rationale).
 """
 
 from __future__ import annotations
@@ -28,11 +42,15 @@ from . import keystore, providers
 from .config import REPO_ROOT, settings
 from .providers import ProviderError, ProviderNotConfigured, _BaseProvider
 
+# The routable AI features. Adding one here automatically gives it a routing
+# row in AI Settings; its call site must use get_provider_for + the boundary
+# ledger discipline described in the module docstring.
 FEATURES = ("health-review", "ingest-extraction", "assistant", "nl-import")
 ROUTES = ("local", "cloud", "off")
 CLOUD_PROVIDERS = ("anthropic", "openai", "gemini")
 ALL_PROVIDERS = CLOUD_PROVIDERS + ("ollama",)
 
+# See module docstring: resolves to /data/secrets/... inside the container.
 SETTINGS_FILE = REPO_ROOT / "data" / "secrets" / "ai-settings.json"
 
 
@@ -40,6 +58,8 @@ SETTINGS_FILE = REPO_ROOT / "data" / "secrets" / "ai-settings.json"
 
 
 def _load() -> dict[str, Any] | None:
+    """Raw settings file dict, or None when absent/corrupt (None = fall back to
+    the legacy env semantics in _effective)."""
     if not SETTINGS_FILE.exists():
         return None
     try:
@@ -50,6 +70,8 @@ def _load() -> dict[str, Any] | None:
 
 
 def _save(data: dict[str, Any]) -> None:
+    """Persist settings with the same 0o600/0o700 discipline as the keystore
+    (the file names which provider gets health data — private, not secret)."""
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(SETTINGS_FILE.parent, 0o700)
@@ -66,7 +88,9 @@ def _save(data: dict[str, Any]) -> None:
 
 def _effective() -> dict[str, Any]:
     """Routing/cloud-provider/models with the settings file taking precedence;
-    absent file falls back to the legacy AI_PROVIDER env semantics."""
+    absent file falls back to the legacy AI_PROVIDER env semantics. Unknown
+    features default to "cloud"; an invalid stored cloud provider degrades to
+    None (→ ProviderNotConfigured downstream) rather than erroring here."""
     data = _load()
     if data is not None:
         stored_routing = data.get("routing") or {}
@@ -98,7 +122,11 @@ def default_provider_spec() -> tuple[str, str | None]:
 
 def get_provider_for(feature: str) -> _BaseProvider:
     """The feature-aware entry point other modules import. Returns a Provider
-    instance or raises ProviderNotConfigured (routed off / nothing configured)."""
+    instance or raises ProviderNotConfigured (routed off / nothing configured).
+    Raising happens before any data is assembled or sent — the "never send data
+    to an unconfigured provider" guardrail (CLAUDE.md §6). Callers must then
+    check provider.is_local and write the boundary AuditEvent before calling
+    generate* on a cloud provider."""
     if feature not in FEATURES:
         raise ValueError(f"unknown AI feature '{feature}' — one of {', '.join(FEATURES)}")
     eff = _effective()
@@ -120,7 +148,12 @@ def get_provider_for(feature: str) -> _BaseProvider:
 
 def log_boundary_event(medplum: Any, feature: str, provider_name: str, description: str) -> dict[str, Any]:
     """One AuditEvent per AI request whose data leaves this device — the
-    cloud-boundary ledger. Call sites invoke this for cloud providers only."""
+    cloud-boundary ledger (FHIR-MAPPING §11). Call sites invoke this for cloud
+    providers only (skip when provider.is_local), and MUST call it BEFORE the
+    provider request: the ledger records intent-to-disclose, so a call that
+    fails after data was sent still has its ledger entry. `description` is a
+    short human line for the Privacy Vault UI (truncated to 200 chars) —
+    metadata only, never record content."""
     event = {
         "resourceType": "AuditEvent",
         "type": {
@@ -149,6 +182,8 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 
 class SettingsUpdate(BaseModel):
+    """Partial update — any omitted (None) field keeps its current value."""
+
     routing: dict[str, str] | None = None
     cloud_provider: str | None = None
     models: dict[str, str] | None = None
@@ -159,6 +194,8 @@ class KeyBody(BaseModel):
 
 
 def _validated_provider(name: str, allow_local: bool) -> str:
+    """Normalize/validate a provider path segment; allow_local=False rejects
+    ollama for key endpoints (the local provider has no API key)."""
     name = name.strip().lower()
     if name == "ollama" and not allow_local:
         raise HTTPException(status_code=400, detail="ollama is the local provider — it needs no API key")
@@ -168,6 +205,8 @@ def _validated_provider(name: str, allow_local: bool) -> str:
 
 
 def _settings_payload() -> dict[str, Any]:
+    """The AI Settings page payload: per-provider configured state (masked key
+    only, never the key itself), effective routing and cloud choice."""
     eff = _effective()
     provider_list = []
     for name in ALL_PROVIDERS:
@@ -189,11 +228,16 @@ def _settings_payload() -> dict[str, Any]:
 
 @router.get("/settings")
 def get_settings() -> dict[str, Any]:
+    """Current effective AI configuration (read-only, no network calls)."""
     return _settings_payload()
 
 
 @router.put("/settings")
 def update_settings(body: SettingsUpdate) -> dict[str, Any]:
+    """Merge a partial update into the effective settings and persist the whole
+    result. First write materializes ai-settings.json, permanently switching
+    the service off the legacy AI_PROVIDER env semantics. Validation is all-or-
+    nothing: any bad feature/route/provider 400s before anything is saved."""
     eff = _effective()
     stored = _load() or {}
 
@@ -234,6 +278,8 @@ def update_settings(body: SettingsUpdate) -> dict[str, Any]:
 
 @router.post("/keys/{provider_name}")
 def set_provider_key(provider_name: str, body: KeyBody) -> dict[str, Any]:
+    """Store a BYOK key in the keystore (Keychain / 0600 file — never FHIR,
+    never .env). Response echoes only the masked form."""
     name = _validated_provider(provider_name, allow_local=False)
     key = body.key.strip()
     if not key:

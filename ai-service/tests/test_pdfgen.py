@@ -1,3 +1,6 @@
+"""pdfgen.markdown_to_pdf: the Health Review markdown subset (headings,
+bullets, bold, XML-escaping of model output) renders to valid PDF bytes."""
+
 from app.pdfgen import markdown_to_pdf
 
 

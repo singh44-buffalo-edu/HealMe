@@ -1,3 +1,32 @@
+/**
+ * AssistantPage — the record-grounded Q&A chat (Phase 7).
+ *
+ * Architecture: routed from App.tsx; every ask goes to the Python ai-service
+ * (../api askAssistant), which reads the FHIR record, calls the routed
+ * provider, and persists the exchange as a Communication (category local
+ * assistant-qa — FHIR-MAPPING.md §11). The page holds only in-memory chat
+ * state; the durable list is the session history below.
+ *
+ * Guarantees this surface must keep visible and true:
+ * - READ-ONLY: the assistant reads the record and never writes to it — the
+ *   footer says so on every render. The only writes in this flow are the
+ *   Communication session logs (and the boundary AuditEvent the service
+ *   stamps before any cloud call). Do not add write paths here; capture
+ *   flows belong to Quick capture / the review queue.
+ * - CITATIONS COME FROM THE API ONLY: `answer.citations` is the service's
+ *   verified claim→resource mapping (every claim must resolve to a real
+ *   resource). This page renders them verbatim — it never derives, invents,
+ *   or renumbers citations client-side.
+ * - AI LABELING + BOUNDARY: every answer bubble carries the ✦ AI pill and a
+ *   per-answer local/cloud line built from answer.provider (not from current
+ *   settings, which may have changed since). Cloud = amber "leaves device"
+ *   with the provider named; the header chip mirrors the configured route.
+ * - Sessions are deletable (deleteAssistantSession); deletion leaves an
+ *   AuditEvent stub — the UI copy "a note that it was removed stays" is a
+ *   contract, not flavor text.
+ * - No provider configured ⇒ the composer is replaced by the configure
+ *   state (app must boot and behave with no AI key, CLAUDE.md §6).
+ */
 import { TypographyStylesProvider } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconHistory, IconTrash } from '@tabler/icons-react';
@@ -155,6 +184,9 @@ function AssistantAvatar() {
   );
 }
 
+/** SOURCES block under an answer — one row per citation, exactly as returned
+ * by the service (n, display, resourceType/value/date). Row ids are keyed by
+ * Communication id so chips in one answer never jump to another's sources. */
 function SourcesList({ commId, citations }: { commId: string; citations: AssistantCitation[] }) {
   return (
     <div
@@ -184,6 +216,9 @@ function SourcesList({ commId, citations }: { commId: string; citations: Assista
   );
 }
 
+/** One answer: ✦ AI pill + read-count + the answer's OWN boundary line
+ * (local vs "sent to X — leaves device"), sanitized markdown, citation chips,
+ * sources. Everything shown is from the AssistantAnswer payload. */
 function AssistantBubble({ answer }: { answer: AssistantAnswer }) {
   const isMobile = useIsMobile();
   const local = answer.provider.is_local;
@@ -251,6 +286,17 @@ function PendingBubble() {
 // Page
 // ---------------------------------------------------------------------------
 
+/**
+ * Assistant chat page: header (boundary chip + history toggle), the message
+ * column, and the composer or configure-a-provider state.
+ *
+ * FHIR touched (via ai-service): reads the record per question; writes a
+ * Communication per exchange; deletes sessions on request (AuditEvent stub
+ * remains). A failed ask is fully rolled back client-side — the bubble is
+ * removed and the question is handed back to the input, so nothing looks
+ * answered that wasn't. Asks are not idempotent: re-asking creates a new
+ * session entry.
+ */
 export function AssistantPage() {
   const isMobile = useIsMobile();
   const [settings, setSettings] = useState<AiSettings>();
@@ -294,6 +340,9 @@ export function AssistantPage() {
     }
   }, [exchanges, pending, isMobile]);
 
+  /** Re-check AI settings (after an error or "Check again"). Returns whether
+   * the assistant route can currently succeed; fetch failures answer true so
+   * a transient blip never locks the composer. */
   const refreshSettings = async (): Promise<boolean> => {
     try {
       const s = await getAiSettings();
@@ -309,6 +358,10 @@ export function AssistantPage() {
     }
   };
 
+  /** Submit one question. Optimistically renders the user bubble, then fills
+   * in the answer; on failure the exchange is removed and the text restored
+   * (see component doc). A 503-shaped error means "provider not configured"
+   * and swaps in the configure state rather than a toast. */
   const ask = async (raw: string) => {
     const question = raw.trim();
     if (!question || pending) {
@@ -347,6 +400,9 @@ export function AssistantPage() {
     }
   };
 
+  /** Delete one saved session (Communication). Server-side an AuditEvent stub
+   * records that something was removed — the success copy promises exactly
+   * that, so keep the two in sync if the backend behavior ever changes. */
   const doDelete = async (id: string) => {
     setDeletingId(id);
     try {

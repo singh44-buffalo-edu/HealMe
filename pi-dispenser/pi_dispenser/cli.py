@@ -10,6 +10,13 @@
 
     python -m pi_dispenser run
         Real hardware loop (Raspberry Pi only; requires Medplum credentials).
+
+This is the composition root: it is the only module that decides WHICH
+backend/clock/sink the DispenserAgent gets. sim = SimulatedBackend +
+SimClock (+ DryRunSink unless Medplum env is set); run = GpioBackend +
+RealClock + MedplumSink; status only reads. The systemd unit
+(systemd/pi-dispenser.service) execs `python -m pi_dispenser run` on the Pi.
+Make targets: `make pi-sim` / `make pi-test` from the repo root.
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ from .ladder import LadderConfig
 
 
 def _tz(name: str):
+    """Scenario `timezone` -> tzinfo: "local"/"" = machine zone, else IANA."""
     if name in ("", "local"):
         return datetime.now().astimezone().tzinfo
     return ZoneInfo(name)
@@ -40,7 +48,11 @@ def _load_scenario(path: str) -> dict:
 
 
 def _scenario_slots(scenario: dict, tz) -> tuple[list[schedule.DoseSlot], str, str]:
-    """Slots + patient/dispenser ids from scenario fixtures (dry-run source)."""
+    """Slots + patient/dispenser ids from scenario fixtures (dry-run source).
+
+    The fixture keys (medications / medication_requests / cartridges /
+    dispenser) are real FHIR shapes — same builder as the live path, only
+    the source differs. Also used by tests/test_sim_e2e.py."""
     day = date.fromisoformat(scenario["date"])
     displays = {
         f"Medication/{m['id']}": (m.get("code") or {}).get("text", m["id"]) for m in scenario.get("medications", [])
@@ -63,11 +75,19 @@ def _ladder(args) -> LadderConfig:
 
 
 def cmd_sim(args) -> int:
+    """Simulated day: scenario fixtures + SimClock, agent loop end to end.
+
+    Exit 0 on a completed day. Writes to Medplum ONLY when credentials are
+    configured and --dry-run is off; the default experience needs nothing
+    installed or running (dry-run prints every payload instead)."""
     scenario = _load_scenario(args.scenario)
     tz = _tz(scenario.get("timezone", "local"))
     day = date.fromisoformat(scenario["date"])
     slots, patient_id, dispenser_id = _scenario_slots(scenario, tz)
 
+    # Sink choice: real Medplum needs BOTH credentials and no --dry-run.
+    # The env patient id overrides the scenario one so writes land on the
+    # real Patient, not a fixture id.
     client = DispenserMedplumClient()
     if client.configured and not args.dry_run:
         sink = MedplumSink(client)
@@ -101,6 +121,9 @@ def cmd_sim(args) -> int:
 
 
 def cmd_status(args) -> int:
+    """Read-only diagnostics: config, ladder, Medplum reachability, today's
+    slots. Exit 1 only when credentials exist but Medplum is unreachable
+    (unconfigured is a valid dry-run setup, not an error)."""
     client = DispenserMedplumClient()
     print("pi-dispenser status")
     print(f"  base url    : {client.base_url}")
@@ -135,6 +158,11 @@ def cmd_status(args) -> int:
 
 
 def cmd_run(args) -> int:
+    """Real-hardware loop, one day at a time, forever (systemd restarts it
+    on failure). Requires credentials, a patient id, and a pill-dispenser
+    Device in Medplum (README "Pi setup"). Re-fetches the regimen every
+    morning so med/cartridge changes in the app apply the next day without
+    a restart."""
     client = DispenserMedplumClient()
     if not client.configured or not client.patient_id:
         print("run: DISPENSER_MEDPLUM_* env not configured — see pi-dispenser/README.md", file=sys.stderr)
@@ -166,12 +194,16 @@ def cmd_run(args) -> int:
             ladder_config=_ladder(args),
             webhook_url=args.webhook,
         )
+        # Only future slots: a mid-day (re)start must not spray out every
+        # already-passed dose of the day. Past unlogged doses stay unlogged —
+        # the schedule shows the gap; the machine never backfills (§3).
         agent.run_day([s for s in slots if s.scheduled > clock.now()])
         clock.sleep_until(datetime.combine(today, dtime(23, 59, 59), clock.now().tzinfo))
         clock.sleep_until(clock.now())  # roll into the next day
 
 
 def main(argv: list[str] | None = None) -> int:
+    """argparse entrypoint; returns the subcommand's exit code."""
     parser = argparse.ArgumentParser(
         prog="pi_dispenser",
         description="HealMeDaily pill-dispenser agent. Not a certified medical device. "
