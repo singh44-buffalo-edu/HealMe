@@ -41,8 +41,8 @@ import {
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
-import { listReviewTasks } from './api';
 import { VaultChip } from './components/ds';
+import { CS_INGEST } from './fhir';
 import { MobileTabBar } from './components/MobileTabBar';
 import { T, mono } from './tokens';
 import { useIsMobile } from './useIsMobile';
@@ -105,29 +105,45 @@ export const NAV_SETTINGS: NavItem[] = [
 ];
 
 /**
- * Pending ingestion-review-queue size from the ai-service, refetched on every
- * route change (cheap; keeps the badge honest right after approvals).
- * Swallows failures and shows no badge when the ai-service is down — nav
- * must keep working without it (app boots with no AI configured).
+ * Pending ingestion-review-queue size, counted straight from the CDR: the
+ * pending proposals live there as Tasks (status=requested, code
+ * review-ingestion-proposal — the same search the ai-service's queue endpoint
+ * runs), so the badge stays honest even while the ai-service is down (the
+ * app boots with no AI configured). Refetched on every route change; a
+ * `_count=0` + `_total=accurate` search returns just the number (CLAUDE.md §5
+ * — `_total` defaults to none). `cache: 'reload'` skips the client's search
+ * cache because approvals are committed by the ai-service, invisible to this
+ * client's write invalidation. Swallows failures and shows no badge.
  */
 export function useReviewQueueCount(): number {
+  const medplum = useMedplum();
   const [count, setCount] = useState(0);
   const location = useLocation();
   useEffect(() => {
     let cancelled = false;
-    listReviewTasks()
-      .then((tasks) => {
+    medplum
+      .search(
+        'Task',
+        {
+          status: 'requested',
+          code: `${CS_INGEST}|review-ingestion-proposal`,
+          _total: 'accurate',
+          _count: '0',
+        },
+        { cache: 'reload' }
+      )
+      .then((bundle) => {
         if (!cancelled) {
-          setCount(tasks.length);
+          setCount(bundle.total ?? 0);
         }
       })
       .catch(() => {
-        // ai-service not running — no badge
+        // CDR unreachable — no badge
       });
     return () => {
       cancelled = true;
     };
-  }, [location.pathname]);
+  }, [medplum, location.pathname]);
   return count;
 }
 

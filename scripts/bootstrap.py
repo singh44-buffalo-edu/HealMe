@@ -5,9 +5,11 @@ Run via `make bootstrap` after `make up` (waits for the server healthcheck —
 first boot does one-time setup and can take minutes). Everything downstream
 reads what this writes into the repo-root .env: seed.py, deploy_bots.py,
 care_circle.py, smoke_test.py, and the ai-service's client-credentials login
-(CLAUDE.md §5 "Auth"). Requires open self-registration, so keep
-MEDPLUM_REGISTER_ENABLED commented out in infra/docker-compose.yml until this
-has run once (hardening note there).
+(CLAUDE.md §5 "Auth"). The FIRST run registers the owner through the open
+registration API, which infra/docker-compose.yml now disables
+(MEDPLUM_REGISTER_ENABLED 'false', Phase 9 hardening) — on a fresh install
+temporarily flip it to 'true' for this one run, then back (note there).
+Re-runs log in with the stored credentials and need no registration.
 
 Creates (idempotently):
   1. The first user + the "HealMeDaily" Project (via the registration API)

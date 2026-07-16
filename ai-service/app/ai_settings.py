@@ -38,6 +38,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from . import fhir_consts as fc
 from . import keystore, providers
 from .config import REPO_ROOT, settings
 from .providers import ProviderError, ProviderNotConfigured, _BaseProvider
@@ -153,14 +154,18 @@ def log_boundary_event(medplum: Any, feature: str, provider_name: str, descripti
     provider request: the ledger records intent-to-disclose, so a call that
     fails after data was sent still has its ledger entry. `description` is a
     short human line for the Privacy Vault UI (truncated to 200 chars) —
-    metadata only, never record content."""
+    metadata only, never record content.
+
+    Machine-readable identity: type = local {CS_AUDIT}|cloud-egress with
+    subtype = the feature slug, so the ledger is one server-side token search
+    (AuditEvent?type=...|cloud-egress) instead of a regex over descriptions.
+    HistoryPage.tsx keys on exactly this coding — the two must stay in
+    lockstep. The human entity.description keeps its exact legacy format:
+    pre-coding events are still recognized by it, and it names the provider."""
     event = {
         "resourceType": "AuditEvent",
-        "type": {
-            "system": "http://terminology.hl7.org/CodeSystem/audit-event-type",
-            "code": "rest",
-            "display": "RESTful Operation",
-        },
+        "type": {"system": fc.CS_AUDIT, "code": "cloud-egress", "display": "Data left this device (cloud AI)"},
+        "subtype": [{"system": fc.CS_AUDIT, "code": feature}],
         "action": "E",
         "recorded": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "outcome": "0",

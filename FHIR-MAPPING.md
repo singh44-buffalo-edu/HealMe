@@ -246,7 +246,7 @@ Each member (caretaker, alerts-only contact, clinician share) is a `ProjectMembe
 | Member + role | `ProjectMembership` + `Practitioner`/`RelatedPerson` profile; role tag via AccessPolicy naming (`care-circle/caretaker`, `care-circle/alerts-only`, `care-circle/clinician-share`) |
 | Scope toggles (meds, vitals, labs, check-ins, documents, AI insights) | `AccessPolicy.resource[]` entries per resource type with criteria; owner edits update the policy in place |
 | Time-boxed clinician share | AccessPolicy plus expiry: membership removed by the share job at `endDateTime` (stored in the policy name/extension); read-only (`readonly = true` on every resource rule) |
-| Break-glass | Bot swaps the member's `access[]` to the emergency policy for 24 h, creates `Communication` to the owner, writes a permanent `AuditEvent` (code local `break-glass`); a second bot run restores the original policy |
+| Break-glass | Bot writes a permanent `AuditEvent` (code local `break-glass`) BEFORE swapping the member's `access[]` to the emergency policy (scoped read-only clinical types — never ClientApplication/Bot/AccessPolicy/AuditEvent/ProjectMembership), creates `Communication` to the owner, stamps a 24 h expiry on the backup `Basic`; a 15-min cron sweep self-restores expired grants (unstamped backups treated as expired — fail-safe) |
 | Who-looked-lately | `AuditEvent` search filtered by agent = member profile |
 | Reminders / alert rules | Bot cron: due-dose scan → `CommunicationRequest`; a rung the owner declined is simply absent (owner preference stored in a `Basic` resource, local code `alert-rules`) |
 
@@ -259,7 +259,7 @@ Caretaker UI renders only what the policy returns; locked areas are a client-sid
 | Q&A session | `Communication(category local assistant-qa, subject=Patient, payload = question + answer markdown, sent)` — deletable; deletion writes an `AuditEvent` stub |
 | Citations | resource references inside the answer payload; every claim must resolve to a real resource |
 | NL quick capture | §6 proposal gate verbatim: raw text `Binary` (local type `nl-capture`) + proposal Binaries + review `Task` — never a direct commit |
-| Boundary ledger | `AuditEvent` per cloud AI call (written before the call), entity description names feature + provider; the Privacy Vault ledger is a search over these |
+| Boundary ledger | `AuditEvent` per cloud AI call (written before the call): `type` = local `CodeSystem/audit`\|`cloud-egress`, `subtype` = feature slug — one token search finds the whole ledger; entity description stays the human line naming feature + provider (legacy events are matched by it) |
 | BYOK keys / per-feature routing | **not FHIR** — OS keychain or `data/secrets/` (0600, gitignored); never in the record, never in exports/backups of the record |
 
 ## 12. Deliberately excluded mappings

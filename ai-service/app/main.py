@@ -250,9 +250,11 @@ class ApproveRequest(BaseModel):
 
 @app.post("/ingest/tasks/{task_id}/approve")
 def approve(task_id: str, body: ApproveRequest) -> dict:
-    """Owner approval of one review-queue proposal: commits resource +
-    Provenance + Task completion atomically (FHIR-MAPPING §6). 400 when the
-    task is not in 'requested' state (already handled)."""
+    """Owner approval of one review-queue proposal: $validate gate, then
+    commits resource + Provenance + Task completion atomically (FHIR-MAPPING
+    §6). 400 when the task is not in 'requested' state (already handled) or
+    when the resource fails FHIR validation — the task then stays 'requested'
+    so the owner can correct and re-approve."""
     return _wrap(ingest.approve_task, medplum, task_id, body.resource)
 
 

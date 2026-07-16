@@ -13,9 +13,12 @@
  * page never writes; dose logging lives on AdherencePage ("Log now" links there).
  *
  * FHIR reads (all bounded, single-user project so one page suffices):
- * - Observation      date=ge{90d} _count=1000 _sort=date — one search, fanned
+ * - Observation      date=ge{90d} _count=1000 _sort=-date — one search, fanned
  *   out client-side into weight (LOINC 29463-7), mood/energy/sleep-duration/
  *   symptom (local CS_OBS codes) and lab rows (category `laboratory`).
+ *   Newest-first sort so that if the window ever exceeds the 1000-result page
+ *   max, the OLDEST edge drops (disclosed by a mono note) — never today's
+ *   data; the page reverses back to ascending before deriving anything.
  * - MedicationRequest + Medication + cartridge Devices via loadMeds().
  * - MedicationAdministration via loadAdmins(30) — last 30 days of dose logs.
  * - QuestionnaireResponse _sort=-authored _count=1 — the latest check-in.
@@ -134,6 +137,7 @@ export function OverviewPage() {
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [capped, setCapped] = useState(false);
   const [weight, setWeight] = useState<Point[]>([]);
   const [mood, setMood] = useState<Point[]>([]);
   const [energy, setEnergy] = useState<Point[]>([]);
@@ -150,8 +154,9 @@ export function OverviewPage() {
       try {
         // 90-day query window. The `ge` bound is sliced from UTC ISO, so it can
         // start up to one local day early — a harmless over-fetch. `_count: 1000`
-        // is Medplum's max page size (CLAUDE.md §5); no pagination needed at
-        // single-user volumes.
+        // is Medplum's max page size (CLAUDE.md §5); sorted -date so an
+        // overflowing window clips its oldest edge, with the cap guard below
+        // disclosing it instead of silently dropping data.
         const since = new Date();
         since.setDate(since.getDate() - 90);
         const sinceStr = since.toISOString().slice(0, 10);
@@ -160,12 +165,19 @@ export function OverviewPage() {
           medplum.searchResources('Observation', {
             date: `ge${sinceStr}`,
             _count: '1000',
-            _sort: 'date',
+            _sort: '-date',
           }),
           loadMeds(medplum),
           loadAdmins(medplum, 30),
           medplum.searchResources('QuestionnaireResponse', { _sort: '-authored', _count: '1' }),
         ]);
+
+        // Cheap truncation guard: exactly one full page means the window
+        // (probably) holds more than the page max.
+        setCapped(observations.length === 1000);
+        // Everything below expects oldest-first (deltas, slice(-14), the
+        // per-list reverse()s) — restore ascending order once, here.
+        observations.reverse();
 
         const weightPts: Point[] = [];
         const moodPts: Point[] = [];
@@ -212,8 +224,8 @@ export function OverviewPage() {
         }
 
         // Presentation windows per the Dashboard design: sleep = last 14
-        // nights; symptoms (8) and labs (12) newest-first — the search returned
-        // oldest-first, hence the reverse().
+        // nights; symptoms (8) and labs (12) newest-first — the fan-out above
+        // ran oldest-first (post-reverse), hence the per-list reverse().
         setWeight(weightPts);
         setMood(moodPts);
         setEnergy(energyPts);
@@ -284,6 +296,12 @@ export function OverviewPage() {
         title="Health overview"
         subtitle={`${fmtDay(localDateString(new Date()))} · 90-day window`}
       />
+
+      {capped ? (
+        <span style={mono(10.5, 400, T.quaternary)}>
+          1,000-result cap reached — the oldest data in this 90-day window is not shown.
+        </span>
+      ) : null}
 
       <StatusStrip
         dotColor={!hasData ? T.disabled : flaggedLabs ? T.watch : T.inRange}

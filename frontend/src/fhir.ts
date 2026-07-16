@@ -53,6 +53,9 @@ export const EXT_SUPPLY_TARGET = `${BASE}/StructureDefinition/supplydelivery-tar
 export const Q_URL = `${BASE}/Questionnaire/daily-check-in`;
 export const EXT_CADENCE = `${BASE}/StructureDefinition/questionnaire-cadence`;
 export const CS_TASK = `${BASE}/CodeSystem/task`;
+// Review-queue Task codes written by the ai-service (mirror of
+// ai-service/app/fhir_consts.py CS_INGEST — the two must match exactly).
+export const CS_INGEST = `${BASE}/CodeSystem/ingestion-task`;
 export const QR_IDENT_SYSTEM = `${IDENT}/questionnaire-response`;
 // Standard terminologies — used only with VERIFIED codes (CLAUDE.md §3).
 export const OBS_CATEGORY = 'http://terminology.hl7.org/CodeSystem/observation-category';
@@ -283,9 +286,10 @@ export function slotsForDate(meds: MedInfo[], date: string): DoseSlot[] {
 /**
  * Dose events logged in the trailing `days` window. Matched to slots by
  * identifier (adminForSlot), never by fuzzy timestamp comparison.
- * Server-side date filter + `_count=1000` (Medplum's hard page max) keeps
- * this a single bounded request — a much longer window would need
- * searchResourcePages.
+ * Server-side date filter + searchResourcePages: the date bound is the real
+ * limit, and pagination past Medplum's 1000-per-page max means the window is
+ * always COMPLETE — these events feed adherence stats, where a silently
+ * truncated page would skew percentages and streaks.
  */
 export async function loadAdmins(
   medplum: MedplumClient,
@@ -293,10 +297,14 @@ export async function loadAdmins(
 ): Promise<MedicationAdministration[]> {
   const start = new Date();
   start.setDate(start.getDate() - days);
-  return medplum.searchResources('MedicationAdministration', {
+  const admins: MedicationAdministration[] = [];
+  for await (const page of medplum.searchResourcePages('MedicationAdministration', {
     'effective-time': `ge${localDateString(start)}`,
     _count: '1000',
-  });
+  })) {
+    admins.push(...page);
+  }
+  return admins;
 }
 
 /** The logged event for a slot, if any — strict identifier match only.
@@ -440,22 +448,41 @@ export interface CheckinDef {
 /** Every active questionnaire carrying a cadence tag, with its current-period
  * response (if any) — the "what is due now" list, sorted D → W → M.
  * Superseded questionnaire versions are `retired` in the CDR, so filtering on
- * status=active resolves each form uniquely (FHIR-MAPPING §2). */
+ * status=active resolves each form uniquely (FHIR-MAPPING §2).
+ * Two round trips total: one Questionnaire search, then ONE comma-OR
+ * identifier search (FHIR token OR) for every current-period response at
+ * once — never a per-questionnaire lookup loop. Responses are joined back to
+ * their questionnaire client-side by identifier value. */
 export async function loadCheckins(medplum: MedplumClient, today: Date = new Date()): Promise<CheckinDef[]> {
   const questionnaires = await medplum.searchResources('Questionnaire', { status: 'active', _count: '50' });
-  const defs: CheckinDef[] = [];
+  const tagged: { questionnaire: Questionnaire; cadence: Cadence; periodIdent: string }[] = [];
   for (const questionnaire of questionnaires) {
     const cadence = questionnaire.extension?.find((e) => e.url === EXT_CADENCE)?.valueCode as
       | Cadence
       | undefined;
     if (!cadence || !questionnaire.url) continue;
     const key = questionnaire.url.split('/').pop() as string;
-    const periodIdent = periodIdentValue(key, cadence, today);
-    const existing = await medplum.searchOne('QuestionnaireResponse', {
-      identifier: `${QR_IDENT_SYSTEM}|${periodIdent}`,
-    });
-    defs.push({ questionnaire, cadence, periodIdent, existing });
+    tagged.push({ questionnaire, cadence, periodIdent: periodIdentValue(key, cadence, today) });
   }
+
+  // At most one response exists per period identifier (idempotent writes), so
+  // _count=50 (the questionnaire cap) always covers the full result set.
+  const existingByIdent = new Map<string, QuestionnaireResponse>();
+  if (tagged.length > 0) {
+    const responses = await medplum.searchResources('QuestionnaireResponse', {
+      identifier: tagged.map((t) => `${QR_IDENT_SYSTEM}|${t.periodIdent}`).join(','),
+      _count: '50',
+    });
+    for (const response of responses) {
+      // QuestionnaireResponse.identifier is 0..1 in R4 (a single Identifier).
+      const ident = response.identifier;
+      if (ident?.system === QR_IDENT_SYSTEM && ident.value) {
+        existingByIdent.set(ident.value, response);
+      }
+    }
+  }
+
+  const defs: CheckinDef[] = tagged.map((t) => ({ ...t, existing: existingByIdent.get(t.periodIdent) }));
   const order: Cadence[] = ['D', 'W', 'M'];
   return defs.sort((a, b) => order.indexOf(a.cadence) - order.indexOf(b.cadence));
 }

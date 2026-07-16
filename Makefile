@@ -12,7 +12,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml
 COMPOSE_ALL := docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml
 PY := ai-service/.venv/bin/python
 
-.PHONY: up down logs dev seed smoke bootstrap install test lint format check bots prod-up prod-down prod-logs backup
+.PHONY: up down logs dev seed smoke bootstrap install test lint format check bots prod-up prod-down prod-logs backup rotate-superadmin
 
 # Start the Medplum stack (postgres/redis/server/app) and block until the
 # server is healthy. First boot runs one-time setup — expect minutes.
@@ -62,6 +62,12 @@ smoke:
 # Timestamped local backup: Postgres CDR dump + Medplum binary storage -> data/backups/
 backup:
 	$(PY) scripts/backup.py
+
+# Phase 9 hardening, owner-run and deliberate: replace the Medplum factory
+# super-admin password (admin@example.com/medplum_admin) with a generated one,
+# server-side + .env. `$(PY) scripts/rotate_superadmin.py --dry-run` to preview.
+rotate-superadmin:
+	$(PY) scripts/rotate_superadmin.py
 
 # Containerized deployment: Medplum stack + built frontend (:8080) + AI service (:8000).
 # Stop `make dev` first — the AI container claims port 8000.

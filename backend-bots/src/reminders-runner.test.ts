@@ -1,11 +1,15 @@
 /**
  * Tests for the dose-reminders cron bot (src/reminders-runner.ts) against
  * @medplum/mock's in-memory FHIR repo, with the clock frozen via the bot's
- * Parameters{now} test hook. Covers: reminder only after slot + 90min grace,
- * neutral "not logged" wording (never "missed"), idempotent identifiers,
- * suppression when the slot already has ANY MedicationAdministration (taken
- * or skipped), the medical-safety invariant that the bot never writes dose
- * status, and the authoredOn start anchor.
+ * Parameters{now} test hook and the timezone pinned via the app-config Basic
+ * (exactly what scripts/seed.py creates), so nothing depends on the machine
+ * running the tests. Covers: reminder only after slot + 90min grace, neutral
+ * "not logged" wording (never "missed"), idempotent identifiers, suppression
+ * when the slot already has ANY MedicationAdministration (taken or skipped),
+ * the medical-safety invariant that the bot never writes dose status, the
+ * authoredOn start anchor, and the timezone contract — slot identity derives
+ * from the OWNER's configured zone (IST fixture), with a UTC fallback when
+ * the app-config Basic is absent.
  * Run: `cd backend-bots && npm test` (part of `make check`).
  */
 import { indexSearchParameterBundle, indexStructureDefinitionBundle } from '@medplum/core';
@@ -20,11 +24,13 @@ import type {
 } from '@medplum/fhirtypes';
 import { MockClient } from '@medplum/mock';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { handler } from './reminders-runner';
+import { handler, zonedDateString, zonedInstant } from './reminders-runner';
 
 const IDENT = 'https://healmedaily.local/fhir/identifier';
 const ADMIN_IDENT = `${IDENT}/medication-administration`;
 const REMINDER_IDENT = `${IDENT}/communication-request`;
+const APP_CONFIG_IDENT = `${IDENT}/app-config`;
+const EXT_TIME_ZONE = 'https://healmedaily.local/fhir/StructureDefinition/app-config-time-zone';
 
 beforeAll(() => {
   indexStructureDefinitionBundle(readJson('fhir/r4/profiles-types.json') as Bundle);
@@ -34,9 +40,9 @@ beforeAll(() => {
   }
 });
 
-// Deterministic clock: local noon — the 08:00 slot is past due + grace,
-// the 20:00 slot is not.
-const NOW = '2026-07-15T12:00:00';
+// Deterministic clock, explicit UTC instant: with the UTC app-config the
+// 08:00 slot is past due + grace, the 20:00 slot is not.
+const NOW = '2026-07-15T12:00:00Z';
 const TODAY = '2026-07-15';
 
 function nowParams(value: string = NOW): Parameters {
@@ -45,6 +51,23 @@ function nowParams(value: string = NOW): Parameters {
 
 function makeEvent(input: Resource): BotEvent<Resource> {
   return { bot: { reference: 'Bot/test' }, contentType: 'application/fhir+json', input, secrets: {} };
+}
+
+/** The app-config Basic exactly as scripts/seed.py creates it. */
+async function makeAppConfig(medplum: MockClient, timeZone: string): Promise<void> {
+  await medplum.createResource({
+    resourceType: 'Basic',
+    identifier: [{ system: APP_CONFIG_IDENT, value: 'app-config' }],
+    code: {
+      coding: [
+        {
+          system: 'https://healmedaily.local/fhir/CodeSystem/app-config',
+          code: 'app-config',
+        },
+      ],
+    },
+    extension: [{ url: EXT_TIME_ZONE, valueString: timeZone }],
+  });
 }
 
 async function makeRequest(medplum: MockClient, slug = 'test-med'): Promise<MedicationRequest> {
@@ -65,6 +88,7 @@ async function makeRequest(medplum: MockClient, slug = 'test-med'): Promise<Medi
 describe('reminders-runner', () => {
   it('creates one reminder per slot past due + grace, none for future slots', async () => {
     const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
     await makeRequest(medplum);
 
     const created = await handler(medplum as unknown as MedplumClient, makeEvent(nowParams()));
@@ -85,17 +109,19 @@ describe('reminders-runner', () => {
 
   it('slot inside the 90min grace window gets no reminder yet', async () => {
     const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
     await makeRequest(medplum);
-    // 09:00 is only 60 min after the 08:00 slot — inside grace
+    // 09:00Z is only 60 min after the 08:00 UTC slot — inside grace
     const created = await handler(
       medplum as unknown as MedplumClient,
-      makeEvent(nowParams('2026-07-15T09:00:00'))
+      makeEvent(nowParams('2026-07-15T09:00:00Z'))
     );
     expect(created).toHaveLength(0);
   });
 
   it('is idempotent across runs (stable reminder identifier)', async () => {
     const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
     await makeRequest(medplum);
 
     const [first] = await handler(medplum as unknown as MedplumClient, makeEvent(nowParams()));
@@ -108,6 +134,7 @@ describe('reminders-runner', () => {
 
   it('skips slots that already have a logged dose (taken OR skipped)', async () => {
     const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
     await makeRequest(medplum);
     // Same slot identifier the frontend writes on log
     await medplum.createResource({
@@ -115,7 +142,7 @@ describe('reminders-runner', () => {
       status: 'completed',
       subject: { reference: 'Patient/123' },
       medicationReference: { reference: 'Medication/m1' },
-      effectiveDateTime: `${TODAY}T08:05:00`,
+      effectiveDateTime: `${TODAY}T08:05:00Z`,
       identifier: [{ system: ADMIN_IDENT, value: `test-med-${TODAY}T08:00` }],
     });
 
@@ -125,6 +152,7 @@ describe('reminders-runner', () => {
 
   it('never writes dose status — no MedicationAdministration is ever created', async () => {
     const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
     await makeRequest(medplum);
     await handler(medplum as unknown as MedplumClient, makeEvent(nowParams()));
     const admins = await medplum.searchResources('MedicationAdministration');
@@ -133,9 +161,85 @@ describe('reminders-runner', () => {
 
   it('ignores requests that have not started yet (authoredOn in the future)', async () => {
     const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
     const req = await makeRequest(medplum);
     await medplum.updateResource({ ...req, authoredOn: '2026-08-01' });
     const created = await handler(medplum as unknown as MedplumClient, makeEvent(nowParams()));
     expect(created).toHaveLength(0);
+  });
+
+  it('derives slot identity in the configured owner zone, not the process/UTC clock (IST)', async () => {
+    const medplum = new MockClient();
+    await makeAppConfig(medplum, 'Asia/Kolkata');
+    await makeRequest(medplum);
+
+    // 05:00Z = 10:30 IST: the 08:00 IST slot (02:30Z) is 2.5h past — due.
+    // A UTC-clocked bot would see the 08:00 UTC slot as 3h in the FUTURE
+    // and stay silent; this is the exact divergence the app-config fixes.
+    const created = await handler(
+      medplum as unknown as MedplumClient,
+      makeEvent(nowParams('2026-07-15T05:00:00Z'))
+    );
+    expect(created).toHaveLength(1);
+    // Identifier carries the IST wall-clock slot — same value the UI writes.
+    expect(created[0].identifier?.[0]?.value).toBe('reminder/test-med/2026-07-15T08:00');
+    // The stored instant is that IST wall-clock as an absolute time.
+    expect(new Date(created[0].occurrenceDateTime as string).toISOString()).toBe(
+      '2026-07-15T02:30:00.000Z'
+    );
+  });
+
+  it("derives 'today' in the owner zone across the UTC date boundary (IST)", async () => {
+    const medplum = new MockClient();
+    await makeAppConfig(medplum, 'Asia/Kolkata');
+    await makeRequest(medplum);
+
+    // 2026-07-14T20:30Z = 2026-07-15 02:00 IST: IST's "today" is the 15th
+    // and neither of its slots is due yet — no reminders. A UTC-date bot
+    // would still be on the 14th and fire for that day's 08:00 slot.
+    const created = await handler(
+      medplum as unknown as MedplumClient,
+      makeEvent(nowParams('2026-07-14T20:30:00Z'))
+    );
+    expect(created).toHaveLength(0);
+  });
+
+  it('falls back to UTC slot identity when the app-config Basic is absent', async () => {
+    const medplum = new MockClient();
+    await makeRequest(medplum); // no app-config seeded
+    const created = await handler(medplum as unknown as MedplumClient, makeEvent(nowParams()));
+    expect(created).toHaveLength(1);
+    expect(created[0].identifier?.[0]?.value).toBe(`reminder/test-med/${TODAY}T08:00`);
+  });
+
+  it('falls back to UTC when the configured zone is not a valid IANA name', async () => {
+    const medplum = new MockClient();
+    await makeAppConfig(medplum, 'Not/AZone');
+    await makeRequest(medplum);
+    const created = await handler(medplum as unknown as MedplumClient, makeEvent(nowParams()));
+    expect(created).toHaveLength(1);
+    expect(created[0].identifier?.[0]?.value).toBe(`reminder/test-med/${TODAY}T08:00`);
+  });
+});
+
+describe('zoned time helpers', () => {
+  it('zonedDateString formats the calendar date of an instant in a zone', () => {
+    const instant = new Date('2026-07-14T20:30:00Z');
+    expect(zonedDateString(instant, 'Asia/Kolkata')).toBe('2026-07-15');
+    expect(zonedDateString(instant, 'UTC')).toBe('2026-07-14');
+  });
+
+  it('zonedInstant resolves a wall-clock slot to the correct absolute instant', () => {
+    expect(zonedInstant('2026-07-15', '08:00:00', 'Asia/Kolkata').toISOString()).toBe(
+      '2026-07-15T02:30:00.000Z'
+    );
+    expect(zonedInstant('2026-07-15', '08:00:00', 'UTC').toISOString()).toBe(
+      '2026-07-15T08:00:00.000Z'
+    );
+    // DST-observing zone, summer offset (America/Los_Angeles = UTC-7 in July)
+    expect(zonedInstant('2026-07-15', '08:00:00', 'America/Los_Angeles').toISOString()).toBe(
+      '2026-07-15T15:00:00.000Z'
+    );
+    expect(Number.isNaN(zonedInstant('2026-07-15', 'nonsense', 'UTC').getTime())).toBe(true);
   });
 });

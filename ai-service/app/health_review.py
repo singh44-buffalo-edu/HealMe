@@ -62,6 +62,15 @@ def _iso_date(days_ago: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%d")
 
 
+# Hard ceiling on the window queries below: 25 pages × _count=1000 per query,
+# followed via Bundle.link.next (medplum.search_all). Far beyond hand-logged
+# volumes, but a long window over Apple-Health-scale imports can exceed it —
+# then the newest rows win (_sort descending) and the context is explicitly
+# flagged as truncated so the summary can disclose the gap instead of quietly
+# reporting on a partial record.
+CONTEXT_MAX_PAGES = 25
+
+
 def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, Any]:
     """Query the CDR and reduce to compact aggregates — not raw resource dumps
     (keeps the prompt small AND limits what ever leaves the device on cloud
@@ -84,7 +93,11 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
         elif res["resourceType"] == "MedicationRequest":
             med_requests.append(res)
 
-    admins = medplum.search_resources("MedicationAdministration", {"effective-time": f"ge{since}", "_count": 1000})
+    admins, admins_truncated = medplum.search_all(
+        "MedicationAdministration",
+        {"effective-time": f"ge{since}", "_sort": "-effective-time", "_count": 1000},
+        max_pages=CONTEXT_MAX_PAGES,
+    )
     by_request: dict[str, list[dict]] = defaultdict(list)
     for adm in admins:
         ref = adm.get("request", {}).get("reference", "")
@@ -119,7 +132,14 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
     # Bucket observations into named series by this app's tracker codes
     # (FHIR-MAPPING §4): LOINC 29463-7 = weight, local mood/energy/
     # sleep-duration/symptom/rx-question, plus any laboratory-category value.
-    observations = medplum.search_resources("Observation", {"date": f"ge{since}", "_count": 1000})
+    # Fetched newest-first (truncation clips the oldest edge), then reversed
+    # to ascending so the [-N:] slices below keep the RECENT entries.
+    observations, obs_truncated = medplum.search_all(
+        "Observation",
+        {"date": f"ge{since}", "_sort": "-date", "_count": 1000},
+        max_pages=CONTEXT_MAX_PAGES,
+    )
+    observations.reverse()
     series: dict[str, list[tuple[str, Any]]] = defaultdict(list)
     symptoms = []
     for obs in observations:
@@ -164,7 +184,7 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
     ]
     reports_total = medplum.search("DiagnosticReport", {"_count": 0, "_total": "accurate"}).get("total", 0)
 
-    return {
+    context: dict[str, Any] = {
         "window_days": window_days,
         "window_start": since,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -173,12 +193,22 @@ def collect_context(medplum: MedplumFhirClient, window_days: int) -> dict[str, A
         "sleep_hours": summarize_series(series.get("sleep_hours", [])),
         "mood_1_to_10": summarize_series(series.get("mood", [])),
         "energy_1_to_10": summarize_series(series.get("energy", [])),
-        "symptoms": symptoms[:50],
+        "symptoms": symptoms[-50:],
         "recent_lab_values": series.get("labs", [])[-20:],
         "questions_for_prescriber": [{"date": d, "question": q} for d, q in series.get("rx_questions", [])[-20:]],
         "conditions": conditions,
         "lab_report_count_all_time": reports_total,
     }
+    if admins_truncated or obs_truncated:
+        # Honest-data disclosure: the key rides into the JSON handed to the AI
+        # (its prompt requires gaps in the "Data gaps" section) and
+        # build_data_summary prints it — a summary over partial data must say so.
+        context["window_truncated"] = (
+            f"Data gap: the window holds more records than the query ceiling "
+            f"({CONTEXT_MAX_PAGES * 1000} per query); the oldest entries were not read. "
+            "Aggregates cover the newest records only."
+        )
+    return context
 
 
 def build_data_summary(context: dict[str, Any]) -> str:
@@ -245,6 +275,9 @@ def build_data_summary(context: dict[str, Any]) -> str:
         for c in context["conditions"]:
             lines.append(f"- {c['text']} ({c['status']})")
 
+    if context.get("window_truncated"):
+        lines += ["", f"> **{context['window_truncated']}**"]
+
     lines += ["", f"{fc.DISCLAIMER}"]
     return "\n".join(lines)
 
@@ -258,11 +291,14 @@ def _store_review(
     description: str,
 ) -> dict[str, Any]:
     """Persist a finished review: markdown Binary + PDF Binary + one
-    DocumentReference (type `health-review`) carrying both attachments.
-    Each run appends a new document — history is kept, nothing overwritten."""
+    DocumentReference (type `health-review`) carrying both attachments, all
+    with the Patient securityContext (FHIR-MAPPING §6 — review content is
+    patient data). Each run appends a new document — history is kept,
+    nothing overwritten."""
     pdf_bytes = markdown_to_pdf(markdown, title="HealMeDaily Health Review")
-    md_binary = medplum.create_binary(markdown.encode(), "text/markdown")
-    pdf_binary = medplum.create_binary(pdf_bytes, "application/pdf")
+    security_context = f"Patient/{patient_id}"
+    md_binary = medplum.create_binary(markdown.encode(), "text/markdown", security_context=security_context)
+    pdf_binary = medplum.create_binary(pdf_bytes, "application/pdf", security_context=security_context)
     doc_ref = medplum.create(
         {
             "resourceType": "DocumentReference",

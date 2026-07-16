@@ -7,17 +7,30 @@
  *
  * Where it sits: deployed by scripts/deploy_bots.py, which also creates the
  * triggering Subscription (criteria `QuestionnaireResponse`, interaction
- * filter `create`). Runs inside Medplum's vmcontext runtime; its only
- * dependency is the FHIR API via the injected MedplumClient. The frontend
- * check-in pages write the QuestionnaireResponses that fire it.
+ * filters `create` AND `update` — the frontend edits a period's response in
+ * place, and amendments must re-derive). Runs inside Medplum's vmcontext
+ * runtime; its only dependency is the FHIR API via the injected
+ * MedplumClient. The frontend check-in pages write the
+ * QuestionnaireResponses that fire it.
  *
  * ⚠️ Bot-endpoint subscriptions execute ONCE and never retry (CLAUDE.md §5),
  * hence the two design rules of this bot:
- *  - Idempotent: each Observation carries a stable identifier
- *    (responseId-linkId, FHIR-MAPPING.md §7) and is written with a
- *    conditional create, so re-runs / re-fired subscriptions never duplicate.
+ *  - Idempotent UPSERT: each Observation carries a stable identifier
+ *    (responseId-linkId, FHIR-MAPPING.md §7); the bot searches by it and
+ *    creates when absent, updates in place when the answer changed, and
+ *    leaves it untouched when identical — so re-runs / re-fired
+ *    subscriptions never duplicate, and amended check-ins converge on the
+ *    latest answers instead of charting the first submission forever.
  *  - Recoverable: a missed run can be replayed over history at any time
  *    (POST the QuestionnaireResponse to Bot/$execute) with the same outcome.
+ *
+ * Deliberately NOT handled: an answer that vanishes from an amended response
+ * does not delete its previously derived Observation. The check-in UI always
+ * submits the complete fixed form (values change; linkIds don't disappear),
+ * and auto-deleting derived clinical data on an absent answer would be a
+ * destructive inference — the QuestionnaireResponse stays the source of
+ * truth, and a genuinely retired datapoint can be removed via the Medplum
+ * App.
  *
  * This IS the "Bot strategy" of FHIR-MAPPING.md §4 — do not also enable SDC
  * template extraction for the same forms, or answers would fan out twice.
@@ -50,12 +63,14 @@ const UNITS_BY_CODE: Record<string, { unit: string; code: string }> = {
  * @param medplum - project-scoped client injected by the bot runtime
  * @param event - `event.input` is the QuestionnaireResponse that fired the
  *   Subscription (or was passed to $execute on a manual replay)
- * @returns the Observations that now exist for this response (freshly created
- *   or found by identifier); empty when the response is unusable (missing
+ * @returns the Observations that now exist for this response (freshly
+ *   created, updated to the amended answer, or found unchanged by
+ *   identifier); empty when the response is unusable (missing
  *   id/subject/questionnaire) or its Questionnaire cannot be resolved
  *
- * Touches: reads Questionnaire (by canonical url), conditionally creates
- * Observations. Never modifies the QuestionnaireResponse itself.
+ * Touches: reads Questionnaire (by canonical url), upserts Observations
+ * (conditional create / update-on-change). Never modifies the
+ * QuestionnaireResponse itself.
  */
 export async function handler(
   medplum: MedplumClient,
@@ -113,30 +128,56 @@ export async function handler(
     // Dedup key: same response + same item can only ever yield one
     // Observation, no matter how many times this bot runs.
     const identifierValue = `${response.id}-${item.linkId}`;
-    const observation = await medplum.createResourceIfNoneExist<Observation>(
-      {
-        resourceType: 'Observation',
-        status: 'final',
-        category: [
-          {
-            coding: [
-              { system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'survey' },
-            ],
-          },
-        ],
-        code: { coding: [code as Coding], text: item.text },
-        subject: response.subject as Observation['subject'],
-        effectiveDateTime: response.authored,
-        derivedFrom: [{ reference: `QuestionnaireResponse/${response.id}` }],
-        identifier: [{ system: IDENT_SYSTEM, value: identifierValue }],
-        ...valueFields,
-      },
-      `identifier=${IDENT_SYSTEM}|${identifierValue}`
-    );
+    const desired: Observation = {
+      resourceType: 'Observation',
+      status: 'final',
+      category: [
+        {
+          coding: [
+            { system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'survey' },
+          ],
+        },
+      ],
+      code: { coding: [code as Coding], text: item.text },
+      subject: response.subject as Observation['subject'],
+      effectiveDateTime: response.authored,
+      derivedFrom: [{ reference: `QuestionnaireResponse/${response.id}` }],
+      identifier: [{ system: IDENT_SYSTEM, value: identifierValue }],
+      ...valueFields,
+    };
+
+    // Upsert: an amended check-in (same response id, new answers) must
+    // update the derived Observation in place, not be skipped as a
+    // duplicate. Identical replays stay writeless so a re-fired
+    // subscription or manual $execute never churns versions.
+    const existing = await medplum.searchOne('Observation', {
+      identifier: `${IDENT_SYSTEM}|${identifierValue}`,
+    });
+    let observation: Observation;
+    if (!existing) {
+      // Conditional create (not plain create): two concurrent first runs
+      // still converge on one resource.
+      observation = await medplum.createResourceIfNoneExist<Observation>(
+        desired,
+        `identifier=${IDENT_SYSTEM}|${identifierValue}`
+      );
+    } else if (sameDerivedContent(existing, desired)) {
+      observation = existing;
+    } else {
+      observation = await medplum.updateResource<Observation>({ ...desired, id: existing.id });
+    }
     created.push(observation);
   }
 
   return created;
+}
+
+/** True when the fields an amendment can change (value + clinical time) are
+ * identical — the replay/no-churn guard of the upsert. */
+function sameDerivedContent(existing: Observation, desired: Observation): boolean {
+  const pick = (o: Observation) =>
+    JSON.stringify([o.valueInteger ?? null, o.valueQuantity ?? null, o.effectiveDateTime ?? null]);
+  return pick(existing) === pick(desired);
 }
 
 /** Depth-first flatten of nested questionnaire item groups. */

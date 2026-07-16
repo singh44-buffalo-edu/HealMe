@@ -13,6 +13,7 @@ CS_ADHERENCE = BASE + "/CodeSystem/adherence-reason"  # user-skipped / user-mark
 CS_DEVICE = BASE + "/CodeSystem/device"  # medication-cartridge etc.
 CS_INGEST = BASE + "/CodeSystem/ingestion-task"  # review-queue Task codes (candidate, confidence...)
 CS_DOC = BASE + "/CodeSystem/document"  # DocumentReference types: uploaded-document, health-review, nl-capture
+CS_AUDIT = BASE + "/CodeSystem/audit"  # AuditEvent.type coding: cloud-egress (subtype = AI feature slug)
 EXT_LIFE_CRITICAL = BASE + "/StructureDefinition/medicationrequest-life-critical"  # owner-set only, never inferred
 EXT_DEVICE_MED = BASE + "/StructureDefinition/device-assigned-medication"
 

@@ -51,6 +51,11 @@ class FakeMedplum:
         self.search_calls.append((resource_type, dict(params)))
         return {"total": 0}
 
+    def search_all(self, resource_type, params, max_pages=100):
+        # collect_context's window queries — single canned page, never truncated.
+        self.search_calls.append((resource_type, dict(params)))
+        return [dict(r) for r in self._search_results.get(resource_type, [])], False
+
     def get(self, path):
         from app.medplum import MedplumError
 
@@ -63,9 +68,11 @@ class FakeMedplum:
         self.created.append(created)
         return created
 
-    def create_binary(self, data, content_type):
+    def create_binary(self, data, content_type, security_context=None):
         binary = {"resourceType": "Binary", "id": self._new_id("bin"), "contentType": content_type}
-        self.binaries.append({"id": binary["id"], "data": data, "content_type": content_type})
+        self.binaries.append(
+            {"id": binary["id"], "data": data, "content_type": content_type, "security_context": security_context}
+        )
         self.created.append(binary)
         return binary
 
@@ -378,9 +385,11 @@ def test_nl_import_creates_review_tasks_not_committed_resources(client, fake, mo
     assert _created(fake, "Observation") == []
     assert _created(fake, "MedicationRequest") == []
 
-    # Raw note stored as Binary + nl-capture DocumentReference.
+    # Raw note stored as Binary + nl-capture DocumentReference. Every Binary
+    # holding patient data carries the Patient securityContext (FHIR-MAPPING §6).
     raw = next(b for b in fake.binaries if b["content_type"] == "text/plain")
     assert raw["data"] == b"weighed 70.4 this morning, slept 6h"
+    assert all(b["security_context"] == "Patient/pat-1" for b in fake.binaries)
     doc_refs = _created(fake, "DocumentReference")
     assert len(doc_refs) == 1
     assert doc_refs[0]["type"]["coding"][0] == {"system": fc.CS_DOC, "code": "nl-capture"}

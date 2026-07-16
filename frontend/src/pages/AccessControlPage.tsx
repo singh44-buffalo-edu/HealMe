@@ -1077,8 +1077,9 @@ function EmergencyCard({ policy, uses }: { policy?: AccessPolicy; uses?: number 
         <CardTitle size={14.5}>If I can&rsquo;t respond</CardTitle>
       </div>
       <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: '#98989d' }}>
-        A caretaker can unlock everything — read-only — for 24 hours. You are told the moment it happens,
-        and it is written into your record&rsquo;s history permanently.
+        A caretaker can unlock your health data — read-only, never settings or keys — for 24 hours,
+        after which access restores itself. You are told the moment it happens, and it is written into
+        your record&rsquo;s history permanently, before any access is granted.
       </p>
       {policy ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

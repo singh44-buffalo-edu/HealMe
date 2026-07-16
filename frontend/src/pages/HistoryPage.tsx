@@ -10,11 +10,14 @@
  * heuristic display logic, not a data model.
  *
  * The boundary ledger rows matter most (FHIR-MAPPING.md §11): the ai-service
- * writes one AuditEvent BEFORE every cloud AI call, entity description
- * "AI request · <feature> → <provider> · …". Those render amber with the
- * ☁ CLOUD tag — the Privacy Vault promise that every byte leaving the
- * machine is named here. If the service's description format changes, the
- * regex in toRow() must change with it.
+ * writes one AuditEvent BEFORE every cloud AI call. Since 2026-07-15 those
+ * events carry a machine-readable coding — AuditEvent.type
+ * {BASE}/CodeSystem/audit|cloud-egress, subtype = the feature slug — which
+ * toRow() matches first. Events written before the coding existed are still
+ * recognized by their entity description "AI request · <feature> →
+ * <provider> · …" (the legacy regex fallback — keep it until the historical
+ * rows age out). Either way they render amber with the ☁ CLOUD tag — the
+ * Privacy Vault promise that every byte leaving the machine is named here.
  *
  * Trust contract surfaced by RulesCard: edits create versions (FHIR history,
  * nothing lost), assistant-session deletion leaves a note, cloud calls are
@@ -42,11 +45,18 @@ import {
 import type { CSSProperties, JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { DsCard, FilterChips, PageHeader, PillButton, StatusDot } from '../components/ds';
+import { BASE } from '../fhir';
 import { mono, T } from '../tokens';
 
 // Events per fetch. Medplum's _count default is 20 (max 1000); 100 keeps
 // "Load earlier" clicks rare without hauling the whole log.
 const PAGE_SIZE = 100;
+
+// Local audit CodeSystem (FHIR-MAPPING §11). The ai-service stamps every
+// cloud-boundary AuditEvent with type = CS_AUDIT|cloud-egress (subtype =
+// feature slug) — written in ai-service/app/ai_settings.py; the two must
+// stay in lockstep.
+const CS_AUDIT = `${BASE}/CodeSystem/audit`;
 
 // ---------------------------------------------------------------------------
 // Time helpers — LOCAL clock (audit rows answer "when did this happen here")
@@ -179,12 +189,13 @@ function agentName(event: AuditEvent): string {
 
 /**
  * Classify one AuditEvent into a display row. Precedence matters: boundary-
- * ledger description → assistant deletion → break-glass → DICOM auth code
- * 110114 (Medplum uses the standard audit vocabulary: subtype 110122 login /
- * 110123 logout) → bot execution → plain REST interactions (subtype
- * read/create/update/delete or action C/R/U/D). Anything unrecognized
- * degrades to a generic "Activity recorded" row — unknown events must still
- * be visible, never dropped. outcome !== '0' marks failure.
+ * ledger coding (type CS_AUDIT|cloud-egress; legacy uncoded events matched
+ * by their description string) → assistant deletion → break-glass → DICOM
+ * auth code 110114 (Medplum uses the standard audit vocabulary: subtype
+ * 110122 login / 110123 logout) → bot execution → plain REST interactions
+ * (subtype read/create/update/delete or action C/R/U/D). Anything
+ * unrecognized degrades to a generic "Activity recorded" row — unknown
+ * events must still be visible, never dropped. outcome !== '0' marks failure.
  */
 function toRow(event: AuditEvent, index: number): RowModel {
   const recorded = event.recorded ?? event.meta?.lastUpdated;
@@ -208,15 +219,22 @@ function toRow(event: AuditEvent, index: number): RowModel {
   let amberDot = false;
   let tag: RowModel['tag'];
 
+  // Cloud-boundary detection: the machine-readable coding is authoritative
+  // (type CS_AUDIT|cloud-egress, subtype = feature slug); the description
+  // regex remains only for historical events written before the coding.
+  const cloudCoded = event.type?.system === CS_AUDIT && event.type?.code === 'cloud-egress';
   const boundary = desc.match(/^AI request · ([^·]+?) → ([^·]+?) ·/);
-  if (boundary) {
+  if (cloudCoded || boundary) {
     // Cloud-boundary ledger entry — one per AI request whose data left this device.
     kind = 'cloud';
     category = 'ai';
-    title = `Sent to ${providerDisplay(boundary[2])} — cloud request`;
+    // Provider name still rides the human description line; the coding
+    // identifies the event and the feature, not the provider.
+    title = `Sent to ${providerDisplay(boundary?.[2] ?? '')} — cloud request`;
     amberDot = true;
     tag = { label: '☁ CLOUD', fg: T.watch, bg: '#fdf9f1' };
-    metaParts = [entity?.name ?? '', 'data left this device', agent];
+    const feature = cloudCoded ? subtype : (boundary?.[1] ?? '');
+    metaParts = [entity?.name || feature, 'data left this device', agent];
   } else if (desc === 'assistant session deleted') {
     kind = 'aiDeleted';
     category = 'ai';

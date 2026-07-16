@@ -323,9 +323,24 @@ export function CheckinPage() {
               <StateTag due={!selected.existing} />
             </span>
           </div>
+          {/*
+           * Prefill on edit: questionnaireResponse feeds useQuestionnaireForm's
+           * defaultValue, which merges the stored answers into the form items by
+           * linkId — so "Edit answers" starts from what was submitted instead of a
+           * blank form (a partial re-entry used to silently drop the untouched
+           * answers from the record). The hook latches defaultValue on first mount
+           * only, so the key encodes the prefill identity too: it still resets the
+           * form when switching questionnaires, and additionally remounts when
+           * toggling into edit mode so the prefill actually applies. The submitted
+           * draft is rebuilt by the hook and never carries the stored response's
+           * id/identifier — handleSubmit re-stamps the period identifier and (via
+           * def.existing.id) the resource id, so the save stays an update of the
+           * same logical response and _history versioning preserves prior answers.
+           */}
           <QuestionnaireForm
-            key={selected.questionnaire.url}
+            key={`${selected.questionnaire.url}#${editing ? (selected.existing?.id ?? 'edit') : 'new'}`}
             questionnaire={selected.questionnaire}
+            questionnaireResponse={editing ? selected.existing : undefined}
             onSubmit={(response) => handleSubmit(selected, response)}
           />
         </DsCard>

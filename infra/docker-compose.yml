@@ -15,10 +15,12 @@
 # The custom frontend (:5173 dev / :8080 prod) and ai-service (:8000) are NOT
 # in this file — see docker-compose.app.yml and `make dev`.
 #
-# Phase 9 hardening note: open self-registration MUST stay enabled for the
-# very first boot (scripts/bootstrap.py registers the owner account through
-# it). Once `make bootstrap` has run, uncomment MEDPLUM_REGISTER_ENABLED
-# below (medplum-server environment) to lock the instance down.
+# Phase 9 hardening note: open self-registration is DISABLED here
+# (MEDPLUM_REGISTER_ENABLED below) — the owner account exists, so nobody on
+# the LAN can self-register. FRESH INSTALLS ONLY: scripts/bootstrap.py needs
+# the registration API once to create the first user, so temporarily set
+# MEDPLUM_REGISTER_ENABLED to 'true' (or comment it out), run
+# `make bootstrap`, then flip it back to 'false' and `docker compose up -d`.
 services:
   postgres:
     image: postgres:16
@@ -111,10 +113,11 @@ services:
       MEDPLUM_INTROSPECTION_ENABLED: 'true'
       MEDPLUM_SHUTDOWN_TIMEOUT_MILLISECONDS: 30000
       # Phase 9 hardening (config key registerEnabled -> env MEDPLUM_REGISTER_ENABLED):
-      # disable open self-registration. Keep this COMMENTED for the first boot —
-      # bootstrap needs to register the owner account once — then uncomment and
-      # `docker compose up -d` again to apply.
-      # MEDPLUM_REGISTER_ENABLED: 'false'
+      # open self-registration is closed — the owner account already exists.
+      # FRESH INSTALL EXCEPTION: bootstrap registers the owner through this
+      # API exactly once, so set it to 'true' (or comment it out) for the
+      # one-time `make bootstrap`, then back to 'false' and re-up.
+      MEDPLUM_REGISTER_ENABLED: 'false'
 
     healthcheck:
       test:

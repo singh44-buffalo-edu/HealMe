@@ -11,17 +11,32 @@
  * ONLY. It never writes dose status — absence of a log is never persisted as
  * a "missed" dose from elapsed time alone.
  *
+ * Timezone (the part that makes slot identity work): the bot runs inside the
+ * medplum-server container, whose wall clock is UTC — but the frontend
+ * derives slot identifiers in the BROWSER's local zone
+ * (frontend/src/fhir.ts localDateString/slotIdentValue). So this bot never
+ * trusts the process zone: it reads the owner's IANA zone from the
+ * app-config Basic (identifier {IDENT}/app-config|app-config, extension
+ * app-config-time-zone — seeded by scripts/seed.py from HMD_TIME_ZONE in
+ * .env) and derives "today" and slot instants in THAT zone via
+ * Intl.DateTimeFormat. If the config is missing or the zone is invalid it
+ * falls back to UTC with a logged warning — reminders then run on UTC slot
+ * identity, which only matches the UI for a UTC owner; run `make seed`.
+ *
  * Slot identity matches the frontend exactly (frontend/src/fhir.ts
- * slotIdentValue): `{request-slug}-{YYYY-MM-DD}T{HH:MM}` under the
- * medication-administration identifier system, so a dose logged in the UI is
- * always seen here.
+ * slotIdentValue): `{request-slug}-{YYYY-MM-DD}T{HH:MM}` in the owner's
+ * zone, under the medication-administration identifier system, so a dose
+ * logged in the UI is always seen here.
  *
  * Where it sits: deployed by scripts/deploy_bots.py, which sets
  * Bot.cronString (every 15 minutes) — Medplum's scheduler invokes it
  * directly (requires the 'cron' project feature; deploy_bots.py enables it
- * as super admin). Because every run rescans from scratch and all writes are
- * conditional creates on stable identifiers, a missed cron tick is harmless:
- * the next tick produces the identical result.
+ * as super admin) — and Bot.auditEventTrigger=on-output so the ~96 empty
+ * scans a day don't flood the AuditEvent table (only runs that create
+ * reminders, or hit the missing-timezone warning, log output and get an
+ * execution record). Because every run rescans from scratch and all writes
+ * are conditional creates on stable identifiers, a missed cron tick is
+ * harmless: the next tick produces the identical result.
  */
 
 import { BotEvent, MedplumClient } from '@medplum/core';
@@ -32,11 +47,18 @@ import type {
   Resource,
 } from '@medplum/fhirtypes';
 
+// The vmcontext bot runtime provides console (its output is what
+// Bot.auditEventTrigger=on-output keys on), but the tsconfig lib is bare
+// ES2022 — declare the sliver we use instead of widening the lib for all bots.
+declare const console: { log: (message: string) => void };
+
 const BASE = 'https://healmedaily.local/fhir';
 const IDENT = `${BASE}/identifier`;
 const ADMIN_IDENT_SYSTEM = `${IDENT}/medication-administration`;
 const REQUEST_IDENT_SYSTEM = `${IDENT}/medication-request`;
 const REMINDER_IDENT_SYSTEM = `${IDENT}/communication-request`;
+const APP_CONFIG_IDENT_SYSTEM = `${IDENT}/app-config`;
+const EXT_TIME_ZONE = `${BASE}/StructureDefinition/app-config-time-zone`;
 const CS_MEDIUM = `${BASE}/CodeSystem/communication-medium`;
 
 /**
@@ -57,16 +79,18 @@ export const GRACE_MINUTES = 90;
  *   overdue-and-unlogged slot (created or found by identifier); empty when
  *   nothing is due
  *
- * Touches: reads MedicationRequest + MedicationAdministration, conditionally
- * creates CommunicationRequest. NEVER writes MedicationAdministration — see
- * the medical-safety rule in the file header. Idempotent at any frequency.
+ * Touches: reads Basic (app-config timezone), MedicationRequest +
+ * MedicationAdministration; conditionally creates CommunicationRequest.
+ * NEVER writes MedicationAdministration — see the medical-safety rule in the
+ * file header. Idempotent at any frequency.
  */
 export async function handler(
   medplum: MedplumClient,
   event: BotEvent<Parameters | Resource | undefined>
 ): Promise<CommunicationRequest[]> {
+  const timeZone = await resolveTimeZone(medplum);
   const now = resolveNow(event.input);
-  const today = localDateString(now);
+  const today = zonedDateString(now, timeZone);
   const created: CommunicationRequest[] = [];
 
   // Single-user regimen: a handful of active meds, so _count=100 covers the
@@ -90,7 +114,8 @@ export async function handler(
     const times = request.dosageInstruction?.flatMap((d) => d.timing?.repeat?.timeOfDay ?? []) ?? [];
 
     for (const time of times) {
-      const scheduled = new Date(`${today}T${time}`); // local time; seconds required
+      // The instant this wall-clock slot occurs in the OWNER's zone.
+      const scheduled = zonedInstant(today, time, timeZone);
       if (Number.isNaN(scheduled.getTime())) {
         continue;
       }
@@ -136,7 +161,41 @@ export async function handler(
     }
   }
 
+  if (created.length > 0) {
+    // Deliberate output: with auditEventTrigger=on-output this is what earns
+    // a reminder-creating run its execution AuditEvent.
+    console.log(`[reminders-runner] ${created.length} reminder(s) exist for overdue slots`);
+  }
   return created;
+}
+
+/**
+ * The owner's IANA timezone from the app-config Basic (seeded by
+ * scripts/seed.py from HMD_TIME_ZONE). Missing config or an invalid zone
+ * falls back to UTC — with a logged warning, because UTC slot identity only
+ * matches the UI when the owner's browser really is on UTC.
+ */
+async function resolveTimeZone(medplum: MedplumClient): Promise<string> {
+  const config = await medplum.searchOne('Basic', {
+    identifier: `${APP_CONFIG_IDENT_SYSTEM}|app-config`,
+  });
+  const zone = config?.extension?.find((e) => e.url === EXT_TIME_ZONE)?.valueString;
+  if (!zone) {
+    console.log(
+      '[reminders-runner] WARNING: no app-config timezone found — falling back to UTC ' +
+        '(slot identity may not match the UI); run `make seed` with HMD_TIME_ZONE set'
+    );
+    return 'UTC';
+  }
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: zone });
+    return zone;
+  } catch (_err) {
+    console.log(
+      `[reminders-runner] WARNING: invalid app-config timezone '${zone}' — falling back to UTC`
+    );
+    return 'UTC';
+  }
 }
 
 /** Cron invocations carry no useful input; tests pass Parameters{now} for a
@@ -166,9 +225,60 @@ function requestSlug(request: MedicationRequest): string {
 }
 
 /**
- * YYYY-MM-DD from the process-local wall clock — deliberately NOT UTC, so
- * "today" and slot dates line up with what the owner's UI shows.
+ * YYYY-MM-DD calendar date of instant `d` in `timeZone` — the owner-local
+ * "today", NEVER the container's (UTC) date, so "today" and slot dates line
+ * up with what the owner's UI shows. en-CA is the locale whose date format
+ * is already YYYY-MM-DD.
  */
-function localDateString(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export function zonedDateString(d: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+/**
+ * The absolute instant at which wall-clock `date`T`time` occurs in
+ * `timeZone` (no date/time libraries in vmcontext, so: take the UTC reading
+ * of that wall-clock, subtract the zone's offset, then re-derive the offset
+ * at the corrected instant once more to settle DST edges). Invalid input
+ * yields an Invalid Date, matching `new Date(...)` semantics upstream.
+ */
+export function zonedInstant(date: string, time: string, timeZone: string): Date {
+  const utcGuess = new Date(`${date}T${time}Z`);
+  if (Number.isNaN(utcGuess.getTime())) {
+    return utcGuess;
+  }
+  const once = utcGuess.getTime() - tzOffsetMs(utcGuess, timeZone);
+  const settled = utcGuess.getTime() - tzOffsetMs(new Date(once), timeZone);
+  return new Date(settled);
+}
+
+/** Offset (ms ahead of UTC) that `timeZone` observes at instant `at`. */
+function tzOffsetMs(at: Date, timeZone: string): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+      .formatToParts(at)
+      .map((p) => [p.type, p.value])
+  );
+  const asUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) % 24, // some ICU builds render midnight as '24'
+    Number(parts.minute),
+    Number(parts.second)
+  );
+  return asUtc - at.getTime();
 }

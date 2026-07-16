@@ -11,9 +11,13 @@
  * correlation callout grew into its own page (CorrelationsPage).
  *
  * Architecture: leaf route in App.tsx's shell; read-only. One FHIR read per
- * window change: Observation date=ge{window} _count=1000 _sort=date, fanned
- * client-side into the four series (weight = verified LOINC 29463-7;
- * sleep-duration/mood/energy = project-local CS_OBS codes — FHIR-MAPPING §2/§4).
+ * window change: Observation code={4 signal codes, comma-OR} date=ge{window}
+ * _count=1000 _sort=-date — the server filters to exactly the plotted codes
+ * (weight = verified LOINC 29463-7; sleep-duration/mood/energy =
+ * project-local CS_OBS codes — FHIR-MAPPING §2/§4), then the page routes each
+ * observation into its series. Newest-first sort means that if the window
+ * ever exceeds the 1000-result page max, the OLDEST edge drops (and a mono
+ * note says so) — never the latest readings.
  *
  * Chart contract (a known restyle trap — do not "fix"):
  * - Absolute Y domains per metric (mood/energy 0–10, sleep 0–12 h, weight
@@ -174,6 +178,7 @@ export function TrendsPage() {
   const [windowDays, setWindowDays] = useState('90');
   const [series, setSeries] = useState<Series>();
   const [range, setRange] = useState<{ start: number; end: number }>();
+  const [capped, setCapped] = useState(false);
   const [error, setError] = useState<string>();
   const [hidden, setHidden] = useState<MetricKey[]>([]);
 
@@ -182,15 +187,27 @@ export function TrendsPage() {
     (async () => {
       try {
         setSeries(undefined);
+        setCapped(false);
         const since = new Date();
         since.setDate(since.getDate() - Number(windowDays));
+        // Comma-joined tokens = FHIR OR: the server returns only the four
+        // plotted codes (CLAUDE.md §5 — never fetch-all-and-filter-in-JS).
         const observations = await medplum.searchResources('Observation', {
+          code: [
+            `${LOINC}|29463-7`,
+            `${CS_OBS}|sleep-duration`,
+            `${CS_OBS}|mood`,
+            `${CS_OBS}|energy`,
+          ].join(','),
           date: `ge${since.toISOString().slice(0, 10)}`,
           _count: '1000',
-          _sort: 'date',
+          _sort: '-date',
         });
-        // Fan one bounded search into the four series by code (see header);
-        // observations with other codes are simply ignored here.
+        // Sorted -date so a window past the 1000-result page max drops its
+        // OLDEST edge; reversed back to ascending for the fan-out below.
+        observations.reverse();
+        // Route the code-filtered search into the four series (see header);
+        // a malformed value (wrong value[x] type) is still skipped, never guessed.
         const next: Series = { weight: [], sleep: [], mood: [], energy: [] };
         for (const obs of observations) {
           const coding = obs.code?.coding?.[0];
@@ -214,6 +231,9 @@ export function TrendsPage() {
         if (!cancelled) {
           setSeries(next);
           setRange({ start: since.getTime(), end: Date.now() });
+          // Cheap truncation guard: a full page means the window (probably)
+          // holds more than the page max — disclose the clipped oldest edge.
+          setCapped(observations.length === 1000);
         }
       } catch (err) {
         if (!cancelled) setError(normalizeErrorString(err));
@@ -405,6 +425,12 @@ export function TrendsPage() {
               />
             </div>
           </div>
+
+          {capped ? (
+            <span style={mono(10.5, 400, T.quaternary)}>
+              1,000-result cap reached — the oldest data in this window is not shown.
+            </span>
+          ) : null}
 
           {/* Metric charts — one card per signal, absolute scales */}
           {!series || !xDomain || !xTicks ? (

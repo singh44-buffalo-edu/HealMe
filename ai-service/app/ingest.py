@@ -4,8 +4,9 @@ Pipeline: upload a PDF/photo → original stored immutably (Binary +
 DocumentReference) → extract text (pypdf, OCR fallback) → AI proposes FHIR
 resources → each proposal becomes a Task + proposal Binary in the review
 queue. Nothing is committed as a clinical resource until the owner approves
-(one transaction: resource + Provenance + Task completed). AI/OCR never
-bypasses this gate — the central medical-safety invariant of ingestion.
+(server-side $validate, then one transaction: resource + Provenance + Task
+completed). AI/OCR never bypasses this gate — the central medical-safety
+invariant of ingestion.
 
 Proposal Task shape (FHIR-MAPPING §6, shared verbatim with assistant.py's
 NL capture — the frontend Review page reads both identically):
@@ -158,8 +159,9 @@ def ingest_document(
 
     # The immutable original, stored before anything can fail downstream
     # (FHIR-MAPPING §6: extraction output never overwrites the source).
+    # securityContext ties the Binary's access to the Patient (§6 mandate).
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    binary = medplum.create_binary(data, content_type)
+    binary = medplum.create_binary(data, content_type, security_context=f"Patient/{patient_id}")
     doc_ref = medplum.create(
         {
             "resourceType": "DocumentReference",
@@ -193,6 +195,9 @@ def ingest_document(
 
     # One review Task per surviving candidate. Server-side re-validation of the
     # resource type: the schema enum is advisory, this check is authoritative.
+    # Deliberately NO $validate here (or in assistant.py's NL capture): a
+    # malformed proposal should still reach the queue so the owner can correct
+    # it there; approve_task's $validate is the single gate before commit.
     created = 0
     for proposal in result.get("proposals", []):
         try:
@@ -203,7 +208,9 @@ def ingest_document(
             continue
         # substitute the real patient id
         payload = json.dumps(resource).replace("PATIENT_ID", patient_id)
-        proposal_binary = medplum.create_binary(payload.encode(), "application/fhir+json")
+        proposal_binary = medplum.create_binary(
+            payload.encode(), "application/fhir+json", security_context=f"Patient/{patient_id}"
+        )
         task_input = [
             {
                 "type": {"coding": [{"system": fc.CS_INGEST, "code": "candidate"}]},
@@ -294,10 +301,16 @@ def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: d
     """Owner approval — the ONLY path from proposal to clinical resource.
     `corrected_resource` (when given) is the owner's edited version and
     replaces the stored candidate; it is re-validated against
-    ALLOWED_RESOURCE_TYPES. Commits atomically per FHIR-MAPPING §6:
-    create resource + create Provenance (naming the source document and
-    confidence) + flip the Task to completed, in one transaction Bundle.
-    Retry-safe via the task-scoped identifier (see inline note)."""
+    ALLOWED_RESOURCE_TYPES. The resolved resource must then pass the server's
+    $validate before anything is assembled — a validation failure raises
+    ValueError (→ HTTP 400) and the Task stays 'requested', so the owner can
+    correct and re-approve instead of the proposal vanishing (Medplum
+    transactions are not all-or-nothing: an invalid entry could otherwise
+    flip the Task to completed while the resource itself 400s, CLAUDE.md §9).
+    Commits atomically per FHIR-MAPPING §6: create resource + create
+    Provenance (naming the source document and confidence) + flip the Task to
+    completed, in one transaction Bundle. Retry-safe via the task-scoped
+    identifier (see inline note)."""
     task = medplum.get(f"Task/{task_id}")
     if task.get("status") != "requested":
         # Double-click / stale-tab guard: an already-completed or rejected
@@ -338,6 +351,13 @@ def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: d
         for i in resource["identifier"]
     ):
         resource["identifier"].append(commit_ident)
+
+    # $validate gate — the ONLY validation point of the proposal pipeline
+    # (creation deliberately skips it, see ingest_document). Validates the
+    # exact resource that will be committed (identifier included); raises
+    # ValueError with the OperationOutcome issues summarized, BEFORE the
+    # transaction exists, so a bad proposal can never half-commit.
+    medplum.validate_resource(resource)
 
     # Assemble the three-entry transaction: resource (conditional create),
     # Provenance targeting it via urn:uuid, Task completion with the output

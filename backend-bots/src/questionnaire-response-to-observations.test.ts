@@ -4,7 +4,9 @@
  * in-memory FHIR repo — no running server needed. Covers: one Observation
  * per numeric answer (strings skipped), UCUM-coded sleep hours, derivedFrom +
  * effectiveDateTime propagation, idempotent re-runs via the stable
- * responseId-linkId identifier, and the missing-questionnaire guard.
+ * responseId-linkId identifier, the amended-check-in upsert (changed answers
+ * update the derived Observation in place; unchanged ones are not
+ * version-churned), and the missing-questionnaire guard.
  * Run: `cd backend-bots && npm test` (part of `make check`).
  */
 import { MockClient } from '@medplum/mock';
@@ -101,6 +103,32 @@ describe('questionnaire-response-to-observations', () => {
       'identifier=https://healmedaily.local/fhir/identifier/questionnaire-observation|qr-2-mood'
     );
     expect(observations).toHaveLength(1);
+  });
+
+  it('updates the derived Observation in place when a check-in is amended', async () => {
+    const first = await handler(medplum as unknown as MedplumClient, makeEvent(makeResponse('qr-4')));
+    const originalMood = first.find((o) => o.code?.coding?.[0]?.code === 'mood');
+    const originalEnergy = first.find((o) => o.code?.coding?.[0]?.code === 'energy');
+
+    // Same response id, mood amended 7 -> 3 (the CheckinPage edit flow
+    // updates the period's QuestionnaireResponse in place).
+    const amended = makeResponse('qr-4');
+    (amended.item ?? []).find((i) => i.linkId === 'mood')!.answer = [{ valueInteger: 3 }];
+    const second = await handler(medplum as unknown as MedplumClient, makeEvent(amended));
+
+    const mood = second.find((o) => o.code?.coding?.[0]?.code === 'mood');
+    expect(mood?.id).toBe(originalMood?.id); // updated, not duplicated
+    expect(mood?.valueInteger).toBe(3);
+    const observations = await medplum.searchResources(
+      'Observation',
+      'identifier=https://healmedaily.local/fhir/identifier/questionnaire-observation|qr-4-mood'
+    );
+    expect(observations).toHaveLength(1);
+    expect(observations[0].valueInteger).toBe(3);
+
+    // Unchanged answers must not be version-churned by the replay.
+    const energy = second.find((o) => o.code?.coding?.[0]?.code === 'energy');
+    expect(energy?.meta?.versionId).toBe(originalEnergy?.meta?.versionId);
   });
 
   it('returns empty for a response without a questionnaire reference', async () => {

@@ -16,14 +16,16 @@ payload in this script is NOT applied as an update. Two consequences:
     That is exactly why the post-transaction fixups at the bottom exist: they
     PUT the delta onto found resources (retire superseded questionnaire
     versions, cadence extension, life-critical flag, authoredOn anchor,
-    cartridge->dispenser mount). Add a fixup whenever you upgrade the shape
-    of a resource that earlier seeds already created.
+    cartridge->dispenser mount, app-config timezone). Add a fixup whenever
+    you upgrade the shape of a resource that earlier seeds already created.
 
 Sample-only resources are tagged `https://healmedaily.local/fhir/tags|seed-sample`
 for easy purge later. The Patient and Questionnaires are real (untagged).
 
 Creates:
   - the single Patient (the owner)
+  - the app-config Basic (owner timezone from HMD_TIME_ZONE — the
+    reminders-runner bot reads it; kept in sync as a fixup)
   - the daily check-in Questionnaire
   - 2 sample Medications + MedicationRequests (rename/replace with the real
     regimen in the app later)
@@ -54,6 +56,8 @@ CS_DEVICE = BASE_URL + "/CodeSystem/device"
 EXT_DEVICE_MED = BASE_URL + "/StructureDefinition/device-assigned-medication"
 EXT_LIFE_CRITICAL = BASE_URL + "/StructureDefinition/medicationrequest-life-critical"
 EXT_CADENCE = BASE_URL + "/StructureDefinition/questionnaire-cadence"  # valueCode D|W|M
+CS_APP_CONFIG = BASE_URL + "/CodeSystem/app-config"
+EXT_TIME_ZONE = BASE_URL + "/StructureDefinition/app-config-time-zone"  # IANA zone
 TAGS = BASE_URL + "/tags"
 SEED_TAG = {"system": TAGS, "code": "seed-sample", "display": "Seed sample data"}
 
@@ -979,6 +983,70 @@ def main() -> None:
                 if put.status_code >= 400:
                     die(f"cartridge parent mount failed: {put.status_code}")
                 log(f"mounted Device/{res['id']} onto the dispenser")
+
+    # Fixup: the app-config Basic (identifier {IDENT}/app-config|app-config,
+    # code app-config) carries the owner's IANA timezone from HMD_TIME_ZONE so
+    # server-side bots (reminders-runner) derive dose-slot identity in the
+    # OWNER's zone instead of the medplum-server container's UTC clock.
+    # Read-check-PUT (not ifNoneExist in the bundle) so an edited .env value
+    # propagates on re-seed; the resource is real config, not sample data.
+    tz_name = env("HMD_TIME_ZONE", "America/Los_Angeles")
+    find_cfg = httpx.get(
+        base + "fhir/R4/Basic",
+        params={"identifier": f"{IDENT}/app-config|app-config", "_count": 1},
+        headers=headers,
+        timeout=15,
+    ).json()
+    if find_cfg.get("entry"):
+        cfg = find_cfg["entry"][0]["resource"]
+        current_tz = next(
+            (
+                e.get("valueString")
+                for e in cfg.get("extension", [])
+                if e.get("url") == EXT_TIME_ZONE
+            ),
+            None,
+        )
+        if current_tz != tz_name:
+            cfg["extension"] = [
+                e for e in cfg.get("extension", []) if e.get("url") != EXT_TIME_ZONE
+            ] + [{"url": EXT_TIME_ZONE, "valueString": tz_name}]
+            put = httpx.put(
+                base + f"fhir/R4/Basic/{cfg['id']}",
+                json=cfg,
+                headers=headers,
+                timeout=15,
+            )
+            if put.status_code >= 400:
+                die(f"app-config timezone update failed: {put.status_code}")
+            log(f"updated app-config timezone -> {tz_name}")
+    else:
+        post = httpx.post(
+            base + "fhir/R4/Basic",
+            json={
+                "resourceType": "Basic",
+                "identifier": [
+                    {"system": f"{IDENT}/app-config", "value": "app-config"}
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": CS_APP_CONFIG,
+                            "code": "app-config",
+                            "display": "App configuration",
+                        }
+                    ],
+                    "text": "App configuration",
+                },
+                "created": today.isoformat(),
+                "extension": [{"url": EXT_TIME_ZONE, "valueString": tz_name}],
+            },
+            headers=headers,
+            timeout=15,
+        )
+        if post.status_code >= 400:
+            die(f"app-config create failed: {post.status_code} {post.text[:300]}")
+        log(f"created app-config Basic (timezone {tz_name})")
 
     # Persist the Patient id for the service/frontend
     find = httpx.get(

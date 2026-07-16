@@ -10,8 +10,12 @@
  * Architecture: leaf route in App.tsx's shell; read-only. "Add results" links
  * to ingestion — lab values enter the record only through the review-queue
  * gate (FHIR-MAPPING §6), never directly from this page. One FHIR read:
- * - Observation category=laboratory _count=1000 _sort=date — the FULL history,
- *   no date bound: draws are sparse and multi-year context is the point.
+ * - Observation category=laboratory _sort=-date, paginated newest-first via
+ *   searchResourcePages up to MAX_LAB_PAGES — the FULL history, no date
+ *   bound: draws are sparse and multi-year context is the point. Past the
+ *   page cap the OLDEST draws drop and an explicit truncation notice renders
+ *   (a bulk EHR import can exceed Medplum's 1000-per-page max on day one —
+ *   silent truncation on a labs dashboard is never acceptable).
  *
  * Reference-range rule (SR-3): the gray band on the hero chart and the tinted
  * segment of each RangeBar are the range STATED ON THE SOURCE REPORT
@@ -66,6 +70,12 @@ const RANGE_OPTIONS: { value: HeroRange; label: string }[] = [
 
 const RANGE_DAYS: Record<HeroRange, number | undefined> = { '1Y': 365, '3Y': 1095, ALL: undefined };
 
+/** History load ceiling: MAX_LAB_PAGES × 1000 (Medplum's page max) results,
+ * walked newest-first so hitting the cap drops the OLDEST draws — and says
+ * so, via the truncation notice. A sanity bound, not a window: 10,000 lab
+ * results is decades of panels. */
+const MAX_LAB_PAGES = 10;
+
 /** Presentation-only grouping of analyte display names into familiar panel
  * cards. First matching regex wins (order matters); anything unmatched lands
  * in "Other results". A navigation aid, not a clinical taxonomy. */
@@ -97,17 +107,19 @@ interface LabPanel {
 }
 
 /**
- * Labs dashboard page. Loads the whole lab history once on mount; view
- * switching (panel/date/flagged), hero selection and range windows are pure
- * client state over that snapshot. The hero defaults to the analyte with the
- * most draws (the longest story); clicking any analyte row promotes it.
- * Failure mode: a search error renders an inline error card; zero results
- * renders guidance pointing at document ingestion.
+ * Labs dashboard page. Loads the whole lab history once on mount (paginated,
+ * newest-first — see MAX_LAB_PAGES); view switching (panel/date/flagged),
+ * hero selection and range windows are pure client state over that snapshot.
+ * The hero defaults to the analyte with the most draws (the longest story);
+ * clicking any analyte row promotes it. Failure mode: a search error renders
+ * an inline error card; zero results renders guidance pointing at document
+ * ingestion; a history past the page cap renders a truncation notice.
  */
 export function LabsPage() {
   const medplum = useMedplum();
   const navigate = useNavigate();
   const [analytes, setAnalytes] = useState<Analyte[]>();
+  const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string>();
   const [view, setView] = useState<ViewMode>('panel');
   const [heroRange, setHeroRange] = useState<HeroRange>('3Y');
@@ -116,11 +128,25 @@ export function LabsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const observations = await medplum.searchResources('Observation', {
+        // Newest-first pages: if the history outgrows the cap, the oldest
+        // draws are the ones dropped. groupAnalytes re-sorts each analyte's
+        // points ascending, so page order never reaches the charts.
+        const observations: Observation[] = [];
+        let pages = 0;
+        let lastPageSize = 0;
+        for await (const page of medplum.searchResourcePages('Observation', {
           category: 'laboratory',
           _count: '1000',
-          _sort: 'date',
-        });
+          _sort: '-date',
+        })) {
+          observations.push(...page);
+          lastPageSize = page.length;
+          pages += 1;
+          if (pages >= MAX_LAB_PAGES) break;
+        }
+        // A full final page at the cap means more history (probably) exists
+        // beyond it — say so instead of silently truncating.
+        setTruncated(pages >= MAX_LAB_PAGES && lastPageSize === 1000);
         setAnalytes(groupAnalytes(observations));
       } catch (err) {
         setError(normalizeErrorString(err));
@@ -188,6 +214,13 @@ export function LabsPage() {
           </>
         }
       />
+
+      {truncated ? (
+        <span style={mono(11, 500, T.watch)}>
+          Showing the most recent {(MAX_LAB_PAGES * 1000).toLocaleString()} results — older lab
+          history beyond this cap is not loaded.
+        </span>
+      ) : null}
 
       {analytes.length === 0 ? (
         <DsCard padding="22px 26px">

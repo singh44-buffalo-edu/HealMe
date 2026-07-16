@@ -1,4 +1,4 @@
-# CLAUDE.md — HealMeDaily personal EHR
+# AGENTS.md — HealMeDaily personal EHR
 
 Living source of truth for building this project. If this file disagrees with the official Medplum docs, **the docs win** — then update this file.
 
@@ -41,10 +41,10 @@ Not a certified medical device. Not medical advice. Human-in-the-loop for all AI
 /infra          docker-compose.yml (Medplum full stack)
 /data           local runtime data (gitignored): inbox/ watched folder
 /personal-health-record-system 2/project/design_handoff_healmedaily/   design handoff (canonical UI reference)
-CLAUDE.md  FHIR-MAPPING.md  Makefile  .env  .env.example
+AGENTS.md  FHIR-MAPPING.md  Makefile  .env  .env.example
 ```
 
-### Design system (adopted 2026-07-15 from the Claude-design handoff)
+### Design system (adopted 2026-07-15 from the Codex-design handoff)
 The `.dc.html` files in the handoff folder above are the **canonical UI reference** (its `README.md` = token tables, `HealMeDaily Design System v2.dc.html` = component catalog). Frontend implementation:
 - **Tokens**: `frontend/src/theme.css` (CSS vars) + `frontend/src/tokens.ts` (`T`, `mono()` for JS/SVG) + `frontend/src/theme.ts` (Mantine theme: `hmdGreen/hmdIndigo/hmdRed/hmdAmber` scales). IBM Plex Mono is bundled via `@fontsource/ibm-plex-mono` — never load fonts from a CDN (privacy promise: nothing leaves the device).
 - **Primitives**: `frontend/src/components/ds.tsx` — DsCard, PageHeader, Eyebrow, StatusDot, AIPill, Chip, VaultChip, BoundaryRow, SegmentedPills, FilterChips, PillButton, ConfidenceBar, Heatstrip, Sparkline, StatusStrip, TableRow, DateBadge. Extend here, don't fork styles in pages.
@@ -154,7 +154,7 @@ app **:3000** · server **:8103** · Vite **:5173** · FastAPI **:8000** · Post
 
 | # | Phase | Status |
 |---|---|---|
-| 1 | Design proposal + CLAUDE.md + FHIR-MAPPING.md | ✅ awaiting sign-off |
+| 1 | Design proposal + AGENTS.md + FHIR-MAPPING.md | ✅ awaiting sign-off |
 | 2 | Walking skeleton: 3 tiers up + seeded + smoke green | — |
 | 3 | MVP: logging UI, cartridge config, 2 dashboards (Adherence, Health Overview), QR→Obs Bot, AI Health Review + PDF, basic ingestion w/ review queue | ✅ |
 | 4 | Ingestion depth: FHIR-bundle/CSV/Apple-Health importers (deterministic, dedup by content-hash identifier, `imported` tag + Provenance, direct commit — review queue is for AI extractions only), watched folder `data/inbox` (60s scan + `/ingest/scan-now`, processed/failed archive). 2026-07-15: + C-CDA (stdlib XML, verified-OID code systems only) and HL7v2 ORU (ER7, DiagnosticReport per OBR) importers; NL quick capture (`/assistant/nl-import`) proposes via the review queue | ✅ |
@@ -162,7 +162,7 @@ app **:3000** · server **:8103** · Vite **:5173** · FastAPI **:8000** · Post
 | 6 | Question engine: cadence-tagged questionnaire bank (D/W/M), due engine + multi-check-in UI, symptom→follow-up-Task bot, home due-panel. Remaining: more bank domains (spec §12), adaptive cadence, PHQ/GAD screenings | mostly ✅ |
 | 7 | More AI (2026-07-15): all 4 providers live (Anthropic/OpenAI/Gemini via httpx + Ollama local), BYOK keystore (macOS Keychain, 0600 file fallback in `data/secrets/`, keys never in FHIR/env dumps), per-feature routing local\|cloud\|off (`/ai` endpoints + AI Settings page), boundary-ledger AuditEvent before every cloud call, record-grounded Assistant with mandatory citations (`/assistant`, sessions = deletable Communications), NL quick capture. Remaining: PDF polish, ask-data chat streaming | mostly ✅ |
 | 8 | Hardware (2026-07-15): `pi-dispenser/` package sim-first — HAL (spindle/load-cell/chime/camera) with simulated+GPIO backends, scheduler shares the app's dose-event identity, MedicationDispense→Administration w/ `administration-verification` (weight>camera>self), escalation ladder per Dose Ritual design, `make pi-sim`/`pi-test`, systemd unit. Remaining: real-hardware bring-up (servo/load-cell calibration, picamera), dispenser ClientApplication, voice check-ins, Pi dashboard | partial ✅ |
-| 9 | Hardening: ai-service least-privilege AccessPolicy (bootstrap, applied), care circle (`scripts/care_circle.py` — scoped read-only AccessPolicies per member, clinician shares w/ expiry), break-glass bot (24h + owner notify + permanent AuditEvent), reminders-runner cron bot (15min, CommunicationRequest only), `scripts/backup.py` + `make backup`, Access Control + History pages. registerEnabled=false active in compose (flip to true once for a fresh install's `make bootstrap`), `make rotate-superadmin` script ready (owner runs it deliberately). Remaining: actually rotating the super-admin password, encryption-at-rest, pin/upgrade discipline (containerize ✅: `make prod-up` → frontend :8080, ai-service :8000, `data/secrets` mounted for shared AI settings) | mostly ✅ |
+| 9 | Hardening: ai-service least-privilege AccessPolicy (bootstrap, applied), care circle (`scripts/care_circle.py` — scoped read-only AccessPolicies per member, clinician shares w/ expiry), break-glass bot (24h + owner notify + permanent AuditEvent), reminders-runner cron bot (15min, CommunicationRequest only), `scripts/backup.py` + `make backup`, Access Control + History pages. Remaining: encryption-at-rest, registerEnabled=false flip (needs first-boot exception), super-admin password rotation, pin/upgrade discipline (containerize ✅: `make prod-up` → frontend :8080, ai-service :8000, `data/secrets` mounted for shared AI settings) | mostly ✅ |
 
 Pause for owner confirmation after each phase. Every phase ends runnable (`make up/dev/seed/smoke` green).
 

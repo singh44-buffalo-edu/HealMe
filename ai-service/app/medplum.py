@@ -22,6 +22,9 @@ Behaviors an external developer must know before touching this file:
   commit* (CLAUDE.md §9). Any non-2xx entry status is raised as a hard error
   so callers notice; combined with the stable identifiers + If-None-Exist
   convention (CLAUDE.md §6) a retry then converges instead of duplicating.
+- `search_all` is the paginate-until-done primitive (follows Bundle.link.next,
+  never _offset — Medplum caps _offset at 10 000); `validate_resource` is the
+  $validate gate the review queue commits through.
 """
 
 from __future__ import annotations
@@ -146,14 +149,88 @@ class MedplumFhirClient:
             raise MedplumError(f"update {path}: {resp.status_code} {resp.text[:300]}")
         return resp.json()
 
-    def create_binary(self, data: bytes, content_type: str) -> dict[str, Any]:
+    def create_binary(self, data: bytes, content_type: str, security_context: str | None = None) -> dict[str, Any]:
         """Upload raw bytes as a Binary (documents, proposal payloads, PDFs).
         Referenced from Attachment.url as "Binary/{id}" — never embedded as
-        Attachment.data (FHIR-MAPPING §6)."""
-        resp = self.request("POST", "Binary", content=data, headers={"Content-Type": content_type})
+        Attachment.data (FHIR-MAPPING §6).
+
+        `security_context` is a reference string (e.g. "Patient/{id}") that
+        becomes Binary.securityContext, tying the Binary's access to that
+        resource instead of project-wide Binary permissions. Medplum's REST
+        shape for raw-bytes uploads is the FHIR-standard X-Security-Context
+        header (docs: /docs/access/binary-security-context) — no JSON Binary
+        resource create is needed. Every Binary holding patient data must set
+        it (FHIR-MAPPING §6 mandates Patient as the context)."""
+        headers = {"Content-Type": content_type}
+        if security_context:
+            headers["X-Security-Context"] = security_context
+        resp = self.request("POST", "Binary", content=data, headers=headers)
         if resp.status_code >= 400:
             raise MedplumError(f"binary create: {resp.status_code} {resp.text[:300]}")
         return resp.json()
+
+    def validate_resource(self, resource: dict[str, Any]) -> list[dict[str, Any]]:
+        """POST {type}/$validate — server-side FHIR validation WITHOUT persisting
+        (CLAUDE.md §9: catches hallucinated fields/codes). Returns the
+        OperationOutcome issue list when nothing is severity error/fatal;
+        raises ValueError summarizing the failing issues otherwise. ValueError
+        (not MedplumError) because the caller's input is at fault — main._wrap
+        maps it to a user-correctable 400, while transport/auth failures still
+        raise MedplumError (→ 502)."""
+        resource_type = resource.get("resourceType")
+        if not resource_type:
+            raise ValueError("resource has no resourceType")
+        resp = self.request("POST", f"{resource_type}/$validate", json=resource)
+        try:
+            outcome = resp.json()
+        except ValueError:
+            outcome = {}
+        issues = outcome.get("issue", []) if outcome.get("resourceType") == "OperationOutcome" else []
+        errors = [i for i in issues if i.get("severity") in ("error", "fatal")]
+        if errors:
+            summary = "; ".join(
+                str((i.get("details") or {}).get("text") or i.get("diagnostics") or i.get("code") or "error")
+                + (f" (at {i['expression'][0]})" if i.get("expression") else "")
+                for i in errors[:5]
+            )
+            raise ValueError(f"{resource_type} failed FHIR validation: {summary}")
+        if resp.status_code >= 400:
+            # Non-OperationOutcome failure (auth/server) — not a validation verdict.
+            raise MedplumError(f"$validate {resource_type}: {resp.status_code} {resp.text[:300]}")
+        return issues
+
+    def search_all(
+        self, resource_type: str, params: dict[str, Any], max_pages: int = 100
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Page through a search by following Bundle.link[relation=next] —
+        Medplum's recommended cursor pagination. (The _offset alternative is
+        capped at 10 000 and can skip/repeat rows when writes interleave with
+        the scan; next-link paging has neither problem.)
+
+        Returns (resources, truncated). truncated=True means `max_pages` pages
+        were fetched and a next link still remained — callers must surface
+        that (export tags the bundle, health review flags the context) rather
+        than treat the result as complete.
+
+        The next URL is rebased onto our configured base before following:
+        Medplum builds it from the server's advertised public host, which —
+        like the presigned URLs read_attachment works around — may be
+        unreachable from inside the compose network."""
+        resources: list[dict[str, Any]] = []
+        bundle = self.search(resource_type, params)
+        for page in range(1, max_pages + 1):
+            resources.extend(e["resource"] for e in bundle.get("entry", []) if "resource" in e)
+            next_url = next(
+                (link.get("url") for link in bundle.get("link", []) if link.get("relation") == "next"), None
+            )
+            if not next_url:
+                return resources, False
+            if page == max_pages:
+                return resources, True  # ceiling hit with more remaining
+            marker = "/fhir/R4/"
+            idx = next_url.find(marker)
+            bundle = self.get(next_url[idx + len(marker) :] if idx >= 0 else next_url)
+        return resources, True  # only reachable when max_pages < 1
 
     def read_binary(self, binary_id: str) -> bytes:
         """Raw bytes of a Binary. Accept: */* makes Medplum stream the stored

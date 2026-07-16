@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app import ai_settings, keystore, providers
+from app import fhir_consts as fc
 
 
 @pytest.fixture(autouse=True)
@@ -242,12 +243,18 @@ def test_log_boundary_event_writes_audit_event():
     assert result["id"] == "audit-1"
     event = fake.created[0]
     assert event["resourceType"] == "AuditEvent"
-    assert event["type"]["code"] == "rest"
+    # Machine-readable ledger coding — HistoryPage filters on exactly this
+    # (type = local cloud-egress code, subtype = feature slug).
+    assert event["type"]["system"] == fc.CS_AUDIT
+    assert event["type"]["code"] == "cloud-egress"
+    assert event["subtype"] == [{"system": fc.CS_AUDIT, "code": "health-review"}]
     assert event["outcome"] == "0"
     assert event["agent"][0]["name"] == "healmedaily-ai"
     assert event["agent"][0]["requestor"] is True
     assert event["source"]["observer"]["display"] == "healmedaily-ai"
     entity = event["entity"][0]
+    # The human description format is load-bearing: legacy (pre-coding) events
+    # are recognized by it, and it still names the provider for the UI.
     assert entity["description"] == "AI request · health-review → anthropic · data left this device"
     assert entity["name"] == "90-day review"
     assert event["recorded"]

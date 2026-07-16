@@ -11,10 +11,13 @@
  *
  * Architecture: leaf route in App.tsx's shell; read-only ("Log reading" links
  * to the Quick add page). One FHIR read on mount:
- * - Observation category=vital-signs date=ge{365d} _count=1000 _sort=date,
+ * - Observation category=vital-signs date=ge{365d} _count=1000 _sort=-date,
  *   split client-side by FHIR-MAPPING §2's verified LOINC codes: BP panel
  *   85354-9 (components 8480-6 systolic / 8462-4 diastolic), HR 8867-4,
- *   temperature 8310-5, SpO2 59408-5, glucose 2339-0.
+ *   temperature 8310-5, SpO2 59408-5, glucose 2339-0. Newest-first sort so a
+ *   year of readings past the 1000-result page max clips its OLDEST edge
+ *   (disclosed by a mono note) — never the latest reading; the page reverses
+ *   back to ascending before splitting.
  *
  * Data-class rule (three classes, CLAUDE.md §2): readings whose provenance is
  * a confirmed AI extraction render with the indigo ✦ chip ("AI-read ·
@@ -276,6 +279,7 @@ export function VitalsPage() {
   const medplum = useMedplum();
   const [bp, setBp] = useState<BpPoint[]>();
   const [series, setSeries] = useState<Record<string, Point[]>>({});
+  const [capped, setCapped] = useState(false);
   const [error, setError] = useState<string>();
   const [metric, setMetric] = useState<MetricKey>('bp');
 
@@ -288,8 +292,17 @@ export function VitalsPage() {
           category: 'vital-signs',
           date: `ge${since.toISOString().slice(0, 10)}`,
           _count: '1000',
-          _sort: 'date',
+          _sort: '-date',
         });
+        // Cheap truncation guard: a full page means the year (probably) holds
+        // more readings than the page max — the note below the header
+        // discloses the clipped oldest edge (~5 readings/day exceeds 1000
+        // within a year, so this is a real state, not paranoia).
+        setCapped(observations.length === 1000);
+        // The split below and everything downstream (endpoint dots, latest =
+        // last element, rows.slice(-8)) expect oldest-first — restore
+        // ascending order once, here.
+        observations.reverse();
         // Split one bounded search by verified LOINC code: the BP panel
         // (85354-9) unpacks its systolic/diastolic components; every other
         // vitals code becomes its own single-value series keyed by code.
@@ -406,6 +419,12 @@ export function VitalsPage() {
           </>
         }
       />
+
+      {capped ? (
+        <span style={mono(10.5, 400, T.quaternary)}>
+          1,000-reading cap reached — the oldest vitals in this 1-year window are not shown.
+        </span>
+      ) : null}
 
       {/* Hero chart card */}
       <DsCard padding="22px 26px" gap={14}>

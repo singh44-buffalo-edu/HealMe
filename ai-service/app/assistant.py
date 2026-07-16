@@ -503,8 +503,9 @@ def _nl_import(text: str) -> dict[str, Any]:
     now = _now()
     # The raw note is the source document of the proposal gate: Binary + a
     # DocumentReference typed with the local `nl-capture` code, exactly like
-    # ingest.py's uploaded-document pattern.
-    raw_binary = medplum.create_binary(text.encode(), "text/plain")
+    # ingest.py's uploaded-document pattern (incl. the Patient securityContext
+    # every patient-data Binary carries, FHIR-MAPPING §6).
+    raw_binary = medplum.create_binary(text.encode(), "text/plain", security_context=f"Patient/{patient_id}")
     doc_ref = _create_with_ident(
         medplum,
         {
@@ -520,9 +521,14 @@ def _nl_import(text: str) -> dict[str, Any]:
     )
 
     task_ids = []
+    # Proposals are deliberately NOT $validate-d here: a malformed candidate
+    # still belongs in the review queue where the owner can correct it —
+    # ingest.approve_task runs the single $validate gate before any commit.
     for i, (proposal, resource) in enumerate(candidates):
         payload = json.dumps(resource).replace("PATIENT_ID", patient_id)
-        proposal_binary = medplum.create_binary(payload.encode(), "application/fhir+json")
+        proposal_binary = medplum.create_binary(
+            payload.encode(), "application/fhir+json", security_context=f"Patient/{patient_id}"
+        )
         try:
             confidence = float(proposal.get("confidence") or 0)
         except (TypeError, ValueError):
