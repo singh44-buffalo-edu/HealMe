@@ -20,18 +20,33 @@ public enum DoseEngine {
     /// adherence-display behavior → ask the owner.
     public static let overdueGraceMinutes = 90
 
+    /// Proleptic Gregorian calendar in the device's CURRENT timezone. The web
+    /// app (JS `Date`), the Pi dispenser and the bots all compute dose-slot
+    /// dates on the Gregorian calendar, so DoseEngine must too — inheriting
+    /// `Calendar.current` would, on a device set to a non-Gregorian calendar
+    /// (Buddhist, Japanese, …), emit a different year in the slot identifier
+    /// and break the cross-client identity contract. Timezone stays local
+    /// (wall-clock dosing); a computed property re-reads it so a timezone
+    /// change at runtime is picked up.
+    public static var gregorian: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = .current
+        c.locale = Locale(identifier: "en_US_POSIX")
+        return c
+    }
+
     // MARK: Calendar helpers
 
     /// Calendar date (YYYY-MM-DD) in the LOCAL timezone. Deliberately not a
     /// UTC slice — near midnight that lands on the wrong day and shifts dose
     /// slots, period identifiers and adherence stats by one day.
-    public static func localDateString(_ date: Date, calendar: Calendar = .current) -> String {
+    public static func localDateString(_ date: Date, calendar: Calendar = DoseEngine.gregorian) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
     /// Local Monday of the week containing `date` — the weekly period key.
-    public static func mondayOf(_ date: Date, calendar: Calendar = .current) -> String {
+    public static func mondayOf(_ date: Date, calendar: Calendar = DoseEngine.gregorian) -> String {
         // Mirrors JS `(getDay() + 6) % 7`: days to subtract to reach Monday.
         // Foundation weekday is 1=Sunday…7=Saturday; JS getDay is 0=Sunday.
         let weekday = calendar.component(.weekday, from: date) - 1 // 0=Sunday
@@ -41,7 +56,7 @@ public enum DoseEngine {
     }
 
     /// Slot wall-clock time as a local Date ("YYYY-MM-DD" + "HH:MM:SS").
-    public static func localDate(date: String, time: String, calendar: Calendar = .current) -> Date {
+    public static func localDate(date: String, time: String, calendar: Calendar = DoseEngine.gregorian) -> Date {
         let d = date.split(separator: "-").compactMap { Int($0) }
         let t = time.split(separator: ":").compactMap { Int($0) }
         var components = DateComponents()
@@ -74,7 +89,7 @@ public enum DoseEngine {
 
     /// Expand schedules into concrete slots for one calendar date, sorted by
     /// time of day. Pure: identical inputs regenerate identical identValues.
-    public static func slotsForDate(_ meds: [MedInfo], date: String, calendar: Calendar = .current) -> [DoseSlot] {
+    public static func slotsForDate(_ meds: [MedInfo], date: String, calendar: Calendar = DoseEngine.gregorian) -> [DoseSlot] {
         var slots: [DoseSlot] = []
         for med in meds {
             if !med.startDate.isEmpty, date < med.startDate {
@@ -115,7 +130,7 @@ public enum DoseEngine {
         admins: [MedicationAdministration],
         days: Int,
         today: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = DoseEngine.gregorian
     ) -> [DaySummary] {
         var out: [DaySummary] = []
         for i in stride(from: days - 1, through: 0, by: -1) {
@@ -152,7 +167,7 @@ public enum DoseEngine {
         admins: [MedicationAdministration],
         daySummaries: [DaySummary],
         streakDays: [DaySummary]? = nil,
-        calendar: Calendar = .current
+        calendar: Calendar = DoseEngine.gregorian
     ) -> AdherenceStats {
         func pctOf(taken: Int, notDone: Int) -> Int? {
             let logged = taken + notDone
@@ -396,7 +411,7 @@ public enum CheckinEngine {
         questionnaireKey: String,
         cadence: Cadence,
         today: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = DoseEngine.gregorian
     ) -> String {
         switch cadence {
         case .daily:

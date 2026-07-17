@@ -534,7 +534,13 @@ public actor MedplumClient {
 
     static func randomVerifier() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status != errSecSuccess {
+            // Never keep the all-zero buffer: a predictable code_verifier defeats
+            // PKCE entirely. Fall back to the system CSPRNG rather than ship zeros.
+            var rng = SystemRandomNumberGenerator()
+            bytes = (0..<bytes.count).map { _ in UInt8.random(in: .min ... .max, using: &rng) }
+        }
         return base64URL(Data(bytes))
     }
 
