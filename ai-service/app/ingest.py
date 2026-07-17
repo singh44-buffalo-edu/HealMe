@@ -33,8 +33,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import fhir_consts as fc
+from .ai_settings import get_provider_for, log_boundary_event
 from .medplum import MedplumFhirClient
-from .providers import ProviderNotConfigured, get_provider
+from .providers import ProviderNotConfigured
 
 # Upload types the pipeline accepts (MVP slice: PDFs/photos — owner decision,
 # CLAUDE.md §8; structured formats go through importers.py instead).
@@ -43,6 +44,10 @@ ALLOWED_TYPES = {
     "image/png": "image",
     "image/jpeg": "image",
 }
+
+# Ceiling on pages rasterized for OCR — a memory-exhaustion guard against a
+# small-but-crafted PDF with an enormous page count (200-DPI images are large).
+OCR_MAX_PAGES = 50
 
 # Resource types a proposal may commit as. Deliberately excludes
 # MedicationRequest (historical meds become MedicationStatement — an extraction
@@ -103,6 +108,16 @@ PROPOSAL_SCHEMA = {
 }
 
 
+def _safe_confidence(value: Any) -> float:
+    """Model-supplied confidence → clamped [0,1] float. A missing/null/non-numeric
+    value (e.g. "high", None) degrades to 0.0 rather than raising: a malformed
+    field on one proposal must not abort the whole extraction with a 500."""
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def extract_text(data: bytes, content_type: str) -> tuple[str, str]:
     """Returns (text, method). OCR fallback for scanned PDFs and images.
     Never raises: extraction failure returns ("", "failed") — the document is
@@ -121,7 +136,9 @@ def extract_text(data: bytes, content_type: str) -> tuple[str, str]:
             import pytesseract
             from pdf2image import convert_from_bytes
 
-            images = convert_from_bytes(data, dpi=200)
+            # Cap rasterized pages: a small but crafted PDF can hold thousands of
+            # pages, and 200-DPI rasterization of each would exhaust memory.
+            images = convert_from_bytes(data, dpi=200, first_page=1, last_page=OCR_MAX_PAGES)
             ocr = "\n\n".join(pytesseract.image_to_string(img) for img in images)
             return ocr.strip(), "ocr"
         # Photo
@@ -179,7 +196,9 @@ def ingest_document(
     text, method = extract_text(data, content_type)
 
     try:
-        provider = get_provider()
+        # Feature-aware routing so the AI Settings local/cloud/off toggle for
+        # 'ingest-extraction' is honored (was get_provider(), which ignored it).
+        provider = get_provider_for("ingest-extraction")
     except ProviderNotConfigured as err:
         return {
             "document_reference_id": doc_ref["id"],
@@ -189,9 +208,14 @@ def ingest_document(
             "note": f"Document stored. No extraction proposals: {err}",
         }
 
-    result = provider.generate_json(
-        EXTRACTION_SYSTEM, _document_content_blocks(data, content_type, text), PROPOSAL_SCHEMA
-    )
+    content_blocks = _document_content_blocks(data, content_type, text)
+    if not provider.is_local:
+        # Boundary ledger: written BEFORE the document text (or the full base64
+        # document/image via the vision fallback) leaves this device.
+        sent = "full document (vision)" if isinstance(content_blocks, list) else f"{len(text)} chars of text"
+        log_boundary_event(medplum, "ingest-extraction", provider.name, f"Document extraction · {filename} · {sent}")
+
+    result = provider.generate_json(EXTRACTION_SYSTEM, content_blocks, PROPOSAL_SCHEMA)
 
     # One review Task per surviving candidate. Server-side re-validation of the
     # resource type: the schema enum is advisory, this check is authoritative.
@@ -218,7 +242,7 @@ def ingest_document(
             },
             {
                 "type": {"coding": [{"system": fc.CS_INGEST, "code": "confidence"}]},
-                "valueDecimal": max(0.0, min(1.0, float(proposal.get("confidence", 0)))),
+                "valueDecimal": _safe_confidence(proposal.get("confidence")),
             },
         ]
         if proposal.get("source_excerpt"):
@@ -316,6 +340,9 @@ def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: d
         # Double-click / stale-tab guard: an already-completed or rejected
         # proposal can never be committed twice.
         raise ValueError(f"task is {task.get('status')}, expected 'requested'")
+    # Version captured for the ifMatch guard below — this read-then-write is
+    # otherwise racy (two concurrent approvals both see 'requested').
+    task_version = (task.get("meta") or {}).get("versionId")
 
     # Resolve the resource to commit: owner correction wins, otherwise the
     # stored candidate payload from the proposal Binary.
@@ -401,7 +428,17 @@ def approve_task(medplum: MedplumFhirClient, task_id: str, corrected_resource: d
                 },
             },
             {"resource": provenance, "request": {"method": "POST", "url": "Provenance"}},
-            {"resource": task_done, "request": {"method": "PUT", "url": f"Task/{task_id}"}},
+            {
+                "resource": task_done,
+                "request": {
+                    "method": "PUT",
+                    "url": f"Task/{task_id}",
+                    # ifMatch: a concurrent approval that already advanced the Task
+                    # makes this write 412 instead of re-completing it. The
+                    # committed resource is still deduped by entry-1 ifNoneExist.
+                    **({"ifMatch": f'W/"{task_version}"'} if task_version else {}),
+                },
+            },
         ],
     }
     result = medplum.post_bundle(bundle)

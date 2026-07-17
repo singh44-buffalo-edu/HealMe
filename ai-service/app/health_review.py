@@ -25,7 +25,6 @@ from typing import Any
 from . import fhir_consts as fc
 from .medplum import MedplumFhirClient
 from .pdfgen import markdown_to_pdf
-from .providers import get_provider
 
 SYSTEM_PROMPT = f"""You are a health-data summarizer preparing notes to help a person discuss
 their health with their clinician. You are given aggregated data from their personal health
@@ -346,9 +345,22 @@ def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: 
     """The AI review: aggregates → provider.generate → header (disclaimer +
     window + provider attribution) prepended → stored via _store_review.
     Provider errors propagate (main._wrap → 502/503); nothing is stored on
-    failure, so a broken run leaves no half-written review behind."""
-    provider = get_provider()  # raises ProviderNotConfigured with a friendly reason
+    failure, so a broken run leaves no half-written review behind.
+
+    Routed via get_provider_for('health-review') so the AI Settings local/cloud/
+    off toggle is honored, and — for a cloud route — a boundary AuditEvent is
+    written BEFORE the aggregated PHI leaves this device (ai_settings module
+    docstring; CLAUDE.md §6)."""
+    # Lazy import avoids an import cycle (ai_settings imports providers).
+    from .ai_settings import get_provider_for, log_boundary_event
+
+    provider = get_provider_for("health-review")  # ProviderNotConfigured → 503 before any data is assembled
     context = collect_context(medplum, window_days)
+    if not provider.is_local:
+        # Boundary ledger: written BEFORE any data leaves this device.
+        log_boundary_event(
+            medplum, "health-review", provider.name, f"AI Health Review · last {window_days} days of record"
+        )
 
     user_prompt = (
         f"Data window: last {window_days} days (since {context['window_start']}). "

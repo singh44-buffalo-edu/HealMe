@@ -72,6 +72,7 @@ def _task(status="requested"):
     return {
         "resourceType": "Task",
         "id": "task-1",
+        "meta": {"versionId": "7"},
         "status": status,
         "intent": "proposal",
         "focus": {"reference": "DocumentReference/doc-1"},
@@ -147,6 +148,86 @@ def test_approve_rejects_non_requested_task_before_validation():
     assert fake.bundles == []
 
 
+def test_approve_guards_task_write_with_ifmatch_version():
+    # The Task PUT must carry ifMatch so a concurrent double-approve 412s
+    # instead of re-completing the same proposal.
+    fake = FakeMedplum(task=_task(), candidate=_candidate())
+    ingest.approve_task(fake, "task-1", None)
+    task_entry = fake.bundles[0]["entry"][2]
+    assert task_entry["request"]["method"] == "PUT"
+    assert task_entry["request"]["ifMatch"] == 'W/"7"'
+
+
+# --- ingest_document: cloud-boundary ledger + confidence guard ----------------------
+
+
+class _FakeCloudProvider:
+    name = "anthropic"
+    model = "claude-x"
+    is_local = False
+
+    def __init__(self, result):
+        self._result = result
+
+    def generate_json(self, system, content, schema):
+        return self._result
+
+
+def test_ingest_writes_boundary_event_before_cloud_extraction(monkeypatch):
+    provider = _FakeCloudProvider({"document_kind": "labs", "proposals": []})
+    monkeypatch.setattr(ingest, "get_provider_for", lambda feature: provider)
+    fake = FakeMedplum()
+    ingest.ingest_document(fake, b"x" * 300, "application/pdf", "labs.pdf", "p1")
+
+    # Exactly one AuditEvent, tagged cloud-egress for the ingest-extraction
+    # feature, created before proposals are processed (FHIR-MAPPING §11).
+    audits = [r for r in fake.created if r["resourceType"] == "AuditEvent"]
+    assert len(audits) == 1
+    assert audits[0]["type"]["code"] == "cloud-egress"
+    assert audits[0]["subtype"][0]["code"] == "ingest-extraction"
+
+
+def test_ingest_local_provider_writes_no_boundary_event(monkeypatch):
+    class _Local(_FakeCloudProvider):
+        name = "ollama"
+        is_local = True
+
+    monkeypatch.setattr(ingest, "get_provider_for", lambda feature: _Local({"document_kind": "n", "proposals": []}))
+    fake = FakeMedplum()
+    ingest.ingest_document(fake, b"x" * 300, "application/pdf", "labs.pdf", "p1")
+    assert [r for r in fake.created if r["resourceType"] == "AuditEvent"] == []
+
+
+def test_ingest_tolerates_non_numeric_confidence(monkeypatch):
+    # A model returning confidence: null / "high" must not 500 the whole run.
+    proposal = {
+        "resource_type": "Observation",
+        "description": "hb",
+        "confidence": None,
+        "resource_json": json.dumps(_candidate()),
+    }
+    monkeypatch.setattr(
+        ingest,
+        "get_provider_for",
+        lambda feature: _FakeCloudProvider({"document_kind": "labs", "proposals": [proposal]}),
+    )
+    fake = FakeMedplum()
+    result = ingest.ingest_document(fake, b"x" * 300, "application/pdf", "labs.pdf", "p1")
+    assert result["proposals_created"] == 1
+    # confidence coerced to 0.0, task still created
+    task = next(r for r in fake.created if r["resourceType"] == "Task")
+    conf = next(i["valueDecimal"] for i in task["input"] if i["type"]["coding"][0]["code"] == "confidence")
+    assert conf == 0.0
+
+
+def test_safe_confidence_clamps_and_coerces():
+    assert ingest._safe_confidence(None) == 0.0
+    assert ingest._safe_confidence("high") == 0.0
+    assert ingest._safe_confidence(1.7) == 1.0
+    assert ingest._safe_confidence(-0.5) == 0.0
+    assert ingest._safe_confidence(0.42) == 0.42
+
+
 def test_approve_rejects_disallowed_resource_type_before_validation():
     fake = FakeMedplum(task=_task(), candidate=_candidate())
     smuggled = {"resourceType": "MedicationRequest", "status": "active"}
@@ -160,10 +241,10 @@ def test_approve_rejects_disallowed_resource_type_before_validation():
 
 
 def test_ingest_document_sets_patient_security_context(monkeypatch):
-    def raising():
+    def raising(feature):
         raise ProviderNotConfigured("no provider")
 
-    monkeypatch.setattr(ingest, "get_provider", raising)
+    monkeypatch.setattr(ingest, "get_provider_for", raising)
     fake = FakeMedplum()
     result = ingest.ingest_document(fake, b"not really a pdf", "application/pdf", "labs.pdf", "p1")
 
