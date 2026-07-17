@@ -33,7 +33,12 @@ services:
       # In-container REPO_ROOT resolves to / (app lives at /srv/app).
       - '../data/secrets:/data/secrets'
     ports:
-      - '8000:8000'
+      # Loopback-only: the ai-service has NO authentication of its own (it holds
+      # the owner's Medplum client-credentials token), so it must never be
+      # reachable off-box. The browser reaches it via http://localhost:8000
+      # (VITE_AI_SERVICE_URL) on the same machine; LAN peers cannot. Do not
+      # change to '8000:8000' — that binds 0.0.0.0 and exposes the whole record.
+      - '127.0.0.1:8000:8000'
     depends_on:
       medplum-server:
         condition: service_healthy

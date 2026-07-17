@@ -108,8 +108,10 @@ Mitigations below are required, not suggested.
 
 - Any 4 GB RAM / 2 vCPU / 40 GB VM (Hetzner CX22, DigitalOcean 4GB, EC2 t3.medium…).
   Debian 12 or Ubuntu 24.04. Enable the provider's **encrypted volume** option if offered.
-- DNS: create four A/AAAA records to the VM's IP:
-  `app.you.example`, `fhir.you.example`, `medplum.you.example`, `ai.you.example`.
+- DNS: create three A/AAAA records to the VM's IP:
+  `app.you.example`, `fhir.you.example`, `medplum.you.example`. Add
+  `ai.you.example` **only if** you consciously expose the ai-service (see the
+  warning in 4.6 — it ships not-published because it has no auth of its own).
 
 ### 4.2 Base hardening (before the app ever starts)
 
@@ -170,6 +172,15 @@ all URLs derive from `HMD_DOMAIN`; TLS is automatic (Let's Encrypt via the check
 - **Watch the History page** — the boundary ledger and "who looked lately" work the same in
   the cloud and are your intrusion smoke alarm.
 - Consider IP-allowlisting or basicauth on `medplum.you.example` (admin UI) in the Caddyfile.
+- **⚠️ The ai-service has no authentication.** It holds the owner's Medplum
+  client-credentials token, so anyone who can reach `:8000` can dump the entire
+  record (`GET /export/fhir`), write clinical data bypassing the review queue
+  (`POST /import/*`), and manage BYOK AI keys. The checked-in `Caddyfile`
+  therefore leaves `ai.{domain}` **commented out**. Keep it internal-only
+  (reach it over Tailscale, Option A). If you must expose it, uncomment the
+  block and add Caddy `basic_auth` first — never publish it bare. In this
+  cloud stack AI-in-browser features are unavailable until you do so; the
+  deterministic (no-AI) clinician summary and all non-AI features still work.
 - The UI's "On this device" VaultChip language is now aspirational — the record is on your VM.
   Consider that copy debt if option B becomes permanent.
 

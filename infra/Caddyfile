@@ -31,10 +31,28 @@ medplum.{$HMD_DOMAIN} {
 	reverse_proxy medplum-app:3000
 }
 
-# ai-service (document upload/extraction, assistant, AI settings)
-ai.{$HMD_DOMAIN} {
-	reverse_proxy healmedaily-ai:8000
-	request_body {
-		max_size 220MB
-	}
-}
+# ai-service (document upload/extraction, assistant, AI settings).
+#
+# ⚠️  DELIBERATELY NOT PUBLISHED. The ai-service has NO authentication of its
+# own — it holds the owner's Medplum client-credentials token, so anyone who
+# can reach it can GET /export/fhir (the ENTIRE health record), POST
+# /import/* (write clinical data, bypassing the review queue), and manage BYOK
+# AI keys. Exposing ai.{$HMD_DOMAIN} on the public internet = a one-curl PHI
+# dump. CORS does not stop a direct client.
+#
+# Recommended (single-user, DEPLOYMENT.md Option A): keep the ai-service
+# internal-only and reach it over Tailscale, not via Caddy.
+#
+# If you MUST expose it (Option B, and you accept the risk), uncomment below
+# AND put HTTP basic auth in front of it — never publish it bare:
+#
+#   ai.{$HMD_DOMAIN} {
+#   	basic_auth {
+#   		# generate the hash with: caddy hash-password
+#   		youruser <bcrypt-hash>
+#   	}
+#   	reverse_proxy healmedaily-ai:8000
+#   	request_body {
+#   		max_size 220MB
+#   	}
+#   }
