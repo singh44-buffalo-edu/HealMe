@@ -527,7 +527,7 @@ public actor MedplumClient {
     }
 
     private static func throwOnError(_ response: HTTPURLResponse, _ data: Data) throws {
-        guard !(200...299).contains(response.statusCode) else { return }
+        guard !(200 ... 299).contains(response.statusCode) else { return }
         if response.statusCode == 401 {
             throw MedplumError.unauthenticated
         }
@@ -558,7 +558,7 @@ public actor MedplumClient {
             // Never keep the all-zero buffer: a predictable code_verifier defeats
             // PKCE entirely. Fall back to the system CSPRNG rather than ship zeros.
             var rng = SystemRandomNumberGenerator()
-            bytes = (0..<bytes.count).map { _ in UInt8.random(in: .min ... .max, using: &rng) }
+            bytes = (0 ..< bytes.count).map { _ in UInt8.random(in: .min ... .max, using: &rng) }
         }
         return base64URL(Data(bytes))
     }

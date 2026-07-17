@@ -71,3 +71,23 @@ jobs:
       # are not needed for the simulator-backed test suite.
       - run: pip install httpx pytest
       - run: pytest -q pi-dispenser/tests
+
+  ios:
+    # macOS runner: SwiftLint/SwiftFormat, the Kit's dose-engine parity tests
+    # (they must stay green in lockstep with frontend/src/fhir.test.ts), and
+    # an unsigned simulator build of the full app.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen swiftlint swiftformat
+      - run: swiftlint --strict
+        working-directory: ios
+      - run: swiftformat --lint ios
+      - run: swift test
+        working-directory: ios/HealMeDailyKit
+      - run: |
+          xcodegen generate
+          xcodebuild -project HealMeDaily.xcodeproj -scheme HealMeDaily \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
+        working-directory: ios

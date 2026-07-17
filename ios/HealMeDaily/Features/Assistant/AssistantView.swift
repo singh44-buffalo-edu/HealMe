@@ -177,7 +177,7 @@ struct AssistantView: View {
 
             TextField("Ask about your record…", text: $question, axis: .vertical)
                 .textFieldStyle(BandFieldStyle())
-                .lineLimit(2...6)
+                .lineLimit(2 ... 6)
                 .disabled(asking)
 
             PillButton(title: "Ask about my record", variant: .ai, busy: asking) {
@@ -211,7 +211,7 @@ struct AssistantView: View {
 
             TextField("e.g. weighed 71 kg this morning", text: $quickText, axis: .vertical)
                 .textFieldStyle(BandFieldStyle())
-                .lineLimit(1...4)
+                .lineLimit(1 ... 4)
                 .disabled(quickBusy)
 
             // Cloud boundary is shown BEFORE the propose button — the user
@@ -237,7 +237,7 @@ struct AssistantView: View {
                 // saved/committed.
                 (
                     Text("\(quickNote)").font(.mono(12, weight: .medium))
-                    + Text(" proposals created — review them under Documents. Nothing was committed.")
+                        + Text(" proposals created — review them under Documents. Nothing was committed.")
                         .font(.system(size: 12))
                 )
                 .foregroundStyle(T.secondary)

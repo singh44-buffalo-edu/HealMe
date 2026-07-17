@@ -129,7 +129,8 @@ struct DocumentsView: View {
     private var captureCard: some View {
         DsCard {
             Eyebrow(text: "Capture")
-            Text("PDFs and photos go through OCR + AI extraction into the review queue below. Structured exports — FHIR JSON, CSV, Apple Health XML, C-CDA, HL7v2 — import directly with dedup.")
+            Text("PDFs and photos go through OCR + AI extraction into the review queue below. "
+                + "Structured exports — FHIR JSON, CSV, Apple Health XML, C-CDA, HL7v2 — import directly with dedup.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(T.secondary)
 

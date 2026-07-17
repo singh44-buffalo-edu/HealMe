@@ -1,0 +1,18 @@
+# SwiftFormat config — enforce the codebase's EXISTING style going forward
+# (the goal is zero-churn on the current tree, drift-guard in CI).
+--swiftversion 5.9
+--indent 4
+--maxwidth 200
+--commas always
+--semicolons never
+--wraparguments preserve
+--wrapcollections preserve
+--wrapparameters preserve
+--funcattributes preserve
+--typeattributes preserve
+--varattributes preserve
+--self init-only
+# Rules that would churn deliberate formatting or fight SwiftUI idioms
+# (single-line `if x { return y }` guards, wire-mirror doc style, /// file
+# headers, import order-as-written, explicit self in @Observable inits):
+--disable wrapMultilineStatementBraces,andOperator,preferKeyPath,sortImports,sortedImports,hoistPatternLet,redundantRawValues,numberFormatting,blankLinesAtStartOfScope,organizeDeclarations,extensionAccessControl,markTypes,opaqueGenericParameters,redundantType,redundantReturn,trailingClosures,enumNamespaces,unusedArguments,wrapIfStatementBodies,wrapPropertyBodies,wrapFunctionBodies,docComments,redundantSelf,conditionalAssignment,hoistAwait,hoistTry,elseOnSameLine,blankLinesBetweenScopes,blankLinesAroundMark,redundantStaticSelf,noForceUnwrapInTests,redundantThrows,wrap

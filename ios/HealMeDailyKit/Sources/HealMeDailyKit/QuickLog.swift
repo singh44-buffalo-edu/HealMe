@@ -145,12 +145,12 @@ public enum QuickLog {
     /// Plausibility windows from the ingestion-module spec §12.12 — entry
     /// gates only, not clinical thresholds.
     public static let vitalsRanges: [(label: String, range: ClosedRange<Double>)] = [
-        ("Systolic (mm Hg)", 70...260),
-        ("Diastolic (mm Hg)", 40...160),
-        ("Heart rate (/min)", 30...220),
-        ("Temperature (°C)", 34...42),
-        ("SpO2 (%)", 70...100),
-        ("Glucose (mg/dL)", 40...500),
+        ("Systolic (mm Hg)", 70 ... 260),
+        ("Diastolic (mm Hg)", 40 ... 160),
+        ("Heart rate (/min)", 30 ... 220),
+        ("Temperature (°C)", 34 ... 42),
+        ("SpO2 (%)", 70 ... 100),
+        ("Glucose (mg/dL)", 40 ... 500),
     ]
 
     /// Build vitals Observations for the fields that were filled in. BP must

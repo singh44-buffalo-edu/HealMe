@@ -327,11 +327,11 @@ public struct AIService: Sendable {
     private func postMultipart<T: Decodable>(_ path: String, data: Data, filename: String, mimeType: String) async throws -> T {
         let boundary = "hmd-\(UUID().uuidString)"
         var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
         body.append(data)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
         var req = request(path: path, timeout: 300) // OCR + model: tens of seconds
         req.httpMethod = "POST"
@@ -365,7 +365,7 @@ public struct AIService: Sendable {
     /// Surfaces FastAPI's `{detail}` verbatim so server-side reasons
     /// ("no provider configured", validation) reach the UI.
     private static func throwOnError(_ response: HTTPURLResponse, _ data: Data) throws {
-        guard !(200...299).contains(response.statusCode) else { return }
+        guard !(200 ... 299).contains(response.statusCode) else { return }
         var detail = "\(response.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: response.statusCode))"
         if let value = try? JSONDecoder().decode(JSONValue.self, from: data),
            let message = value["detail"]?.stringValue {
