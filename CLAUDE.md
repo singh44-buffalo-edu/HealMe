@@ -45,7 +45,13 @@ Not a certified medical device. Not medical advice. Human-in-the-loop for all AI
                 its tests mirror fhir.test.ts — change both in lockstep) +
                 HealMeDaily app target (XcodeGen project.yml, .xcodeproj
                 gitignored). make ios-project / ios-test / ios-build; docs:
-                ios/README.md + APPSTORE.md.
+                ios/README.md + APPSTORE.md. 2026-07-17: offline write outbox
+                + core snapshot (Sync.swift), opt-in read-only HealthKit sync
+                (HealthKitMapping + HealthKitService, identifier suffix
+                `healthkit` — mapping §7), Labs/Trends/Profile screens,
+                SwiftLint/SwiftFormat + CI ios job. ai-service requires a
+                Medplum bearer token on all endpoints except /health
+                (AI_REQUIRE_AUTH, web+iOS forward it automatically).
 /personal-health-record-system 2/project/design_handoff_healmedaily/   design handoff (canonical UI reference)
 CLAUDE.md  FHIR-MAPPING.md  APPSTORE.md  Makefile  .env  .env.example
 ```

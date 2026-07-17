@@ -30,7 +30,12 @@ server**. You do not need the App Store to run it on your own iPhone:
    re-run `make ios-project`).
 2. Open the project in Xcode → target **HealMeDaily** → *Signing &
    Capabilities* → check **Automatically manage signing**, pick your Team.
-   Xcode creates the App ID + certificates for you.
+   Xcode creates the App ID + certificates for you. The project ships a
+   HealthKit entitlement (read-only sync, opt-in in Settings) — Xcode adds
+   the HealthKit capability to the App ID automatically; App Review will
+   expect the Apple Health toggle to be demonstrable, and the App Privacy
+   answers below still hold (health data goes only to the user's own
+   server, the developer collects nothing).
 3. Sanity check on a real device: select your iPhone, Run. Sign in against
    `http://<mac-lan-ip>:8103/`.
 
