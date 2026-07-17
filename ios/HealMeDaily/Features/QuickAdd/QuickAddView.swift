@@ -69,7 +69,7 @@ private struct QuickAddWeightCard: View {
         Task {
             do {
                 let observation = try QuickLog.weight(kg: quickAddDouble(kgText) ?? 0, when: when)
-                try await model.record.saveQuickObservations { _ in [observation] }
+                _ = try await model.saveQuickObservations([observation])
                 kgText = ""
                 when = Date()
                 withAnimation { saved = true }
@@ -107,7 +107,7 @@ private struct QuickAddSleepCard: View {
         Task {
             do {
                 let observation = try QuickLog.sleep(hours: quickAddDouble(hoursText) ?? 0, when: when)
-                try await model.record.saveQuickObservations { _ in [observation] }
+                _ = try await model.saveQuickObservations([observation])
                 hoursText = ""
                 when = Date()
                 withAnimation { saved = true }
@@ -148,7 +148,7 @@ private struct QuickAddMoodEnergyCard: View {
             do {
                 // Returns two Observations (mood + energy) — pass the array through.
                 let observations = QuickLog.moodEnergy(mood: Int(mood), energy: Int(energy), when: when)
-                try await model.record.saveQuickObservations { _ in observations }
+                _ = try await model.saveQuickObservations(observations)
                 mood = 5
                 energy = 5
                 when = Date()
@@ -195,7 +195,7 @@ private struct QuickAddSymptomCard: View {
         Task {
             do {
                 let observation = try QuickLog.symptom(text: text, when: when)
-                try await model.record.saveQuickObservations { _ in [observation] }
+                _ = try await model.saveQuickObservations([observation])
                 text = ""
                 when = Date()
                 withAnimation { saved = true }
@@ -274,7 +274,7 @@ private struct QuickAddVitalsCard: View {
                 )
                 // Throws with a precise message (e.g. lone systolic) — surface verbatim.
                 let observations = try QuickLog.vitals(entry, when: when)
-                try await model.record.saveQuickObservations { _ in observations }
+                _ = try await model.saveQuickObservations(observations)
                 systolic = ""
                 diastolic = ""
                 heartRate = ""
@@ -328,7 +328,7 @@ private struct QuickAddRxQuestionCard: View {
         Task {
             do {
                 let observation = try QuickLog.rxQuestion(text: text)
-                try await model.record.saveQuickObservations { _ in [observation] }
+                _ = try await model.saveQuickObservations([observation])
                 text = ""
                 withAnimation { saved = true }
             } catch {
@@ -424,7 +424,7 @@ private struct QuickAddSliderRow: View {
                     .font(.mono(13, weight: .medium))
                     .foregroundStyle(T.ink)
             }
-            Slider(value: $value, in: 1...10, step: 1)
+            Slider(value: $value, in: 1 ... 10, step: 1)
                 .tint(T.green)
         }
     }

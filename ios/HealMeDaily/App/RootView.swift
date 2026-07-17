@@ -32,6 +32,14 @@ struct RootView: View {
             if phase == .background && model.requireBiometrics {
                 model.unlocked = false
             }
+            // Returning to the foreground is a natural moment to deliver
+            // queued offline writes and pick up new Apple Health samples.
+            if phase == .active && model.authState == .signedIn {
+                Task {
+                    await model.drainOutbox()
+                    await model.healthKit.sync(record: model.record)
+                }
+            }
         }
     }
 }

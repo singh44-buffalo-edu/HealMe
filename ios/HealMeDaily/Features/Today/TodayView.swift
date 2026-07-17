@@ -40,6 +40,8 @@ struct TodayView: View {
                     ErrorBanner(message: error)
                 }
 
+                syncStrip
+
                 if !model.coreLoaded {
                     ProgressView()
                         .tint(T.green)
@@ -85,6 +87,58 @@ struct TodayView: View {
         .sheet(item: $backdateTarget) { target in
             TodayBackdateSheet(slot: target.slot) { takenAt in
                 log(target.slot, .taken, takenAt: takenAt)
+            }
+        }
+    }
+
+    // MARK: - Offline / sync state
+
+    /// Offline + outbox status. Factual device-state notes (not errors):
+    /// what's shown, why, and what happens when connectivity returns.
+    @ViewBuilder
+    private var syncStrip: some View {
+        if model.isOffline || model.pendingWrites > 0 || model.usingCachedCore {
+            DsCard(padding: 12) {
+                HStack(spacing: 8) {
+                    StatusDot(color: T.watch, size: 6)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.isOffline ? "Offline" : "Syncing")
+                            .font(.mono(10, weight: .semibold))
+                            .kerning(0.8)
+                            .foregroundStyle(T.watch)
+                        if model.usingCachedCore {
+                            Text("Showing the last copy saved on this device.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(T.secondary)
+                        }
+                        if model.pendingWrites > 0 {
+                            Text("\(model.pendingWrites) change\(model.pendingWrites == 1 ? "" : "s") saved here — syncs when your server is reachable.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(T.secondary)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        if !model.syncFailures.isEmpty {
+            // Server rejected queued writes — dropped from the queue, shown
+            // loudly so nothing disappears silently.
+            DsCard(padding: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Some offline changes could not sync")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(T.outOfRange)
+                    ForEach(model.syncFailures, id: \.self) { failure in
+                        Text(failure)
+                            .font(.mono(11))
+                            .foregroundStyle(T.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    PillButton(title: "Dismiss", variant: .secondary) {
+                        model.dismissSyncFailures()
+                    }
+                }
             }
         }
     }
@@ -143,6 +197,13 @@ struct TodayView: View {
             }
 
             stateRow(row, busy: busy)
+
+            // This slot's state is a local echo of a queued write.
+            if model.pendingDoseIdents.contains(row.slot.identValue) {
+                Text("Saved on this device — pending sync")
+                    .font(.mono(10))
+                    .foregroundStyle(T.watch)
+            }
         }
         // Correcting a taken dose re-logs the same logical event.
         if case .taken = row.state {

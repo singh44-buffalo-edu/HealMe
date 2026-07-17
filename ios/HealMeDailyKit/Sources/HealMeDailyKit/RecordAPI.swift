@@ -99,37 +99,89 @@ public struct RecordAPI: Sendable {
         action: DoseAction,
         takenAt: Date? = nil
     ) async throws -> MedicationAdministration {
-        let identToken = "\(FHIR.administrationIdentSystem)|\(slot.identValue)"
+        try await applyDoseLog(Self.doseLogPayload(slot: slot, action: action, takenAt: takenAt))
+    }
+
+    /// Freeze one dose action into a self-contained, queueable payload.
+    /// Clinical time is resolved NOW (backdatable takenAt; skips/misses pin
+    /// to the scheduled slot time) so an offline entry syncs with the time
+    /// the user acted, not the time connectivity returned.
+    public static func doseLogPayload(slot: DoseSlot, action: DoseAction, takenAt: Date? = nil) -> DoseLogPayload {
+        DoseLogPayload(
+            identValue: slot.identValue,
+            requestId: slot.med.request.id ?? "",
+            medicationReference: slot.med.request.medicationReference,
+            deviceRef: slot.med.cartridge.flatMap { cartridge in
+                cartridge.device.id.map { "Device/\($0)" }
+            },
+            decrementDeviceId: (slot.med.cartridge?.remaining != nil) ? slot.med.cartridge?.device.id : nil,
+            action: action.rawValue,
+            effectiveDateTime: action == .taken
+                ? Self.isoInstant(takenAt ?? Date())
+                : Self.isoInstant(slot.scheduled)
+        )
+    }
+
+    /// Locally-synthesized echo of the administration a payload will create —
+    /// matched by identifier exactly like the server resource, so slot state
+    /// flips immediately while the write is still queued.
+    public static func echoAdministration(_ payload: DoseLogPayload) -> MedicationAdministration {
+        var echo = MedicationAdministration(
+            identifier: [Identifier(system: FHIR.administrationIdentSystem, value: payload.identValue)],
+            status: payload.action == DoseAction.taken.rawValue ? "completed" : "not-done",
+            medicationReference: payload.medicationReference,
+            request: Reference(reference: "MedicationRequest/\(payload.requestId)"),
+            effectiveDateTime: payload.effectiveDateTime
+        )
+        echo.statusReason = Self.statusReason(for: payload.action)
+        return echo
+    }
+
+    private static func statusReason(for action: String) -> [CodeableConcept]? {
+        switch action {
+        case DoseAction.skipped.rawValue:
+            return [CodeableConcept(coding: [
+                Coding(system: FHIR.csAdherence, code: "user-skipped", display: "Skipped by user"),
+            ])]
+        case DoseAction.missed.rawValue:
+            return [CodeableConcept(coding: [
+                Coding(system: FHIR.csAdherence, code: "user-marked-missed", display: "Marked missed by user"),
+            ])]
+        default:
+            return nil
+        }
+    }
+
+    /// Apply one dose-log payload (live path and outbox replay share this).
+    /// Behavior is the verbatim port of web `logDose`: identifier search
+    /// decides create-vs-correct; inventory delta follows the taken↔not-taken
+    /// TRANSITION; the decrement is display-only and never gates the med.
+    @discardableResult
+    public func applyDoseLog(_ payload: DoseLogPayload) async throws -> MedicationAdministration {
+        guard let patient = try await getPatient(), let patientId = patient.id else {
+            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+        }
+        let identToken = "\(FHIR.administrationIdentSystem)|\(payload.identValue)"
         // One identifier search decides create-vs-correct for this slot.
         let existing = try await client.searchOne(MedicationAdministration.self, [
             ("identifier", identToken),
         ])
 
+        let taken = payload.action == DoseAction.taken.rawValue
         var base = MedicationAdministration(
-            identifier: [Identifier(system: FHIR.administrationIdentSystem, value: slot.identValue)],
-            status: action == .taken ? "completed" : "not-done",
+            identifier: [Identifier(system: FHIR.administrationIdentSystem, value: payload.identValue)],
+            status: taken ? "completed" : "not-done",
             subject: Reference(reference: "Patient/\(patientId)"),
-            medicationReference: slot.med.request.medicationReference,
-            request: Reference(reference: "MedicationRequest/\(slot.med.request.id ?? "")"),
-            // Taken doses carry the (backdatable) taken time; skips/misses
-            // pin effectiveDateTime to the scheduled slot time instead.
-            effectiveDateTime: action == .taken
-                ? Self.isoInstant(takenAt ?? Date())
-                : Self.isoInstant(slot.scheduled)
+            medicationReference: payload.medicationReference,
+            request: Reference(reference: "MedicationRequest/\(payload.requestId)"),
+            effectiveDateTime: payload.effectiveDateTime
         )
-        switch action {
-        case .taken:
-            if let cartridge = slot.med.cartridge {
-                base.device = [Reference(reference: "Device/\(cartridge.device.id ?? "")")]
+        if taken {
+            if let deviceRef = payload.deviceRef {
+                base.device = [Reference(reference: deviceRef)]
             }
-        case .skipped:
-            base.statusReason = [CodeableConcept(coding: [
-                Coding(system: FHIR.csAdherence, code: "user-skipped", display: "Skipped by user"),
-            ])]
-        case .missed:
-            base.statusReason = [CodeableConcept(coding: [
-                Coding(system: FHIR.csAdherence, code: "user-marked-missed", display: "Marked missed by user"),
-            ])]
+        } else {
+            base.statusReason = Self.statusReason(for: payload.action)
         }
 
         // Capture prior state first — the inventory delta depends on the
@@ -146,9 +198,8 @@ public struct RecordAPI: Sendable {
 
         // Display-only inventory (never gates taking a med): decrement on a
         // new "taken", restore when a taken dose is corrected.
-        let delta = (action == .taken && !wasTaken) ? -1.0 : (action != .taken && wasTaken) ? 1.0 : 0.0
-        if delta != 0, let cartridge = slot.med.cartridge, cartridge.remaining != nil,
-           let deviceId = cartridge.device.id {
+        let delta = (taken && !wasTaken) ? -1.0 : (!taken && wasTaken) ? 1.0 : 0.0
+        if delta != 0, let deviceId = payload.decrementDeviceId {
             var device = try await client.read(Device.self, id: deviceId)
             let capacity = device.property?
                 .first { $0.type?.coding?.contains { $0.code == "capacity" } ?? false }?
@@ -223,27 +274,49 @@ public struct RecordAPI: Sendable {
     /// by construction — a resubmit never duplicates).
     @discardableResult
     public func submitCheckin(_ def: CheckinDef, items: [QuestionnaireResponseItem]) async throws -> QuestionnaireResponse {
+        try await applyCheckin(CheckinPayload(
+            periodIdent: def.periodIdent,
+            questionnaireUrl: def.questionnaire.url,
+            items: items,
+            authored: Self.isoInstant(Date())
+        ))
+    }
+
+    /// Locally-synthesized echo of the response a payload will create.
+    public static func echoResponse(_ payload: CheckinPayload) -> QuestionnaireResponse {
+        QuestionnaireResponse(
+            identifier: Identifier(system: FHIR.questionnaireResponseIdentSystem, value: payload.periodIdent),
+            questionnaire: payload.questionnaireUrl,
+            status: "completed",
+            authored: payload.authored,
+            item: payload.items
+        )
+    }
+
+    /// Apply one check-in payload (live path and outbox replay share this).
+    /// A fresh identifier search decides update-vs-create — replay-safe even
+    /// when the period's response appeared from elsewhere in the meantime.
+    @discardableResult
+    public func applyCheckin(_ payload: CheckinPayload) async throws -> QuestionnaireResponse {
         guard let patient = try await getPatient(), let patientId = patient.id else {
             throw MedplumError.invalidResponse("No patient record — run make seed on the server")
         }
         var response = QuestionnaireResponse(
-            identifier: Identifier(system: FHIR.questionnaireResponseIdentSystem, value: def.periodIdent),
-            questionnaire: def.questionnaire.url,
+            identifier: Identifier(system: FHIR.questionnaireResponseIdentSystem, value: payload.periodIdent),
+            questionnaire: payload.questionnaireUrl,
             status: "completed",
             subject: Reference(reference: "Patient/\(patientId)"),
-            authored: Self.isoInstant(Date()),
-            item: items
+            authored: payload.authored,
+            item: payload.items
         )
-        if let existing = def.existing {
+        let identToken = "\(FHIR.questionnaireResponseIdentSystem)|\(payload.periodIdent)"
+        if let existing = try await client.searchOne(QuestionnaireResponse.self, [("identifier", identToken)]) {
             response.id = existing.id
             return try await client.update(response)
         }
         // Conditional create (mirrors web CheckinPage): a double-tap or retry
         // races to ONE response for the period instead of duplicating.
-        return try await client.createIfNoneExist(
-            response,
-            query: "identifier=\(FHIR.questionnaireResponseIdentSystem)|\(def.periodIdent)"
-        )
+        return try await client.createIfNoneExist(response, query: "identifier=\(identToken)")
     }
 
     // MARK: Follow-up tasks
@@ -276,20 +349,136 @@ public struct RecordAPI: Sendable {
         guard let patient = try await getPatient(), let patientId = patient.id else {
             throw MedplumError.invalidResponse("No patient record — run make seed on the server")
         }
-        for var observation in build("Patient/\(patientId)") {
+        try await applyObservations(ObservationsPayload(
+            observations: Self.stampQuickIdentifiers(build("Patient/\(patientId)"))
+        ))
+    }
+
+    /// Stamp each observation with a fresh quick-observation identifier
+    /// (client event UUID, FHIR-MAPPING §7) — done ONCE, at capture, so a
+    /// queued payload replays onto the same identifiers.
+    public static func stampQuickIdentifiers(_ observations: [FHIRObservation]) -> [FHIRObservation] {
+        observations.map { observation in
+            var stamped = observation
+            stamped.identifier = [
+                Identifier(system: FHIR.quickObservationIdentSystem, value: UUID().uuidString.lowercased()),
+            ]
+            return stamped
+        }
+    }
+
+    /// Apply one quick-observations payload (live path and outbox replay
+    /// share this). Sequential conditional creates, not a transaction —
+    /// mirrors the web's documented choice for independent quick-add values;
+    /// If-None-Exist on the pre-stamped identifier makes a partial-failure
+    /// replay converge instead of duplicating.
+    public func applyObservations(_ payload: ObservationsPayload) async throws {
+        guard let patient = try await getPatient(), let patientId = patient.id else {
+            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+        }
+        for var observation in payload.observations {
             // Subject is stamped centrally (mirrors the web useSaveObservation):
             // builders return code/value/effective, this path owns identity.
             observation.subject = Reference(reference: "Patient/\(patientId)")
-            observation.identifier = [
-                Identifier(system: FHIR.quickObservationIdentSystem, value: UUID().uuidString.lowercased()),
-            ]
-            _ = try await client.create(observation)
+            guard let ident = observation.identifier?.first, let value = ident.value else {
+                throw MedplumError.invalidResponse("Quick observation missing its identifier")
+            }
+            _ = try await client.createIfNoneExist(
+                observation,
+                query: "identifier=\(FHIR.quickObservationIdentSystem)|\(value)"
+            )
         }
     }
 
     /// Bounded FHIRObservation search for dashboards (server-side filtered).
     public func loadObservations(_ params: [(String, String)]) async throws -> [FHIRObservation] {
         try await client.searchResources(FHIRObservation.self, params)
+    }
+
+    // MARK: HealthKit sync
+
+    /// Save HealthKit-mapped observations idempotently. Per-sample kinds
+    /// converge on their HK-UUID identifier via conditional create; daily
+    /// aggregates additionally UPDATE in place when a re-sync brings a
+    /// different final value (late-arriving watch data for yesterday).
+    @discardableResult
+    public func saveHealthKitObservations(_ observations: [FHIRObservation]) async throws -> (saved: Int, corrected: Int) {
+        guard let patient = try await getPatient(), let patientId = patient.id else {
+            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+        }
+        var saved = 0
+        var corrected = 0
+        for var observation in observations {
+            observation.subject = Reference(reference: "Patient/\(patientId)")
+            guard let identValue = observation.identifier?.first?.value else { continue }
+            let query = "identifier=\(HealthKitMapping.identSystem)|\(identValue)"
+            // Returns the fresh resource OR the pre-existing one (that's the
+            // point of If-None-Exist) — same value either way means done.
+            let result = try await client.createIfNoneExist(observation, query: query)
+            if result.valueQuantity?.value == observation.valueQuantity?.value {
+                saved += 1
+                continue
+            }
+            // Existing aggregate with a stale value — correct it in place.
+            var fix = observation
+            fix.id = result.id
+            fix.meta = result.meta
+            _ = try await client.update(fix)
+            corrected += 1
+        }
+        return (saved, corrected)
+    }
+
+    // MARK: Labs / trends / profile (read-only loaders)
+
+    /// Full lab history, newest-first (mirrors web LabsPage: category=
+    /// laboratory, no date bound — draws are sparse and multi-year context is
+    /// the point). Newest-first means hitting the page cap drops the OLDEST
+    /// draws; the caller surfaces a truncation notice, never silence.
+    public func loadLabObservations(maxPages: Int = 10) async throws -> [FHIRObservation] {
+        try await client.searchAll(FHIRObservation.self, [
+            ("category", "laboratory"),
+            ("_sort", "-date"),
+            ("_count", "1000"),
+        ], maxPages: maxPages)
+    }
+
+    /// The four trend signals in one comma-OR code search (mirrors web
+    /// TrendsPage: weight = verified LOINC, sleep/mood/energy = local codes).
+    public func loadTrendObservations(days: Int) async throws -> [FHIRObservation] {
+        let start = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        return try await client.searchResources(FHIRObservation.self, [
+            ("code", [
+                "\(FHIR.loinc)|29463-7",
+                "\(FHIR.csObservation)|sleep-duration",
+                "\(FHIR.csObservation)|mood",
+                "\(FHIR.csObservation)|energy",
+            ].joined(separator: ",")),
+            ("date", "ge\(DoseEngine.localDateString(start))"),
+            ("_count", "1000"),
+            ("_sort", "-date"),
+        ])
+    }
+
+    public func loadConditions() async throws -> [Condition] {
+        try await client.searchResources(Condition.self, [
+            ("_sort", "-_lastUpdated"),
+            ("_count", "200"),
+        ])
+    }
+
+    public func loadAllergies() async throws -> [AllergyIntolerance] {
+        try await client.searchResources(AllergyIntolerance.self, [
+            ("_sort", "-_lastUpdated"),
+            ("_count", "200"),
+        ])
+    }
+
+    public func loadImmunizations() async throws -> [Immunization] {
+        try await client.searchResources(Immunization.self, [
+            ("_sort", "-_lastUpdated"),
+            ("_count", "200"),
+        ])
     }
 
     /// Pending ingestion-review-queue size, counted straight from the CDR —

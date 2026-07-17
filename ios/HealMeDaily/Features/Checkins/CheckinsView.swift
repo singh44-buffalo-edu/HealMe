@@ -319,7 +319,7 @@ struct CheckinsView: View {
                     }
                     // Any integer item renders as a 0–10 scale — covers the
                     // seeded question bank.
-                    Slider(value: intBinding(linkId), in: 0...10, step: 1)
+                    Slider(value: intBinding(linkId), in: 0 ... 10, step: 1)
                         .tint(T.green)
                 }
             )
@@ -352,7 +352,7 @@ struct CheckinsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     questionLabel(item)
                     TextField("", text: stringBinding(linkId), axis: .vertical)
-                        .lineLimit(3...6)
+                        .lineLimit(3 ... 6)
                         .textFieldStyle(BandFieldStyle())
                 }
             )
@@ -625,10 +625,16 @@ struct CheckinsView: View {
         Task {
             do {
                 let items = buildItems(def)
-                _ = try await model.record.submitCheckin(def, items: items)
+                let queued = try await model.submitCheckin(def, items: items)
                 editing = false
-                note = "Saved — resubmits in the same period update the same response."
-                await reload()
+                if queued {
+                    // Offline: the response is queued on-device; skip the
+                    // reload (it would fail) and say what actually happened.
+                    note = "Saved on this device — syncs when your server is reachable."
+                } else {
+                    note = "Saved — resubmits in the same period update the same response."
+                    await reload()
+                }
             } catch {
                 self.error = error.localizedDescription
             }

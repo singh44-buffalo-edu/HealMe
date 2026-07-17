@@ -141,15 +141,23 @@ public enum DoseEngine {
             var notDone = 0
             for slot in slots {
                 let admin = adminForSlot(admins, slot)
-                if admin?.status == "completed" { taken += 1 }
-                else if admin?.status == "not-done" { notDone += 1 }
+                if admin?.status == "completed" {
+                    taken += 1
+                } else if admin?.status == "not-done" {
+                    notDone += 1
+                }
             }
             var status = DayStatus.noDoses
             if !slots.isEmpty {
-                if taken == slots.count { status = .allTaken }
-                else if taken > 0 { status = .partial }
-                else if notDone > 0 { status = .noneTaken }
-                else { status = .unlogged }
+                if taken == slots.count {
+                    status = .allTaken
+                } else if taken > 0 {
+                    status = .partial
+                } else if notDone > 0 {
+                    status = .noneTaken
+                } else {
+                    status = .unlogged
+                }
             }
             out.append(DaySummary(date: date, scheduled: slots.count, taken: taken, notDone: notDone, status: status))
         }
@@ -213,8 +221,11 @@ public enum DoseEngine {
                 if day.notDone > 0 { break } // an explicit skip/miss today ends the streak now
                 continue // today merely not finished yet — judge from yesterday
             }
-            if day.status == .allTaken { streak += 1 }
-            else if day.status != .noDoses { break }
+            if day.status == .allTaken {
+                streak += 1
+            } else if day.status != .noDoses {
+                break
+            }
         }
 
         return AdherenceStats(
@@ -231,7 +242,8 @@ public enum DoseEngine {
 
 /// UI projection of one cartridge Device (FHIR-MAPPING §5). `low` is derived
 /// and display-only — inventory NEVER gates whether a med may be taken.
-public struct CartridgeInfo: Sendable, Hashable {
+/// Codable so the core snapshot can persist for offline launches.
+public struct CartridgeInfo: Sendable, Hashable, Codable {
     public var device: Device
     public var name: String
     public var enabled: Bool
@@ -286,7 +298,8 @@ public struct CartridgeInfo: Sendable, Hashable {
 }
 
 /// One active medication as the UI sees it (mirrors MedInfo in fhir.ts).
-public struct MedInfo: Sendable, Hashable {
+/// Codable so the core snapshot can persist for offline launches.
+public struct MedInfo: Sendable, Hashable, Codable {
     public var request: MedicationRequest
     public var name: String
     public var instructions: String
