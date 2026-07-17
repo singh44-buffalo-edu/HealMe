@@ -72,3 +72,57 @@ def test_medplum_unreachable_is_502_not_allow(client, monkeypatch):
     monkeypatch.setattr(auth, "_token_is_valid", fake_valid)
     response = client.get("/ingest/tasks", headers={"Authorization": "Bearer whatever"})
     assert response.status_code == 502
+
+
+def test_medplum_5xx_is_502_not_401(client, monkeypatch):
+    # A Medplum outage (500) must not masquerade as an expired session — the
+    # user would be told to "sign in again" during a server hiccup.
+    calls = {"status": 500}
+
+    class FakeResponse:
+        status_code = calls["status"]
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, *a, **k):
+            return FakeResponse()
+
+    monkeypatch.setattr(auth.httpx, "AsyncClient", FakeClient)
+    response = client.get("/ingest/tasks", headers={"Authorization": "Bearer live-but-medplum-down"})
+    assert response.status_code == 502
+
+
+def test_base_url_without_trailing_slash_hits_userinfo(client, monkeypatch):
+    # urljoin against a slash-less base must not drop the host — verify the
+    # exact URL the gate calls.
+    seen = {}
+
+    class FakeResponse:
+        status_code = 200
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, *a, **k):
+            seen["url"] = url
+            return FakeResponse()
+
+    monkeypatch.setattr(auth.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(auth.settings, "medplum_base_url", "http://localhost:8103")
+    client.get("/ingest/tasks", headers={"Authorization": "Bearer t"})
+    assert seen["url"] == "http://localhost:8103/oauth2/userinfo"

@@ -30,8 +30,21 @@ const AI_BASE = RAW_BASE.endsWith('/') ? RAW_BASE : `${RAW_BASE}/`;
 
 /** The ai-service requires the caller's Medplum session token on every
  * endpoint except /health (its auth.py gate) — forward the one the signed-in
- * app already holds. Never in a URL parameter, always a header. */
-function authHeaders(): Record<string, string> {
+ * app already holds. Never in a URL parameter, always a header.
+ *
+ * Refreshes first when the access token is expired: raw fetch (unlike the
+ * SDK's own request path) does not auto-refresh, so after ~1 h idle the token
+ * would be stale and the gate would answer a false "sign in again". */
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    // refreshIfExpired() self-guards (no-op when the token is still valid) —
+    // needed because raw fetch, unlike the SDK's own request path, does not
+    // auto-refresh; without it a call after ~1h idle sends a stale token.
+    await medplum.refreshIfExpired();
+  } catch {
+    // Refresh failed (offline / refresh token gone) — send whatever we have;
+    // the gate's 401 then surfaces the real reason.
+  }
   const token = medplum.getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -40,11 +53,12 @@ function authHeaders(): Record<string, string> {
 // hint) from real HTTP errors, and surfaces FastAPI's {detail} verbatim so
 // server-side reasons ("no provider configured", validation) reach the UI.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const auth = await authHeaders();
   let res: Response;
   try {
     res = await fetch(AI_BASE + path, {
       ...init,
-      headers: { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) },
+      headers: { ...auth, ...(init?.headers as Record<string, string> | undefined) },
     });
   } catch {
     throw new Error('AI service is not reachable — is `make dev` running?');
@@ -66,9 +80,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * Replaces plain hrefs — those cannot carry the Authorization header the
  * ai-service now requires, and tokens never belong in URLs. */
 async function downloadBlob(path: string, filename: string): Promise<void> {
+  const auth = await authHeaders();
   let res: Response;
   try {
-    res = await fetch(AI_BASE + path, { headers: authHeaders() });
+    res = await fetch(AI_BASE + path, { headers: auth });
   } catch {
     throw new Error('AI service is not reachable — is `make dev` running?');
   }
@@ -83,14 +98,14 @@ async function downloadBlob(path: string, filename: string): Promise<void> {
     throw new Error(detail);
   }
   const url = URL.createObjectURL(await res.blob());
-  try {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  // Revoke on the next tick, not synchronously: some browsers abort a
+  // large in-flight download if the object URL is freed the instant after
+  // click().
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // POST-a-JSON-body shorthand.

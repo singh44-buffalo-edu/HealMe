@@ -18,6 +18,17 @@ Fail-closed rules:
 
 `AI_REQUIRE_AUTH=false` turns the gate off for fully-loopback dev setups;
 the default is ON.
+
+Scope limitation (documented, not yet closed): this gate AUTHENTICATES (the
+caller holds a live Medplum session) but does not AUTHORIZE per-caller — the
+service then acts with its OWN full-access client credentials. In the
+single-user owner app that is the whole intent. But once care-circle members
+exist (Phase 9), a member with a deliberately-scoped Medplum token could call
+the ai-service directly and reach whole-record export/review, bypassing their
+AccessPolicy (a classic confused-deputy). Before exposing the ai-service to
+anyone but the owner, add an owner-identity check here (compare the userinfo
+profile against the configured owner) or have the service forward the
+caller's token for FHIR reads instead of its own. Tracked for Phase 9.
 """
 
 from __future__ import annotations
@@ -57,13 +68,27 @@ def _prune(now: float) -> None:
 async def _token_is_valid(token: str) -> bool:
     """Ask Medplum whether this access token is live (OIDC userinfo).
 
-    Raises httpx.HTTPError when Medplum cannot be reached — the caller maps
-    that to 502 rather than letting an outage disable authentication.
+    Returns True/False for a definitive answer (200 = valid; 400/401/403 =
+    invalid). Raises httpx.HTTPError when Medplum cannot give one — a network
+    failure OR a 5xx — so the caller maps it to 502 rather than mistaking an
+    outage for an expired session (fail-closed, but never a false "sign in
+    again" during a Medplum hiccup).
     """
-    url = urljoin(settings.medplum_base_url, "oauth2/userinfo")
+    # Normalize exactly like medplum.py: urljoin against a base WITHOUT a
+    # trailing slash would drop the host's path (or the host itself for a
+    # path-less base). Force the trailing slash first.
+    base = settings.medplum_base_url
+    if not base.endswith("/"):
+        base += "/"
+    url = urljoin(base, "oauth2/userinfo")
     async with httpx.AsyncClient(timeout=5.0) as client:
         response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
-    return response.status_code == 200
+    if response.status_code == 200:
+        return True
+    if response.status_code in (400, 401, 403):
+        return False
+    # 5xx / 429 / anything unexpected: not an authorization verdict.
+    raise httpx.HTTPError(f"userinfo returned {response.status_code}")
 
 
 async def require_medplum_token(request: Request, call_next):
