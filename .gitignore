@@ -13,5 +13,21 @@ build/
 *.log
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 *.swp
 *.swo
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# Claude Code local state (keep .claude/launch.json tracked; ignore the rest)
+.claude/*
+!.claude/launch.json
+
+# iOS: generated project + Xcode local state (project.yml is the source of truth)
+ios/*.xcodeproj/
+ios/DerivedData/
+**/xcuserdata/
+.build/

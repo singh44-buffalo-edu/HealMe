@@ -59,3 +59,15 @@ jobs:
       - run: ruff check app tests ../scripts
       - run: ruff format --check app tests ../scripts
       - run: pytest -q
+
+  pi-dispenser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # stdlib + httpx only; hardware libs are imported lazily on the Pi and
+      # are not needed for the simulator-backed test suite.
+      - run: pip install httpx pytest
+      - run: pytest -q pi-dispenser/tests

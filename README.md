@@ -117,5 +117,10 @@ The owner's ingestion-module requirements spec (v0.1) is the roadmap north star 
 Copy `.env.example` → `.env` (done automatically by `make bootstrap`). AI features are optional:
 leave `AI_PROVIDER` empty and the app runs with AI disabled. To enable: set
 `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=...`, then restart `make dev`. Cloud providers
-receive your health data (including document contents during ingestion) — a local path
-(Ollama + Tesseract) is planned. Data never leaves your machine otherwise.
+receive your health data (including document contents during ingestion); a fully local path
+(Ollama + Tesseract) is available — set `AI_PROVIDER=ollama` or route per-feature to `local`
+in AI Settings. Data never leaves your machine otherwise.
+
+## License
+
+[MIT](./LICENSE).
