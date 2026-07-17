@@ -118,6 +118,7 @@ struct SettingsView: View {
             }
             .listRowBackground(T.card)
 
+            healthKitSection
             aiSection
             accountSection
             aboutSection
@@ -168,7 +169,11 @@ struct SettingsView: View {
         } header: {
             Text("AI")
         } footer: {
-            Text("'cloud' sends record contents to the chosen provider — every cloud call is logged to the boundary ledger first. API keys are managed on the web AI-settings page (never stored on this phone).")
+            Text(
+                "'cloud' sends record contents to the chosen provider — every cloud call is logged "
+                    + "to the boundary ledger first. API keys are managed on the web AI-settings page "
+                    + "(never stored on this phone)."
+            )
         }
         .listRowBackground(T.card)
     }
@@ -252,6 +257,69 @@ struct SettingsView: View {
 
     // MARK: - Account
 
+    // MARK: - Apple Health
+
+    /// Opt-in, read-only Apple Health → own-server sync. The toggle drives
+    /// HealthKitService; status/last-sync render verbatim from it.
+    private var healthKitSection: some View {
+        Section {
+            if model.healthKit.status == .unavailable {
+                Text("Apple Health is not available on this device.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(T.secondary)
+            } else {
+                Toggle(isOn: Binding(
+                    get: { model.healthKit.status == .on || model.healthKit.status == .requesting },
+                    set: { turnOn in
+                        Task {
+                            if turnOn {
+                                await model.healthKit.enable(record: model.record)
+                            } else {
+                                model.healthKit.disable()
+                            }
+                        }
+                    }
+                )) {
+                    Text("Sync Apple Health")
+                        .font(.system(size: 14))
+                        .foregroundStyle(T.ink)
+                }
+                .tint(T.green)
+
+                if model.healthKit.status == .on {
+                    HStack {
+                        Text(model.healthKit.syncing ? "Syncing…" : "Last sync")
+                            .font(.system(size: 14))
+                            .foregroundStyle(T.secondary)
+                        Spacer()
+                        if let at = model.healthKit.lastSyncAt {
+                            Text("\(Fmt.when(RecordAPI.isoInstant(at)))\(model.healthKit.lastSummary.map { " · \($0)" } ?? "")")
+                                .font(.mono(11))
+                                .foregroundStyle(T.tertiary)
+                        }
+                    }
+                    PillButton(title: "Sync now", variant: .secondary, busy: model.healthKit.syncing) {
+                        Task { await model.healthKit.sync(record: model.record) }
+                    }
+                }
+                if let error = model.healthKit.lastError {
+                    Text(error)
+                        .font(.system(size: 12))
+                        .foregroundStyle(T.outOfRange)
+                }
+            }
+        } header: {
+            Text("Apple Health")
+        } footer: {
+            Text(
+                "Read-only: steps, resting heart rate, HRV, sleep, weight, blood pressure, SpO₂ and "
+                    + "temperature go from this phone to your own server. Nothing is written back to "
+                    + "Apple Health, and nothing goes anywhere else."
+            )
+        }
+        .listRowBackground(T.card)
+    }
+
     private var accountSection: some View {
         Section {
             HStack {
@@ -273,6 +341,20 @@ struct SettingsView: View {
                     .foregroundStyle(T.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
+            }
+            // Queued offline writes — visible so sign-out never silently
+            // holds undelivered health data (the queue drains after the
+            // next sign-in to the same server).
+            if model.pendingWrites > 0 {
+                HStack {
+                    Text("Waiting to sync")
+                        .font(.system(size: 14))
+                        .foregroundStyle(T.secondary)
+                    Spacer()
+                    Text("\(model.pendingWrites) change\(model.pendingWrites == 1 ? "" : "s")")
+                        .font(.mono(12))
+                        .foregroundStyle(T.watch)
+                }
             }
             Button {
                 Task {
