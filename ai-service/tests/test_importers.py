@@ -110,12 +110,54 @@ APPLE_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 def test_apple_prepare_converts_aggregates_and_skips():
     entries, skipped = importers.prepare_apple_entries(APPLE_XML, PATIENT)
-    by_code = {e["resource"]["code"]["coding"][0]["code"]: e["resource"] for e in entries}
+    by_code = {e["resource"]["code"]["coding"][0]["code"]: e for e in entries}
 
-    assert round(by_code["29463-7"]["valueQuantity"]["value"], 1) == 70.5  # lb -> kg
-    assert by_code["8867-4"]["valueQuantity"]["value"] == 62
-    assert by_code["55423-8"]["valueQuantity"]["value"] == 6500  # daily aggregate
-    assert by_code["sleep-duration"]["valueQuantity"]["value"] == 6.5
+    assert round(by_code["29463-7"]["resource"]["valueQuantity"]["value"], 1) == 70.5  # lb -> kg
+    assert by_code["8867-4"]["resource"]["valueQuantity"]["value"] == 62
+    assert by_code["55423-8"]["resource"]["valueQuantity"]["value"] == 6500  # daily aggregate
+    assert by_code["sleep-duration"]["resource"]["valueQuantity"]["value"] == 6.5
     assert skipped == {"HKQuantityTypeIdentifierDietaryWater": 1}
     # timezone preserved
-    assert by_code["29463-7"]["effectiveDateTime"] == "2026-06-01T08:00:00+05:30"
+    assert by_code["29463-7"]["resource"]["effectiveDateTime"] == "2026-06-01T08:00:00+05:30"
+
+    # Per-day aggregates are conditional UPDATEs (refresh in place on re-import
+    # of a fuller export); discrete point readings stay conditional creates.
+    assert by_code["55423-8"]["request"]["method"] == "PUT"  # steps aggregate
+    assert by_code["sleep-duration"]["request"]["method"] == "PUT"  # sleep aggregate
+    assert by_code["8867-4"]["request"]["method"] == "POST"  # heart-rate point reading
+    assert by_code["55423-8"]["request"]["url"].startswith("Observation?identifier=")
+
+
+def test_chunk_entries_keeps_referencing_group_together():
+    # A referencing resource must never be split from the resource it points at,
+    # or Medplum leaves the intra-bundle reference dangling (CLAUDE.md §9).
+    importers.CHUNK  # sanity: constant exists
+    n = importers.CHUNK
+    # n independent observations, then a report referencing the FIRST one.
+    entries = [
+        importers._entry(
+            {"resourceType": "Observation", "status": "final", "valueQuantity": {"value": i}},
+            {"system": importers.IMPORT_IDENT, "value": f"obs-{i}"},
+            full_url=f"urn:uuid:obs-{i}",
+        )
+        for i in range(n)
+    ]
+    entries.append(
+        importers._entry(
+            {"resourceType": "DiagnosticReport", "status": "final", "result": [{"reference": "urn:uuid:obs-0"}]},
+            {"system": importers.IMPORT_IDENT, "value": "report-0"},
+            full_url="urn:uuid:report-0",
+        )
+    )
+    chunks = importers._chunk_entries(entries)
+    # The report and urn:uuid:obs-0 land in the same chunk despite crossing the
+    # CHUNK boundary (the fixed-window slicer would have split them).
+    for chunk in chunks:
+        urls = {e.get("fullUrl") for e in chunk}
+        if "urn:uuid:report-0" in urls:
+            assert "urn:uuid:obs-0" in urls
+            break
+    else:
+        raise AssertionError("report chunk not found")
+    # Every entry still committed exactly once.
+    assert sum(len(c) for c in chunks) == len(entries)

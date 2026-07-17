@@ -14,6 +14,8 @@ importers' content-hash identifiers make the re-run a no-op."""
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +28,16 @@ from .medplum import medplum
 STRUCTURED = {".json": "fhir", ".csv": "csv", ".xml": "apple", ".cda": "ccda", ".ccda": "ccda", ".hl7": "hl7"}
 DOCUMENTS = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
+# Serializes scans: the background loop and an on-demand POST /ingest/scan-now
+# (or two scan-now calls) must never process the same inbox concurrently, or a
+# file could be read+ingested twice before either scan renames it out.
+_scan_lock = threading.Lock()
+
+# A file whose mtime changed within this many seconds is assumed to still be
+# copying in (Finder/cp/unzip/AirDrop grow the final name progressively) and is
+# skipped until the next scan — a quiescence guard against reading a partial file.
+QUIESCENCE_SECONDS = 5
+
 
 def inbox_dir() -> Path:
     """INGEST_WATCH_DIR as an absolute path (relative values anchor to
@@ -36,22 +48,44 @@ def inbox_dir() -> Path:
 
 def scan_once() -> list[dict]:
     """Process every new file in the inbox exactly once. Returns a summary
-    per file; safe to call concurrently with uploads (files are moved out of
-    the inbox before processing results are written anywhere). One bad file
-    is archived to failed/ and never stops the rest of the scan."""
+    per file. Scans are serialized (_scan_lock): a scan already in progress
+    makes a concurrent call a no-op rather than double-processing files. One
+    bad file is archived to failed/ and never stops the rest of the scan."""
     results: list[dict] = []
     # Silent no-op until Medplum + patient are configured — the loop starts at
     # boot, before `make seed` may have run.
     if not medplum.configured or not settings.medplum_patient_id:
         return results
+    # Non-blocking: if another scan holds the lock, skip this round entirely.
+    if not _scan_lock.acquire(blocking=False):
+        return results
+    try:
+        return _scan_locked()
+    finally:
+        _scan_lock.release()
+
+
+def _scan_locked() -> list[dict]:
+    """The scan body; runs only while _scan_lock is held (see scan_once)."""
+    results: list[dict] = []
     inbox = inbox_dir()
     processed = inbox / "processed"
     failed = inbox / "failed"
     for folder in (inbox, processed, failed):
         folder.mkdir(parents=True, exist_ok=True)
 
+    now_ts = time.time()
     for path in sorted(inbox.iterdir()):
-        if not path.is_file() or path.name.startswith("."):
+        # Skip non-files, dotfiles, and symlinks (a symlink dropped in the inbox
+        # would otherwise leak an arbitrary file's contents into the record).
+        if path.is_symlink() or not path.is_file() or path.name.startswith("."):
+            continue
+        # Quiescence: skip a file that was modified moments ago — it may still
+        # be copying in. It gets picked up on the next scan once stable.
+        try:
+            if now_ts - path.stat().st_mtime < QUIESCENCE_SECONDS:
+                continue
+        except OSError:
             continue
         suffix = path.suffix.lower()
         # Timestamp prefix keeps archive names unique when the same filename

@@ -167,9 +167,14 @@ class _BaseProvider:
         schema: dict[str, Any],
         max_tokens: int = 16000,
     ) -> Any:
-        """generate() + json.loads. A malformed-JSON reply surfaces as
-        json.JSONDecodeError → ValueError → HTTP 400 via the _wrap helpers."""
-        return json.loads(self.generate(system, user_content, max_tokens, output_schema=schema))
+        """generate() + json.loads. A malformed-JSON reply is the provider's
+        fault, not the caller's, so it raises ProviderError (→ 502 upstream)
+        rather than letting json.JSONDecodeError bubble up as a 400."""
+        raw = self.generate(system, user_content, max_tokens, output_schema=schema)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as err:
+            raise ProviderError(f"{self.name or 'provider'} returned malformed JSON") from err
 
 
 # --- Anthropic (SDK) ----------------------------------------------------------

@@ -102,6 +102,28 @@ def _entry(resource: dict[str, Any], ident: dict[str, str], full_url: str | None
     return entry
 
 
+def _update_entry(resource: dict[str, Any], ident: dict[str, str]) -> dict[str, Any]:
+    """Like _entry but a conditional UPDATE (PUT ?identifier=) rather than a
+    conditional create. Used for values that legitimately CHANGE for a stable
+    key — Apple Health per-day step/sleep totals grow as later exports cover
+    more of the day, so a fixed date identifier must refresh the resource, not
+    dedup to the stale first import (a POST+If-None-Exist would 200 and keep
+    the old total). Zero matches → create (201); one match → update (200)."""
+    resource.setdefault("identifier", [])
+    if isinstance(resource["identifier"], list) and not any(
+        i.get("system") == IMPORT_IDENT for i in resource["identifier"]
+    ):
+        resource["identifier"].append(ident)
+    resource.setdefault("meta", {}).setdefault("tag", []).append(IMPORT_TAG)
+    return {
+        "resource": resource,
+        "request": {
+            "method": "PUT",
+            "url": f"{resource['resourceType']}?identifier={ident['system']}|{ident['value']}",
+        },
+    }
+
+
 # --- FHIR bundle ---------------------------------------------------------------
 
 
@@ -140,10 +162,14 @@ def prepare_fhir_entries(bundle: dict[str, Any], patient_id: str) -> tuple[list[
     patient_ref = f"Patient/{patient_id}"
     raw_entries = bundle.get("entry", [])
 
-    # Map every local id/fullUrl so intra-bundle references survive
+    # Map local id/fullUrl of the entries we will ACTUALLY import so intra-bundle
+    # references survive. Skipped-type entries (Device, Encounter…) are excluded:
+    # keeping a reference to a resource we never create leaves it dangling.
     local_ids: set[str] = set()
     for e in raw_entries:
         res = e.get("resource") or {}
+        if res.get("resourceType") not in ALLOWED_IMPORT_TYPES:
+            continue
         if e.get("fullUrl"):
             local_ids.add(e["fullUrl"])
         if res.get("resourceType") and res.get("id"):
@@ -245,25 +271,24 @@ def prepare_apple_entries(xml_bytes: bytes, patient_id: str) -> tuple[list[dict]
     steps_by_date: dict[str, float] = defaultdict(float)
     sleep_by_date: dict[str, float] = defaultdict(float)
 
-    def quantity_obs(code: str, display: str, unit: str, category: str, when: str, value: float, ident_key: str):
-        return _entry(
-            {
-                "resourceType": "Observation",
-                "status": "final",
-                "subject": {"reference": patient_ref},
-                "category": [
-                    {
-                        "coding": [
-                            {"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": category}
-                        ]
-                    }
-                ],
-                "code": {"coding": [{"system": fc.LOINC, "code": code, "display": display}], "text": display},
-                "effectiveDateTime": when,
-                "valueQuantity": {"value": value, "unit": unit},
-            },
-            _hash_ident(ident_key),
-        )
+    def quantity_obs(
+        code: str, display: str, unit: str, category: str, when: str, value: float, ident_key: str, update: bool = False
+    ):
+        obs = {
+            "resourceType": "Observation",
+            "status": "final",
+            "subject": {"reference": patient_ref},
+            "category": [
+                {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": category}]}
+            ],
+            "code": {"coding": [{"system": fc.LOINC, "code": code, "display": display}], "text": display},
+            "effectiveDateTime": when,
+            "valueQuantity": {"value": value, "unit": unit},
+        }
+        # Per-day aggregates (update=True) refresh in place on re-import; discrete
+        # point readings dedup by content hash (immutable, never change).
+        build = _update_entry if update else _entry
+        return build(obs, _hash_ident(ident_key))
 
     for _, elem in ElementTree.iterparse(io.BytesIO(xml_bytes), events=("end",)):
         if elem.tag != "Record":
@@ -310,12 +335,12 @@ def prepare_apple_entries(xml_bytes: bytes, patient_id: str) -> tuple[list[dict]
     for date, total in sorted(steps_by_date.items()):
         entries.append(
             quantity_obs(
-                "55423-8", "Steps", "steps", "activity", f"{date}T23:59:00Z", round(total), f"apple|steps|{date}"
+                "55423-8", "Steps", "steps", "activity", f"{date}T23:59:00Z", round(total), f"apple|steps|{date}", True
             )
         )
     for date, hours in sorted(sleep_by_date.items()):
         entries.append(
-            _entry(
+            _update_entry(
                 {
                     "resourceType": "Observation",
                     "status": "final",
@@ -833,16 +858,89 @@ def prepare_hl7_entries(text: str, patient_id: str) -> tuple[list[dict], dict[st
 # --- Commit ---------------------------------------------------------------------
 
 
+def _collect_refs(node: Any, known: set[str], acc: set[str]) -> None:
+    """Gather every reference string in `node` that points at a fullUrl in
+    `known` (an intra-batch reference)."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "reference" and isinstance(value, str) and value in known:
+                acc.add(value)
+            else:
+                _collect_refs(value, known, acc)
+    elif isinstance(node, list):
+        for value in node:
+            _collect_refs(value, known, acc)
+
+
+def _chunk_entries(entries: list[dict]) -> list[list[dict]]:
+    """Split entries into transaction bundles of ~CHUNK WITHOUT separating
+    entries that reference one another by fullUrl. Medplum resolves
+    intra-bundle references only within the same bundle, so a referencing and
+    a referenced resource in different chunks would leave a dangling reference
+    (e.g. a DiagnosticReport.result → Observation split across chunks,
+    CLAUDE.md §9). Entries with no fullUrl (CSV/Apple rows) are independent
+    singletons and pack exactly as the old fixed-window chunking did. A single
+    reference group larger than CHUNK is kept intact in one oversized bundle —
+    correctness wins over the size heuristic."""
+    n = len(entries)
+    if n == 0:
+        return []
+
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    url_to_idx = {e["fullUrl"]: i for i, e in enumerate(entries) if e.get("fullUrl")}
+    known = set(url_to_idx)
+    for i, e in enumerate(entries):
+        refs: set[str] = set()
+        _collect_refs(e.get("resource", {}), known, refs)
+        for ref in refs:
+            j = url_to_idx.get(ref)
+            if j is not None and j != i:
+                union(i, j)
+
+    groups: dict[int, list[int]] = {}
+    order: list[int] = []
+    for i in range(n):
+        root = find(i)
+        if root not in groups:
+            groups[root] = []
+            order.append(root)
+        groups[root].append(i)
+
+    chunks: list[list[dict]] = []
+    current: list[int] = []
+    for root in order:
+        comp = groups[root]
+        if current and len(current) + len(comp) > CHUNK:
+            chunks.append([entries[k] for k in current])
+            current = []
+        current.extend(comp)
+    if current:
+        chunks.append([entries[k] for k in current])
+    return chunks
+
+
 def commit_entries(medplum: MedplumFhirClient, entries: list[dict], source_label: str) -> dict[str, Any]:
-    """POST prepared entries as transaction bundles of CHUNK, then one
-    Provenance over everything newly created (the batch audit trail).
-    Returns {imported, already_existed}: 201 = new, 200 = the conditional
-    create matched an existing resource (dedup hit). Retry-safe end to end —
-    replaying after a partial failure only fills in the gaps."""
+    """POST prepared entries as transaction bundles (reference-aware chunks of
+    ~CHUNK, see _chunk_entries), then one Provenance over everything newly
+    created (the batch audit trail). Returns {imported, already_existed}: 201 =
+    new, 200 = the conditional create matched an existing resource (dedup hit).
+    Retry-safe end to end — replaying after a partial failure only fills in the
+    gaps."""
     imported = existing = 0
     committed_refs: list[str] = []
-    for i in range(0, len(entries), CHUNK):
-        chunk = entries[i : i + CHUNK]
+    for chunk in _chunk_entries(entries):
         result = medplum.post_bundle({"resourceType": "Bundle", "type": "transaction", "entry": chunk})
         for entry in result.get("entry", []):
             status = entry.get("response", {}).get("status", "")
