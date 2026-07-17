@@ -23,8 +23,18 @@
  * a boundary-ledger AuditEvent (CLAUDE.md §6 AI guardrails).
  */
 
+import { medplum } from './medplum';
+
 const RAW_BASE: string = import.meta.env.VITE_AI_SERVICE_URL ?? 'http://localhost:8000/';
 const AI_BASE = RAW_BASE.endsWith('/') ? RAW_BASE : `${RAW_BASE}/`;
+
+/** The ai-service requires the caller's Medplum session token on every
+ * endpoint except /health (its auth.py gate) — forward the one the signed-in
+ * app already holds. Never in a URL parameter, always a header. */
+function authHeaders(): Record<string, string> {
+  const token = medplum.getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // Shared fetch wrapper: distinguishes "service down" (friendly `make dev`
 // hint) from real HTTP errors, and surfaces FastAPI's {detail} verbatim so
@@ -32,7 +42,10 @@ const AI_BASE = RAW_BASE.endsWith('/') ? RAW_BASE : `${RAW_BASE}/`;
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(AI_BASE + path, init);
+    res = await fetch(AI_BASE + path, {
+      ...init,
+      headers: { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) },
+    });
   } catch {
     throw new Error('AI service is not reachable — is `make dev` running?');
   }
@@ -47,6 +60,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(detail);
   }
   return res.json() as Promise<T>;
+}
+
+/** Authenticated file download: fetch → blob → synthetic <a download> click.
+ * Replaces plain hrefs — those cannot carry the Authorization header the
+ * ai-service now requires, and tokens never belong in URLs. */
+async function downloadBlob(path: string, filename: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(AI_BASE + path, { headers: authHeaders() });
+  } catch {
+    throw new Error('AI service is not reachable — is `make dev` running?');
+  }
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = String(body.detail);
+    } catch {
+      // non-JSON error body
+    }
+    throw new Error(detail);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 // POST-a-JSON-body shorthand.
@@ -95,16 +139,18 @@ export const generateReview = (windowDays: number) =>
 export const generateDataSummary = (windowDays: number) =>
   request<ReviewResult>('health-review/data-summary', json({ window_days: windowDays }));
 
-/** Direct-download URLs (used as <a href>/window.open, not via request()). */
-export const exportFhirUrl = `${AI_BASE}export/fhir`;
-export const exportCsvUrl = `${AI_BASE}export/observations.csv`;
+/** Authenticated exports (replacing the old direct-href URLs — plain links
+ * cannot carry the session token the ai-service now requires). */
+export const downloadFhirExport = () => downloadBlob('export/fhir', 'healmedaily-record.json');
+export const downloadCsvExport = () => downloadBlob('export/observations.csv', 'observations.csv');
 
 /** Most recent stored review; rejects (404 detail) when none exists yet. */
 export const getLatestReview = () => request<ReviewResult>('health-review/latest');
 
-/** Download URL for a stored review PDF (every PDF carries the
- * not-medical-advice disclaimer — CLAUDE.md §6 AI guardrails). */
-export const reviewPdfUrl = (docId: string) => `${AI_BASE}health-review/${docId}/pdf`;
+/** Download a stored review PDF (every PDF carries the not-medical-advice
+ * disclaimer — CLAUDE.md §6 AI guardrails). */
+export const downloadReviewPdf = (docId: string) =>
+  downloadBlob(`health-review/${encodeURIComponent(docId)}/pdf`, `health-review-${docId}.pdf`);
 
 /** Outcome of a document upload: where the original landed and how many
  * extraction proposals now await human review. */

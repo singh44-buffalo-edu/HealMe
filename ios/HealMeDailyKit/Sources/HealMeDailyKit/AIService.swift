@@ -13,6 +13,11 @@ import Foundation
 public struct AIService: Sendable {
     public let baseURL: URL
     private let session: URLSession
+    /// Supplies the caller's Medplum access token: the ai-service requires it
+    /// on every endpoint except /health (its session gate). Async so the
+    /// provider can refresh a near-expiry token first. nil ⇒ no header (the
+    /// service answers 401 and the UI shows its message).
+    public var tokenProvider: (@Sendable () async -> String?)?
 
     public init(baseURL: URL, session: URLSession = .shared) {
         var normalized = baseURL.absoluteString
@@ -338,6 +343,12 @@ public struct AIService: Sendable {
     }
 
     private func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var request = request
+        // Session token added here so every call path (GET/POST/multipart)
+        // carries it — never in a URL parameter.
+        if let tokenProvider, let token = await tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {

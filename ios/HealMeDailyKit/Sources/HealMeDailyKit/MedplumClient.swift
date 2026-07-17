@@ -238,6 +238,13 @@ public actor MedplumClient {
         store.clear()
     }
 
+    /// Current valid access token (proactively refreshed near expiry) — for
+    /// forwarding to the ai-service's session gate. nil when signed out or
+    /// when a refresh is impossible right now.
+    public func bearerToken() async -> String? {
+        try? await currentAccessToken()
+    }
+
     /// Display name of the signed-in profile (GET auth/me).
     public func profileDisplayName() async throws -> String {
         let data = try await authorizedRequest(path: "auth/me", method: "GET", body: nil, contentType: nil, extraHeaders: [:])

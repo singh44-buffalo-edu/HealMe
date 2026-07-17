@@ -39,8 +39,8 @@ import { Link } from 'react-router';
 import type { ImportKind, ReviewTask } from '../api';
 import {
   approveTask,
-  exportCsvUrl,
-  exportFhirUrl,
+  downloadCsvExport,
+  downloadFhirExport,
   getAiSettings,
   importStructured,
   listReviewTasks,
@@ -183,6 +183,10 @@ const PILL_LINK: CSSProperties = {
   fontSize: 13,
   borderRadius: 20,
   padding: '8px 16px',
+  // Applied to <button>s since the exports went href → authenticated fetch.
+  border: 'none',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
 };
 
 const LINK_BUTTON: CSSProperties = {
@@ -454,22 +458,30 @@ export function IngestPage() {
               : { display: 'flex', gap: 10, flexWrap: 'wrap' }
           }
         >
-          <a
-            href={exportFhirUrl}
-            target="_blank"
-            rel="noreferrer"
+          {/* Buttons, not hrefs: the export endpoints need the session token
+              in a header, so the download goes fetch → blob → save. */}
+          <button
+            type="button"
+            onClick={() =>
+              downloadFhirExport().catch((err) =>
+                notifications.show({ color: 'red', message: normalizeErrorString(err) })
+              )
+            }
             style={isMobile ? { ...PILL_LINK, justifyContent: 'center', minHeight: 44, boxSizing: 'border-box' } : PILL_LINK}
           >
             Download FHIR bundle (JSON)
-          </a>
-          <a
-            href={exportCsvUrl}
-            target="_blank"
-            rel="noreferrer"
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              downloadCsvExport().catch((err) =>
+                notifications.show({ color: 'red', message: normalizeErrorString(err) })
+              )
+            }
             style={isMobile ? { ...PILL_LINK, justifyContent: 'center', minHeight: 44, boxSizing: 'border-box' } : PILL_LINK}
           >
             Download observations (CSV)
-          </a>
+          </button>
         </div>
       </DsCard>
     </div>

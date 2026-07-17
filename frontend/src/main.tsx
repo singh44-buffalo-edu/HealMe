@@ -19,19 +19,13 @@ import './theme.css';
 
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
-import { MedplumClient } from '@medplum/core';
 import { MedplumProvider } from '@medplum/react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { App } from './App';
+import { medplum } from './medplum';
 import { theme } from './theme';
-
-// VITE_-prefixed env vars are baked in at build time (not runtime config);
-// the default targets the self-hosted Medplum server from infra/docker-compose.
-const medplum = new MedplumClient({
-  baseUrl: import.meta.env.VITE_MEDPLUM_BASE_URL ?? 'http://localhost:8103/',
-});
 
 // PWA offline shell — production only, never caches health data (see public/sw.js)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

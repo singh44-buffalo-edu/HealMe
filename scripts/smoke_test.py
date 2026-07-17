@@ -174,11 +174,27 @@ def main() -> None:
             assert resp.status_code in (200, 204), f"delete status {resp.status_code}"
         return f"Observation/{obs_id} created+verified+deleted"
 
+    def ai_headers() -> dict:
+        """Bearer header for the ai-service's session gate (auth.py): the
+        script forwards the same client-credentials token it uses for FHIR."""
+        return {"Authorization": f"Bearer {token['value']}"} if token.get("value") else {}
+
+    def check_ai_auth_gate():
+        """Proves: the ai-service session gate is live — a protected endpoint
+        refuses tokenless callers with 401 while /health stays open. Skipped
+        (reported, not failed) when AI_REQUIRE_AUTH=false."""
+        health = httpx.get(ai_base + "health", timeout=5).json()
+        if not health.get("auth_required"):
+            return "AI_REQUIRE_AUTH=false — gate off, skipping 401 check"
+        resp = httpx.get(ai_base + "ingest/tasks", timeout=10)
+        assert resp.status_code == 401, f"expected 401 without a token, got {resp.status_code}"
+        return "tokenless request correctly refused (401)"
+
     def check_ai_medplum_roundtrip():
         """Proves: the ai-service ITSELF can reach Medplum — /medplum/status
         makes a server-side FHIR read with the service's own token cache
         (distinct from this script's direct calls above)."""
-        resp = httpx.get(ai_base + "medplum/status", timeout=10)
+        resp = httpx.get(ai_base + "medplum/status", timeout=10, headers=ai_headers())
         assert resp.status_code == 200, f"status {resp.status_code}: {resp.text[:200]}"
         return f"patients={resp.json().get('patients')}"
 

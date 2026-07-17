@@ -52,6 +52,11 @@ class Settings(BaseSettings):
 
     # CORS allowlist for the React frontend (comma-separated origins).
     ai_allowed_origins: str = "http://localhost:5173"
+    # Require a valid Medplum access token on every endpoint except /health
+    # (auth.py). Default ON: the service can export the whole record, so an
+    # unauthenticated surface is only tolerable on a fully-loopback dev box —
+    # set AI_REQUIRE_AUTH=false there if you must.
+    ai_require_auth: bool = True
     # Watched-folder ingestion (watcher.py): relative paths resolve against REPO_ROOT.
     ingest_watch_dir: str = "./data/inbox"
     ingest_scan_seconds: int = 60
