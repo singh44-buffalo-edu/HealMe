@@ -80,6 +80,13 @@ export async function handler(
   if (response.resourceType !== 'QuestionnaireResponse') {
     throw new Error(`expected QuestionnaireResponse, got ${response.resourceType}`);
   }
+  // Only fan out COMPLETED responses. The subscription fires on create+update,
+  // and an in-progress draft (status 'in-progress'/'stopped') must not chart
+  // partial answers as final Observations — it would derive values the owner
+  // has not committed, then leave them stale when the draft is finished.
+  if (response.status !== 'completed') {
+    return [];
+  }
   if (!response.id || !response.subject || !response.questionnaire) {
     return [];
   }

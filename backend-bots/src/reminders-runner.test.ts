@@ -107,6 +107,52 @@ describe('reminders-runner', () => {
     expect(reminder.about?.[0]?.reference).toMatch(/^MedicationRequest\//);
   });
 
+  it('reminds a late-evening slot after it crosses midnight (previous-day scan)', async () => {
+    const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
+    // A single 23:30 slot on 2026-07-15 — due (grace 90m) at 01:00 on 07-16.
+    await medplum.createResource<MedicationRequest>({
+      resourceType: 'MedicationRequest',
+      status: 'active',
+      intent: 'order',
+      subject: { reference: 'Patient/123' },
+      medicationReference: { reference: 'Medication/m1', display: 'Lisinopril 10mg' },
+      authoredOn: '2026-07-01',
+      identifier: [{ system: `${IDENT}/medication-request`, value: 'test-med' }],
+      dosageInstruction: [{ timing: { repeat: { timeOfDay: ['23:30:00'] } } }],
+    });
+    // 01:05 on 07-16: the 07-15 slot became overdue 5 min ago. Before the
+    // previous-day scan, "today" was 07-16 and this slot was never examined.
+    const created = await handler(
+      medplum as unknown as MedplumClient,
+      makeEvent(nowParams('2026-07-16T01:05:00Z'))
+    );
+    expect(created).toHaveLength(1);
+    expect(created[0].identifier?.[0]?.value).toBe('reminder/test-med/2026-07-15T23:30');
+  });
+
+  it('does not remind a stale slot that became overdue on a prior day', async () => {
+    const medplum = new MockClient();
+    await makeAppConfig(medplum, 'UTC');
+    await medplum.createResource<MedicationRequest>({
+      resourceType: 'MedicationRequest',
+      status: 'active',
+      intent: 'order',
+      subject: { reference: 'Patient/123' },
+      medicationReference: { reference: 'Medication/m1', display: 'Lisinopril 10mg' },
+      authoredOn: '2026-07-01',
+      identifier: [{ system: `${IDENT}/medication-request`, value: 'test-med' }],
+      dosageInstruction: [{ timing: { repeat: { timeOfDay: ['08:00:00'] } } }],
+    });
+    // Yesterday's 08:00 dose was overdue yesterday; it must not resurface as a
+    // day-late reminder now (only slots overdue since today's midnight qualify).
+    const created = await handler(
+      medplum as unknown as MedplumClient,
+      makeEvent(nowParams('2026-07-16T12:00:00Z'))
+    );
+    expect(created.map((r) => r.identifier?.[0]?.value)).toEqual(['reminder/test-med/2026-07-16T08:00']);
+  });
+
   it('slot inside the 90min grace window gets no reminder yet', async () => {
     const medplum = new MockClient();
     await makeAppConfig(medplum, 'UTC');

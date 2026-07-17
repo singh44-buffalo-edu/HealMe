@@ -136,4 +136,15 @@ describe('questionnaire-response-to-observations', () => {
     const created = await handler(medplum as unknown as MedplumClient, makeEvent(response));
     expect(created).toHaveLength(0);
   });
+
+  it('does not chart an in-progress draft (only completed responses fan out)', async () => {
+    const draft: QuestionnaireResponse = { ...makeResponse('qr-5'), status: 'in-progress' };
+    const created = await handler(medplum as unknown as MedplumClient, makeEvent(draft));
+    expect(created).toHaveLength(0);
+    const observations = await medplum.searchResources(
+      'Observation',
+      'identifier=https://healmedaily.local/fhir/identifier/questionnaire-observation|qr-5-mood'
+    );
+    expect(observations).toHaveLength(0);
+  });
 });

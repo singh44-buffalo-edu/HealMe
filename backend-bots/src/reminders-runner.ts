@@ -91,6 +91,19 @@ export async function handler(
   const timeZone = await resolveTimeZone(medplum);
   const now = resolveNow(event.input);
   const today = zonedDateString(now, timeZone);
+  // Also scan the previous local day: a late-evening slot (e.g. 22:30) only
+  // clears its 90-min grace AFTER local midnight, by which point `today` has
+  // rolled over and would never look back at that slot. Reminders are
+  // idempotent (createResourceIfNoneExist by date-stamped identifier), so
+  // re-scanning yesterday every run is safe. Older overdue slots are ignored
+  // by design — a reminder a day+ late is noise, not a nudge.
+  const scanDates = [previousDateString(today), today];
+  // Start of the current local day. A slot only earns a reminder while its
+  // due-instant (scheduled + grace) sits in [todayStart, now]: today's overdue
+  // slots qualify as before, plus a yesterday slot that crossed midnight into
+  // today — but NOT yesterday's daytime slots, which became overdue yesterday
+  // and would only be day-late noise now.
+  const todayStart = zonedInstant(today, '00:00:00', timeZone).getTime();
   const created: CommunicationRequest[] = [];
 
   // Single-user regimen: a handful of active meds, so _count=100 covers the
@@ -104,60 +117,68 @@ export async function handler(
     if (!request.id || !request.subject) {
       continue;
     }
-    // authoredOn is the medication start anchor (FHIR-MAPPING.md §2) —
-    // slots only exist from that date forward.
-    const startDate = request.authoredOn?.slice(0, 10);
-    if (startDate && today < startDate) {
-      continue; // med not started yet — no slots today
-    }
+    // authoredOn is the medication start anchor (FHIR-MAPPING.md §2), resolved
+    // to the OWNER's local calendar date so it compares against scanDate (a
+    // raw UTC slice of an evening dateTime would land a day off).
+    const startDate = localCalendarDate(request.authoredOn, timeZone);
     const slug = requestSlug(request);
-    const times = request.dosageInstruction?.flatMap((d) => d.timing?.repeat?.timeOfDay ?? []) ?? [];
+    // Only the first dosageInstruction — the frontend (fhir.ts loadMeds) and
+    // the Pi dispenser both use dosageInstruction[0]; expanding all of them
+    // would remind for slots the app never shows.
+    const times = request.dosageInstruction?.[0]?.timing?.repeat?.timeOfDay ?? [];
 
-    for (const time of times) {
-      // The instant this wall-clock slot occurs in the OWNER's zone.
-      const scheduled = zonedInstant(today, time, timeZone);
-      if (Number.isNaN(scheduled.getTime())) {
-        continue;
+    for (const scanDate of scanDates) {
+      if (startDate && scanDate < startDate) {
+        continue; // med not started yet on this date — no slots
       }
-      if (now.getTime() - scheduled.getTime() < GRACE_MINUTES * 60_000) {
-        continue; // not yet past due + grace
-      }
+      for (const time of times) {
+        // The instant this wall-clock slot occurs in the OWNER's zone.
+        const scheduled = zonedInstant(scanDate, time, timeZone);
+        if (Number.isNaN(scheduled.getTime())) {
+          continue;
+        }
+        const dueInstant = scheduled.getTime() + GRACE_MINUTES * 60_000;
+        if (dueInstant > now.getTime()) {
+          continue; // not yet past due + grace
+        }
+        if (dueInstant < todayStart) {
+          continue; // became overdue before today — stale, not a fresh nudge
+        }
 
-      // Same logical-slot identifier the UI writes when a dose is logged
-      // (taken OR skipped/missed) — any log means no reminder.
-      const slotValue = `${slug}-${today}T${time.slice(0, 5)}`;
-      const logged = await medplum.searchOne('MedicationAdministration', {
-        identifier: `${ADMIN_IDENT_SYSTEM}|${slotValue}`,
-      });
-      if (logged) {
-        continue;
-      }
+        // Same logical-slot identifier the UI writes when a dose is logged
+        // (taken OR skipped/missed) — any log means no reminder.
+        const slotValue = `${slug}-${scanDate}T${time.slice(0, 5)}`;
+        const logged = await medplum.searchOne('MedicationAdministration', {
+          identifier: `${ADMIN_IDENT_SYSTEM}|${slotValue}`,
+        });
+        if (logged) {
+          continue;
+        }
 
-      const reminderValue = `reminder/${slug}/${today}T${time.slice(0, 5)}`;
-      const medName = request.medicationReference?.display ?? 'Medication';
-      const reminder = await medplum.createResourceIfNoneExist<CommunicationRequest>(
-        {
-          resourceType: 'CommunicationRequest',
-          status: 'active',
-          subject: request.subject,
-          about: [{ reference: `MedicationRequest/${request.id}` }],
-          medium: [
-            { coding: [{ system: CS_MEDIUM, code: 'push', display: 'Push notification' }] },
-          ],
-          occurrenceDateTime: scheduled.toISOString(),
-          authoredOn: now.toISOString(),
-          payload: [
-            {
-              // Neutral wording on purpose: "not logged yet", never "missed" —
-              // dose status is only ever set by the user.
-              contentString: `Dose reminder: ${medName} scheduled for ${time.slice(0, 5)} has not been logged yet.`,
-            },
-          ],
-          identifier: [{ system: REMINDER_IDENT_SYSTEM, value: reminderValue }],
-        },
-        `identifier=${REMINDER_IDENT_SYSTEM}|${reminderValue}`
-      );
-      created.push(reminder);
+        const reminderValue = `reminder/${slug}/${scanDate}T${time.slice(0, 5)}`;
+        const medName = request.medicationReference?.display ?? 'Medication';
+        const reminder = await medplum.createResourceIfNoneExist<CommunicationRequest>(
+          {
+            resourceType: 'CommunicationRequest',
+            status: 'active',
+            subject: request.subject,
+            about: [{ reference: `MedicationRequest/${request.id}` }],
+            medium: [{ coding: [{ system: CS_MEDIUM, code: 'push', display: 'Push notification' }] }],
+            occurrenceDateTime: scheduled.toISOString(),
+            authoredOn: now.toISOString(),
+            payload: [
+              {
+                // Neutral wording on purpose: "not logged yet", never "missed" —
+                // dose status is only ever set by the user.
+                contentString: `Dose reminder: ${medName} scheduled for ${time.slice(0, 5)} has not been logged yet.`,
+              },
+            ],
+            identifier: [{ system: REMINDER_IDENT_SYSTEM, value: reminderValue }],
+          },
+          `identifier=${REMINDER_IDENT_SYSTEM}|${reminderValue}`
+        );
+        created.push(reminder);
+      }
     }
   }
 
@@ -237,6 +258,23 @@ export function zonedDateString(d: Date, timeZone: string): string {
     month: '2-digit',
     day: '2-digit',
   }).format(d);
+}
+
+/** The calendar date one day before `date` ("YYYY-MM-DD"). UTC-midnight
+ * arithmetic on a date-only string is safe here — only the date label matters,
+ * not an instant, so DST never enters into it. */
+export function previousDateString(date: string): string {
+  return new Date(new Date(`${date}T00:00:00Z`).getTime() - 86_400_000).toISOString().slice(0, 10);
+}
+
+/** A FHIR date/dateTime -> its owner-local calendar date, matching the
+ * frontend's localCalendarDate (fhir.ts). A date-only value passes through; a
+ * value with a time is resolved through `timeZone`. Empty/undefined -> ''. */
+export function localCalendarDate(value: string | undefined, timeZone: string): string {
+  if (!value) {
+    return '';
+  }
+  return value.length > 10 ? zonedDateString(new Date(value), timeZone) : value.slice(0, 10);
 }
 
 /**

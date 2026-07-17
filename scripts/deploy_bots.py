@@ -61,7 +61,9 @@ BOTS = [
         "dist": REPO / "backend-bots/dist/questionnaire-response-to-observations.js",
         "subscription": {
             "reason": "Run questionnaire-response-to-observations on new and amended check-ins",
-            "criteria": "QuestionnaireResponse",
+            # status=completed: never invoke on an in-progress draft (the bot
+            # also guards on status, but the criteria avoids the wasted run).
+            "criteria": "QuestionnaireResponse?status=completed",
             "supported_interactions": ["create", "update"],
         },
     },
