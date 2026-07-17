@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
 import secrets
 import string
 import sys
@@ -64,7 +65,13 @@ def ensure_env_file() -> None:
     if not ENV_PATH.exists():
         example = REPO / ".env.example"
         ENV_PATH.write_text(example.read_text())
-        log("created .env from .env.example")
+        # .env holds the admin + super-admin passwords and the service client
+        # secret — owner-only (0600), never the default world-readable umask.
+        try:
+            os.chmod(ENV_PATH, 0o600)
+        except OSError:
+            pass
+        log("created .env from .env.example (mode 0600)")
 
 
 def env(key: str, default: str = "") -> str:

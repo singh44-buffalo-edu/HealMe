@@ -121,6 +121,17 @@ def main() -> None:
     # 2. Binary storage (MEDPLUM_BINARY_STORAGE=file:./binary/ inside the
     # server container — uploaded PDFs/photos and generated reports).
     tar_file = dest / "binary-storage.tar"
+    # A stopped medplum-server must NOT look like "no uploads yet" — that would
+    # silently ship a backup missing every uploaded PDF/photo. Confirm the
+    # container is up first, then distinguish "dir absent" (test exits 1, no
+    # stderr) from an exec/probe failure (die rather than skip).
+    running = subprocess.run(
+        COMPOSE + ["ps", "-q", "medplum-server"], capture_output=True, text=True
+    )
+    if running.returncode != 0 or not running.stdout.strip():
+        die(
+            "medplum-server is not running — cannot back up binary storage. Start the stack (make up) and retry."
+        )
     probe = subprocess.run(
         COMPOSE + ["exec", "-T", "medplum-server", "test", "-d", "binary"],
         capture_output=True,
@@ -131,9 +142,13 @@ def main() -> None:
             tar_file,
             "binary storage",
         )
-    else:
+    elif probe.returncode == 1 and not probe.stderr.strip():
         log(
             "no binary storage directory yet (no uploads) — skipping binary-storage.tar"
+        )
+    else:
+        die(
+            f"could not probe binary storage (exit {probe.returncode}): {probe.stderr.decode(errors='replace')[:200]}"
         )
 
     log(f"backup complete: {dest}")
