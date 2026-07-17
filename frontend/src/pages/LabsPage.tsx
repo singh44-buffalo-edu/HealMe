@@ -269,13 +269,15 @@ export function LabsPage() {
 
 /**
  * Bucket raw lab Observations into per-analyte series. The grouping key is the
- * display name (code.text, falling back to coding display/code): imported
- * reports from different sources rarely share consistent codings, so
- * same-named analytes merge into one trend. Each analyte keeps its points
- * sorted by draw date, the first stated referenceRange found in the group,
- * and an out-of-range flag computed from the LATEST value only — a historical
- * excursion does not flag the analyte today. Unit comes from the first
- * observation; values are used exactly as stored (no unit conversion).
+ * display name (code.text, falling back to coding display/code) PLUS the unit:
+ * imported reports from different sources rarely share consistent codings, so
+ * same-named analytes merge into one trend — but only when their units agree,
+ * so glucose in mg/dL and mmol/L stay separate series instead of being charted
+ * and range-flagged against each other. Each analyte keeps its points sorted by
+ * draw date, the first stated referenceRange found in the (now unit-homogeneous)
+ * group, and an out-of-range flag computed from the LATEST value only — a
+ * historical excursion does not flag the analyte today. Values are used exactly
+ * as stored (no unit conversion).
  */
 function groupAnalytes(observations: Observation[]): Analyte[] {
   const groups = new Map<string, Observation[]>();
@@ -283,10 +285,14 @@ function groupAnalytes(observations: Observation[]): Analyte[] {
     if (obs.valueQuantity?.value == null) continue;
     const name = obs.code?.text ?? obs.code?.coding?.[0]?.display ?? obs.code?.coding?.[0]?.code;
     if (!name) continue;
-    groups.set(name, [...(groups.get(name) ?? []), obs]);
+    const unit = obs.valueQuantity?.unit ?? '';
+    // NUL-separated composite so different-unit series never merge.
+    const key = `${name}\u0000${unit}`;
+    groups.set(key, [...(groups.get(key) ?? []), obs]);
   }
   const analytes: Analyte[] = [];
-  for (const [name, group] of groups) {
+  for (const [key, group] of groups) {
+    const [name, unit] = key.split('\u0000');
     const points = group
       .map((o) => ({
         date: (o.effectiveDateTime ?? '').slice(0, 10),
@@ -302,7 +308,7 @@ function groupAnalytes(observations: Observation[]): Analyte[] {
     const latest = points[points.length - 1];
     analytes.push({
       name,
-      unit: group[0].valueQuantity?.unit ?? '',
+      unit, // from the group key — the group is unit-homogeneous
       low,
       high,
       points,

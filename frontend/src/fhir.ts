@@ -198,11 +198,12 @@ export async function loadMeds(medplum: MedplumClient): Promise<MedInfo[]> {
       cartridge: cartridges.find(
         (c) => c.enabled && c.medicationRef === request.medicationReference?.reference
       ),
-      // authoredOn is the clinical start anchor; fall back to record creation
-      // converted to the LOCAL calendar date (a raw UTC slice can land on
-      // "tomorrow" and suppress today's doses).
+      // authoredOn is the clinical start anchor; fall back to record creation.
+      // Always resolved to the LOCAL calendar date — a raw UTC slice of a
+      // dateTime authored in the evening (UTC-negative zones) lands on
+      // "tomorrow" and suppresses today's doses.
       startDate: request.authoredOn
-        ? request.authoredOn.slice(0, 10)
+        ? localCalendarDate(request.authoredOn)
         : request.meta?.lastUpdated
           ? localDateString(new Date(request.meta.lastUpdated))
           : '',
@@ -256,6 +257,16 @@ export function slotIdentValue(med: MedInfo, date: string, time: string): string
  */
 export function localDateString(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * A FHIR date/dateTime string → its LOCAL calendar date (YYYY-MM-DD). A
+ * date-only value ("2026-07-16") is returned verbatim — parsing it as a Date
+ * would treat it as UTC midnight and shift it a day in negative offsets. A
+ * value carrying a time is converted through the local timezone.
+ */
+export function localCalendarDate(value: string): string {
+  return value.length > 10 ? localDateString(new Date(value)) : value.slice(0, 10);
 }
 
 /**

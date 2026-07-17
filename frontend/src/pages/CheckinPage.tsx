@@ -110,6 +110,10 @@ export function CheckinPage() {
   const [selectedUrl, setSelectedUrl] = useState<string>();
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string>();
+  // Re-entrancy guard: a double-click (or Enter-then-click) must not fire two
+  // submits before reload() flips def.existing — that would POST two responses
+  // for the same period. Paired with a conditional create for defense in depth.
+  const [submitting, setSubmitting] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -178,6 +182,8 @@ export function CheckinPage() {
    * duplicate (idempotent by construction — safe to retry after a failure).
    */
   const handleSubmit = async (def: CheckinDef, response: QuestionnaireResponse) => {
+    if (submitting) return; // ignore repeat clicks while the first save is in flight
+    setSubmitting(true);
     try {
       const patient = await getPatient(medplum);
       if (!patient) throw new Error('No patient record — run make seed');
@@ -197,13 +203,18 @@ export function CheckinPage() {
           message: `${def.questionnaire.title} updated. (Charted values keep the first submission until re-derivation lands.)`,
         });
       } else {
-        await medplum.createResource(resource);
+        // Conditional create on the period identifier: if a response for this
+        // period already exists (e.g. a racing double-submit), the server
+        // returns it instead of creating a duplicate.
+        await medplum.createResourceIfNoneExist(resource, `identifier=${QR_IDENT_SYSTEM}|${def.periodIdent}`);
         notifications.show({ color: 'teal', message: `${def.questionnaire.title} saved — thank you!` });
       }
       setEditing(false);
       await reload();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not save check-in', message: normalizeErrorString(err) });
+    } finally {
+      setSubmitting(false);
     }
   };
 

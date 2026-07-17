@@ -11,6 +11,7 @@ import {
   IDENT,
   adherenceStats,
   adminForSlot,
+  localCalendarDate,
   localDateString,
   mondayOf,
   periodIdentValue,
@@ -64,6 +65,20 @@ const day = (offset: number) => {
   d.setDate(d.getDate() + offset);
   return localDateString(d);
 };
+
+describe('localCalendarDate', () => {
+  it('returns a date-only value verbatim (no UTC reparse that could shift it)', () => {
+    expect(localCalendarDate('2026-07-16')).toBe('2026-07-16');
+  });
+
+  it('converts a dateTime to the local calendar date', () => {
+    // An instant is resolved through the local zone; the date component of the
+    // local wall-clock time is what matters (asserted against the same helper
+    // loadMeds relies on, so this holds in any test-runner timezone).
+    const iso = '2026-07-16T14:30:00Z';
+    expect(localCalendarDate(iso)).toBe(localDateString(new Date(iso)));
+  });
+});
 
 describe('slot identity', () => {
   it('builds stable identifiers from the request slug + date + HH:MM', () => {
