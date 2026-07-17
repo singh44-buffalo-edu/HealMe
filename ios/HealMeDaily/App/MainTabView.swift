@@ -69,9 +69,24 @@ struct MoreView: View {
                 } label: {
                     Label("Vitals", systemImage: "heart")
                 }
+                NavigationLink {
+                    TrendsView()
+                } label: {
+                    Label("Trends", systemImage: "chart.xyaxis.line")
+                }
             }
 
             Section {
+                NavigationLink {
+                    RecordsView()
+                } label: {
+                    Label("Labs & records", systemImage: "testtube.2")
+                }
+                NavigationLink {
+                    ProfileView()
+                } label: {
+                    Label("Profile", systemImage: "person.text.rectangle")
+                }
                 NavigationLink {
                     DocumentsView()
                 } label: {
