@@ -161,6 +161,22 @@ def test_self_report_when_no_sensor_can_verify():
     assert all(verification_of(a) == "self" for a in admins)
 
 
+def test_unmapped_med_is_a_reminder_not_a_wrong_tray_dispense():
+    # A med with no cartridge mapped must NOT rotate to a default tray and drop
+    # another med's pills. Clearing cartridges makes both slots tray-less; the
+    # agent should emit reminders and physically dispense nothing.
+    scenario = deepcopy(load_scenario())
+    scenario["cartridges"] = []
+    events: list[dict] = []
+    payloads, backend = run_scenario(
+        scenario, webhook=lambda url, p: events.append(p), webhook_url="http://lan.local/hook"
+    )
+    # No MedicationDispense and no MedicationAdministration: the guard returns
+    # before both the spindle rotate and the dispense event (agent._dispense).
+    assert not any(p["resourceType"] in ("MedicationDispense", "MedicationAdministration") for p in payloads)
+    assert [e["event"] for e in events].count("reminder-unmapped") == 2
+
+
 def test_webhook_fires_on_state_changes_and_failures_never_break_the_run():
     events: list[dict] = []
 

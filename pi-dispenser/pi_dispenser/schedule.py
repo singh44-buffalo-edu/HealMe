@@ -149,13 +149,29 @@ def map_trays(cartridges: list[dict], dispenser_id: str | None) -> dict[str, tup
     return mapping
 
 
-def _start_date(request: dict) -> str:
-    """authoredOn bounds slot generation (FHIR-MAPPING.md §2, med start anchor)."""
+def _local_calendar_date(value: str, tz) -> str:
+    """A FHIR date/dateTime -> its owner-LOCAL calendar date, matching the
+    frontend's localCalendarDate (fhir.ts). A date-only value is returned
+    verbatim; a value carrying a time is converted through `tz`. A raw UTC
+    slice would land on the wrong day for evening dateTimes in UTC-negative
+    zones and suppress a med's first day of slots — the frontend deliberately
+    localizes, so the dispenser must too or the two disagree on the start day."""
+    if len(value) <= 10:
+        return value[:10]
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(tz).date().isoformat()
+    except ValueError:
+        return value[:10]
+
+
+def _start_date(request: dict, tz) -> str:
+    """authoredOn bounds slot generation (FHIR-MAPPING.md §2, med start anchor),
+    resolved to the owner-local calendar date (see _local_calendar_date)."""
     authored = request.get("authoredOn")
     if authored:
-        return authored[:10]
+        return _local_calendar_date(authored, tz)
     last_updated = (request.get("meta") or {}).get("lastUpdated")
-    return last_updated[:10] if last_updated else ""
+    return _local_calendar_date(last_updated, tz) if last_updated else ""
 
 
 def build_day_slots(
@@ -166,8 +182,8 @@ def build_day_slots(
     tz,
     dispenser_id: str | None = None,
 ) -> list[DoseSlot]:
-    """One DoseSlot per (active request x dosageInstruction x timeOfDay) for
-    `day`, sorted by scheduled time then identity.
+    """One DoseSlot per (active request x timeOfDay of the first
+    dosageInstruction) for `day`, sorted by scheduled time then identity.
 
     `tz` anchors slots to the owner's local day — the same local-date
     convention the frontend uses (identifiers carry local dates, so both
@@ -186,7 +202,7 @@ def build_day_slots(
         # authoredOn is the med-start anchor (FHIR-MAPPING.md §2): meds added
         # mid-history must not generate phantom "missed" slots for days
         # before they existed.
-        start = _start_date(request)
+        start = _start_date(request, tz)
         if start and day_str < start:
             continue  # med did not exist yet — no slots
         med_ref = (request.get("medicationReference") or {}).get("reference", "")
@@ -201,8 +217,14 @@ def build_day_slots(
             for ext in request.get("extension", [])
         )
         tray, cartridge_id = trays.get(med_ref, (None, None))
-        for dosage in request.get("dosageInstruction", []):
-            repeat = ((dosage.get("timing") or {}).get("repeat")) or {}
+        # Only the FIRST dosageInstruction — the frontend (fhir.ts loadMeds reads
+        # dosageInstruction[0]) and the iOS client (RecordAPI .first) do the same.
+        # Expanding every instruction here would generate slots the app never
+        # shows or logs, so the same physical regimen would diverge between the
+        # dispenser and the app it must stay identical to (module contract above).
+        dosages = request.get("dosageInstruction") or []
+        if dosages:
+            repeat = ((dosages[0].get("timing") or {}).get("repeat")) or {}
             for time_of_day in repeat.get("timeOfDay", []):
                 parsed = parse_time_of_day(time_of_day)
                 slots.append(

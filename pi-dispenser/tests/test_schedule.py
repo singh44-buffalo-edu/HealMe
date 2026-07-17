@@ -82,6 +82,30 @@ def test_life_critical_flag_carried_through():
     assert slot.life_critical is True
 
 
+def test_only_first_dosage_instruction_expands():
+    # The frontend (fhir.ts) and iOS both read dosageInstruction[0]; the
+    # dispenser must too, or a multi-instruction request would generate slots
+    # the app never shows/logs and the two would diverge on the same regimen.
+    request = medication_request("multi-med", "med-a", "Med A", ["09:00:00"])
+    request["dosageInstruction"].append(
+        {"text": "second schedule", "timing": {"repeat": {"timeOfDay": ["21:00:00"]}}}
+    )
+    slots = build_day_slots([request], [], DISPLAYS, DAY, UTC)
+    assert [s.time for s in slots] == ["09:00:00"]  # 21:00 from the 2nd instruction ignored
+
+
+def test_authored_on_datetime_uses_local_calendar_date():
+    # An evening-local authoredOn dateTime that is "tomorrow" in UTC must still
+    # count as started for the local day (matches the frontend's localCalendarDate).
+    from datetime import timedelta, timezone as tzmod
+
+    minus5 = tzmod(timedelta(hours=-5))
+    # 2026-07-15 22:00 -05:00 == 2026-07-16 03:00 UTC; local start date is the 15th.
+    req = medication_request("evening-med", "med-a", "Med A", ["09:00:00"], authoredOn="2026-07-16T03:00:00Z")
+    slots = build_day_slots([req], [], DISPLAYS, DAY, minus5)  # DAY = 2026-07-15
+    assert [s.time for s in slots] == ["09:00:00"]  # started on the 15th local, so a slot exists
+
+
 def test_parse_time_of_day_valid():
     parsed = parse_time_of_day("19:30:00")
     assert (parsed.hour, parsed.minute, parsed.second) == (19, 30, 0)

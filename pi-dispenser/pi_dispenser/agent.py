@@ -162,12 +162,20 @@ class DispenserAgent:
     def _dispense(self, slot: DoseSlot, now: datetime) -> None:
         """queued -> awaiting-pickup: physically drop the dose, write the
         MedicationDispense, start the slot's escalation ladder."""
+        if slot.tray is None:
+            # No cartridge is mapped to this med. Rotating to a default tray
+            # would open ANOTHER medication's wedge and drop the WRONG pills —
+            # a medical-safety hazard. Never withhold the dose: surface it as a
+            # take-it-manually reminder instead of dispensing the wrong thing.
+            self._say(
+                f"reminder: take {slot.medication_display} — no cartridge mapped, not auto-dispensed — {slot.ident_value}"
+            )
+            self._notify("reminder-unmapped", slot, at=now)
+            return
         if not self._backend.lid.is_closed():
             self._say("warning: lid is open — dispensing anyway (the machine never gates a dose)")
-        # Wedge index = weekday (Mon=0..Sun=6): each tray holds one week of
-        # one med. Tray defaults to 1 when no cartridge is mapped — the dose
-        # is still offered (unmapped hardware never withholds a med).
-        self._backend.spindle.rotate_to_tray(slot.tray or 1)
+        # Wedge index = weekday (Mon=0..Sun=6): each tray holds one week of one med.
+        self._backend.spindle.rotate_to_tray(slot.tray)
         self._backend.spindle.open_wedge(slot.scheduled.weekday())
         self._say(f"dispensed {slot.medication_display} (tray {slot.tray or '?'}) — {slot.ident_value}")
         self._sink.submit(dispense_event(slot, self._patient_id, self._dispenser_id, when_handed_over=now))
