@@ -238,7 +238,12 @@ public struct RecordAPI: Sendable {
             response.id = existing.id
             return try await client.update(response)
         }
-        return try await client.create(response)
+        // Conditional create (mirrors web CheckinPage): a double-tap or retry
+        // races to ONE response for the period instead of duplicating.
+        return try await client.createIfNoneExist(
+            response,
+            query: "identifier=\(FHIR.questionnaireResponseIdentSystem)|\(def.periodIdent)"
+        )
     }
 
     // MARK: Follow-up tasks

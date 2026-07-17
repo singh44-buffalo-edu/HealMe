@@ -117,6 +117,70 @@ final class FHIRShapeTests: XCTestCase {
         XCTAssertEqual(bundle.resources(Medication.self).first?.code?.text, "Lisinopril 10mg")
     }
 
+    func testLabObservationDecodesReferenceRangeAndInterpretation() throws {
+        let payload = """
+        {
+          "resourceType": "Observation",
+          "id": "lab1",
+          "status": "final",
+          "code": {"coding": [{"system": "http://loinc.org", "code": "2093-3"}], "text": "Cholesterol"},
+          "valueQuantity": {"value": 212, "unit": "mg/dL", "system": "http://unitsofmeasure.org", "code": "mg/dL"},
+          "referenceRange": [{"low": {"value": 0}, "high": {"value": 200, "unit": "mg/dL"}, "text": "<200 mg/dL"}],
+          "interpretation": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation", "code": "H"}]}]
+        }
+        """
+        let obs = try JSONDecoder().decode(FHIRObservation.self, from: Data(payload.utf8))
+        XCTAssertEqual(obs.referenceRange?.first?.high?.value, 200)
+        XCTAssertEqual(obs.referenceRange?.first?.text, "<200 mg/dL")
+        XCTAssertEqual(
+            obs.interpretation?.first?.code(in: "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation"),
+            "H"
+        )
+    }
+
+    func testProfileResourcesDecode() throws {
+        let condition = try JSONDecoder().decode(Condition.self, from: Data("""
+        {"resourceType": "Condition", "id": "c1",
+         "clinicalStatus": {"coding": [{"code": "active"}]},
+         "code": {"text": "Hypertension"}, "onsetDateTime": "2020-01-01"}
+        """.utf8))
+        XCTAssertEqual(condition.code?.text, "Hypertension")
+        XCTAssertEqual(condition.clinicalStatus?.coding?.first?.code, "active")
+
+        let allergy = try JSONDecoder().decode(AllergyIntolerance.self, from: Data("""
+        {"resourceType": "AllergyIntolerance", "id": "a1", "criticality": "high",
+         "code": {"text": "Penicillin"},
+         "reaction": [{"manifestation": [{"text": "Hives"}], "severity": "moderate"}]}
+        """.utf8))
+        XCTAssertEqual(allergy.criticality, "high")
+        XCTAssertEqual(allergy.reaction?.first?.manifestation?.first?.text, "Hives")
+
+        let immunization = try JSONDecoder().decode(Immunization.self, from: Data("""
+        {"resourceType": "Immunization", "id": "i1", "status": "completed",
+         "vaccineCode": {"text": "Influenza"}, "occurrenceDateTime": "2025-10-01"}
+        """.utf8))
+        XCTAssertEqual(immunization.vaccineCode?.text, "Influenza")
+
+        let report = try JSONDecoder().decode(DiagnosticReport.self, from: Data("""
+        {"resourceType": "DiagnosticReport", "id": "d1", "status": "final",
+         "code": {"text": "Lipid panel"}, "result": [{"reference": "Observation/lab1"}]}
+        """.utf8))
+        XCTAssertEqual(report.result?.first?.reference, "Observation/lab1")
+
+        let statement = try JSONDecoder().decode(MedicationStatement.self, from: Data("""
+        {"resourceType": "MedicationStatement", "id": "s1", "status": "active",
+         "medicationCodeableConcept": {"text": "Aspirin 81mg"}}
+        """.utf8))
+        XCTAssertEqual(statement.medicationCodeableConcept?.text, "Aspirin 81mg")
+    }
+
+    func testBundleRequestEncodesIfMatch() throws {
+        let request = BundleRequest(method: "PUT", url: "Device/d1", ifMatch: #"W/"3""#)
+        let data = try JSONEncoder().encode(request)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(obj["ifMatch"] as? String, #"W/"3""#)
+    }
+
     func testPKCEChallengeIsRFC7636() {
         // RFC 7636 appendix B reference vector.
         let challenge = MedplumClient.s256Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")

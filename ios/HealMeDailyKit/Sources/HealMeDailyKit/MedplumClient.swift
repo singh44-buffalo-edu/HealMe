@@ -321,11 +321,23 @@ public actor MedplumClient {
     }
 
     public func update<T: FHIRResource>(_ resource: T) async throws -> T {
+        try await update(resource, ifMatchVersion: nil)
+    }
+
+    /// Version-checked update: sends `If-Match: W/"<versionId>"` so a
+    /// concurrent writer surfaces as HTTP 412 instead of a lost update
+    /// (FHIR-MAPPING.md §5 read-modify-write convention). Pass nil to skip
+    /// the check (plain PUT).
+    public func update<T: FHIRResource>(_ resource: T, ifMatchVersion versionId: String?) async throws -> T {
         guard let id = resource.id else {
             throw MedplumError.invalidResponse("Cannot update a resource without an id")
         }
+        var headers: [String: String] = [:]
+        if let versionId {
+            headers["If-Match"] = "W/\"\(versionId)\""
+        }
         let body = try Self.encoder.encode(resource)
-        let data = try await authorizedRequest(path: "fhir/R4/\(T.resourceType)/\(id)", method: "PUT", body: body, contentType: "application/fhir+json", extraHeaders: [:])
+        let data = try await authorizedRequest(path: "fhir/R4/\(T.resourceType)/\(id)", method: "PUT", body: body, contentType: "application/fhir+json", extraHeaders: headers)
         return try Self.decode(T.self, from: data)
     }
 
