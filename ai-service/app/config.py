@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # unauthenticated surface is only tolerable on a fully-loopback dev box —
     # set AI_REQUIRE_AUTH=false there if you must.
     ai_require_auth: bool = True
+    # Owner-authorization allowlist (confused-deputy fix, auth.py): comma-
+    # separated FHIR profile references (e.g. "Practitioner/abc,Patient/xyz")
+    # the session's userinfo must match. Empty ⇒ authenticate-only — any valid
+    # Medplum session passes (safe default for the single-user deployment; set
+    # this before exposing the service to care-circle members).
+    ai_owner_profiles: str = ""
 
     # APNs push (Phase 7) — the owner's Apple credentials, server-only (never
     # in the app). Absent ⇒ push is "not configured" and the app still works.

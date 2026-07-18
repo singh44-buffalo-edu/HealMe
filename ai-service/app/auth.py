@@ -14,21 +14,24 @@ Fail-closed rules:
 - No/malformed Authorization header → 401 (except /health and CORS
   preflights).
 - Medplum says the token is invalid → 401.
+- Token valid but the caller is not the owner → 403 (see below).
 - Medplum unreachable during verification → 502 (never silently allow).
 
 `AI_REQUIRE_AUTH=false` turns the gate off for fully-loopback dev setups;
 the default is ON.
 
-Scope limitation (documented, not yet closed): this gate AUTHENTICATES (the
-caller holds a live Medplum session) but does not AUTHORIZE per-caller — the
-service then acts with its OWN full-access client credentials. In the
-single-user owner app that is the whole intent. But once care-circle members
-exist (Phase 9), a member with a deliberately-scoped Medplum token could call
-the ai-service directly and reach whole-record export/review, bypassing their
-AccessPolicy (a classic confused-deputy). Before exposing the ai-service to
-anyone but the owner, add an owner-identity check here (compare the userinfo
-profile against the configured owner) or have the service forward the
-caller's token for FHIR reads instead of its own. Tracked for Phase 9.
+Owner authorization (confused-deputy fix): the gate AUTHENTICATES (the caller
+holds a live Medplum session) and, when `AI_OWNER_PROFILES` is set, also
+AUTHORIZES — the caller's userinfo profile (fhirUser / profile / sub claim)
+must be on that allowlist. This matters because the service then acts with
+its OWN full-access client credentials: without an owner check, a care-circle
+member (Phase 9) holding a deliberately-scoped Medplum token could call the
+ai-service directly and reach whole-record export/review, bypassing their
+AccessPolicy. Set `AI_OWNER_PROFILES` to the owner's profile reference(s)
+(comma-separated, e.g. `Practitioner/abc,Patient/xyz`) before exposing the
+service to anyone but the owner. When it is UNSET the gate authenticates only
+(any valid session passes) — the safe default for the current single-user
+deployment, so nothing breaks until care-circle is actually wired.
 """
 
 from __future__ import annotations
@@ -69,14 +72,37 @@ def _prune(now: float) -> None:
                 del _verified[key]
 
 
-async def _token_is_valid(token: str) -> bool:
-    """Ask Medplum whether this access token is live (OIDC userinfo).
+def _owner_allowlist() -> set[str]:
+    """Normalized {Type/id} owner profile references from AI_OWNER_PROFILES.
+    Empty set ⇒ authenticate-only (any valid session passes)."""
+    return {_normalize_ref(p) for p in settings.ai_owner_profiles.split(",") if p.strip()}
 
-    Returns True/False for a definitive answer (200 = valid; 400/401/403 =
-    invalid). Raises httpx.HTTPError when Medplum cannot give one — a network
-    failure OR a 5xx — so the caller maps it to 502 rather than mistaking an
-    outage for an expired session (fail-closed, but never a false "sign in
-    again" during a Medplum hiccup).
+
+def _normalize_ref(reference: str) -> str:
+    """A profile reference or fhirUser URL → bare 'Type/id'
+    (e.g. 'https://host/fhir/R4/Practitioner/abc' → 'Practitioner/abc')."""
+    ref = reference.strip().rstrip("/")
+    parts = ref.split("/")
+    return "/".join(parts[-2:]) if len(parts) >= 2 else ref
+
+
+def _claim_profiles(claims: dict) -> set[str]:
+    """Every profile-ish identity claim userinfo might carry, normalized."""
+    out: set[str] = set()
+    for key in ("fhirUser", "profile", "sub"):
+        value = claims.get(key)
+        if isinstance(value, str) and value:
+            out.add(_normalize_ref(value))
+        elif isinstance(value, dict) and isinstance(value.get("reference"), str):
+            out.add(_normalize_ref(value["reference"]))
+    return out
+
+
+async def _userinfo(token: str) -> dict | None:
+    """OIDC userinfo claims for a live token, or None for a definitive
+    invalid (400/401/403). Raises httpx.HTTPError when Medplum cannot give a
+    verdict (network OR 5xx) so the caller maps it to 502 — never a false
+    'sign in again' during a Medplum hiccup.
     """
     # Normalize exactly like medplum.py: urljoin against a base WITHOUT a
     # trailing slash would drop the host's path (or the host itself for a
@@ -88,15 +114,20 @@ async def _token_is_valid(token: str) -> bool:
     async with httpx.AsyncClient(timeout=5.0) as client:
         response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
     if response.status_code == 200:
-        return True
+        try:
+            claims = response.json()
+        except ValueError:
+            claims = {}
+        return claims if isinstance(claims, dict) else {}
     if response.status_code in (400, 401, 403):
-        return False
+        return None
     # 5xx / 429 / anything unexpected: not an authorization verdict.
     raise httpx.HTTPError(f"userinfo returned {response.status_code}")
 
 
 async def require_medplum_token(request: Request, call_next):
-    """HTTP middleware: gate every non-exempt request on a Medplum session."""
+    """HTTP middleware: gate every non-exempt request on a Medplum session
+    (and, when AI_OWNER_PROFILES is set, on being the owner)."""
     if not settings.ai_require_auth:
         return await call_next(request)
     # CORS preflights carry no Authorization header by design.
@@ -117,17 +148,27 @@ async def require_medplum_token(request: Request, call_next):
     now = time.monotonic()
     if _verified.get(key, 0.0) <= now:
         try:
-            valid = await _token_is_valid(token)
+            claims = await _userinfo(token)
         except httpx.HTTPError:
             return JSONResponse(
                 status_code=502,
                 content={"detail": "Could not verify the session with Medplum."},
             )
-        if not valid:
+        if claims is None:
             _verified.pop(key, None)
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Session expired or invalid — sign in again."},
+            )
+        allowlist = _owner_allowlist()
+        if allowlist and allowlist.isdisjoint(_claim_profiles(claims)):
+            # Authenticated but not the owner — do NOT cache (a scoped token
+            # must never earn a fast-path), and never say why beyond "not
+            # authorized".
+            _verified.pop(key, None)
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "This account is not authorized for the AI service."},
             )
         _prune(now)
         _verified[key] = now + CACHE_TTL_SECONDS

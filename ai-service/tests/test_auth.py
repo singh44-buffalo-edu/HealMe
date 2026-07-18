@@ -41,11 +41,11 @@ def test_malformed_header_is_401(client):
 def test_valid_token_passes_and_caches(client, monkeypatch):
     calls = {"n": 0}
 
-    async def fake_valid(token):
+    async def fake_userinfo(token):
         calls["n"] += 1
-        return token == "good-token"
+        return {} if token == "good-token" else None
 
-    monkeypatch.setattr(auth, "_token_is_valid", fake_valid)
+    monkeypatch.setattr(auth, "_userinfo", fake_userinfo)
     headers = {"Authorization": "Bearer good-token"}
     first = client.get("/ingest/tasks", headers=headers)
     second = client.get("/ingest/tasks", headers=headers)
@@ -57,21 +57,59 @@ def test_valid_token_passes_and_caches(client, monkeypatch):
 
 
 def test_rejected_token_is_401(client, monkeypatch):
-    async def fake_valid(token):
-        return False
+    async def fake_userinfo(token):
+        return None
 
-    monkeypatch.setattr(auth, "_token_is_valid", fake_valid)
+    monkeypatch.setattr(auth, "_userinfo", fake_userinfo)
     response = client.get("/ingest/tasks", headers={"Authorization": "Bearer stale"})
     assert response.status_code == 401
 
 
 def test_medplum_unreachable_is_502_not_allow(client, monkeypatch):
-    async def fake_valid(token):
+    async def fake_userinfo(token):
         raise httpx.ConnectError("boom")
 
-    monkeypatch.setattr(auth, "_token_is_valid", fake_valid)
+    monkeypatch.setattr(auth, "_userinfo", fake_userinfo)
     response = client.get("/ingest/tasks", headers={"Authorization": "Bearer whatever"})
     assert response.status_code == 502
+
+
+def test_non_owner_token_is_403_when_allowlist_set(client, monkeypatch):
+    # Valid session, but AI_OWNER_PROFILES names someone else → 403, not cached.
+    monkeypatch.setattr(settings, "ai_owner_profiles", "Practitioner/owner")
+
+    async def fake_userinfo(token):
+        return {"fhirUser": "https://host/fhir/R4/Practitioner/caretaker"}
+
+    monkeypatch.setattr(auth, "_userinfo", fake_userinfo)
+    resp = client.get("/ingest/tasks", headers={"Authorization": "Bearer scoped"})
+    assert resp.status_code == 403
+
+
+def test_owner_token_passes_when_allowlist_set(client, monkeypatch):
+    monkeypatch.setattr(settings, "ai_owner_profiles", "Practitioner/owner, Patient/me")
+
+    async def fake_userinfo(token):
+        # fhirUser as an absolute URL must normalize to Type/id and match.
+        return {"fhirUser": "https://host/fhir/R4/Practitioner/owner"}
+
+    monkeypatch.setattr(auth, "_userinfo", fake_userinfo)
+    resp = client.get("/ingest/tasks", headers={"Authorization": "Bearer owner"})
+    assert resp.status_code != 401
+    assert resp.status_code != 403
+
+
+def test_no_allowlist_authenticates_only(client, monkeypatch):
+    # Unset AI_OWNER_PROFILES ⇒ any valid session passes (single-user default).
+    monkeypatch.setattr(settings, "ai_owner_profiles", "")
+
+    async def fake_userinfo(token):
+        return {"fhirUser": "Practitioner/anyone"}
+
+    monkeypatch.setattr(auth, "_userinfo", fake_userinfo)
+    resp = client.get("/ingest/tasks", headers={"Authorization": "Bearer anyone"})
+    assert resp.status_code != 401
+    assert resp.status_code != 403
 
 
 def test_medplum_5xx_is_502_not_401(client, monkeypatch):
@@ -107,6 +145,9 @@ def test_base_url_without_trailing_slash_hits_userinfo(client, monkeypatch):
 
     class FakeResponse:
         status_code = 200
+
+        def json(self):
+            return {}
 
     class FakeClient:
         def __init__(self, *a, **k):
