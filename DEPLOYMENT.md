@@ -172,15 +172,31 @@ all URLs derive from `HMD_DOMAIN`; TLS is automatic (Let's Encrypt via the check
 - **Watch the History page** — the boundary ledger and "who looked lately" work the same in
   the cloud and are your intrusion smoke alarm.
 - Consider IP-allowlisting or basicauth on `medplum.you.example` (admin UI) in the Caddyfile.
-- **⚠️ The ai-service has no authentication.** It holds the owner's Medplum
-  client-credentials token, so anyone who can reach `:8000` can dump the entire
-  record (`GET /export/fhir`), write clinical data bypassing the review queue
-  (`POST /import/*`), and manage BYOK AI keys. The checked-in `Caddyfile`
-  therefore leaves `ai.{domain}` **commented out**. Keep it internal-only
-  (reach it over Tailscale, Option A). If you must expose it, uncomment the
-  block and add Caddy `basic_auth` first — never publish it bare. In this
-  cloud stack AI-in-browser features are unavailable until you do so; the
-  deterministic (no-AI) clinician summary and all non-AI features still work.
+- **ai-service authentication (as of 2026-07-17).** The ai-service now
+  requires a valid Medplum session token on every endpoint except `/health`
+  (`AI_REQUIRE_AUTH`, default **on** — see `ai-service/app/auth.py`): the web
+  app and iOS app forward the signed-in session's token automatically. It
+  still acts with its OWN full-access client-credentials token once past the
+  gate, so before exposing it to anyone but the owner set
+  `AI_OWNER_PROFILES` (comma-separated FHIR profile refs) — the gate then
+  returns 403 to any non-owner session. With the gate on, `ai.{domain}` is no
+  longer a bare one-curl PHI dump; still, the recommended posture is
+  **internal-only** — the browser reaches it same-origin/over Tailscale and
+  the Medplum push Subscription reaches it on the internal Docker network
+  (`http://healmedaily-ai:8000`), so there is rarely a reason to publish it.
+  If you do expose `ai.{domain}`, keep `AI_REQUIRE_AUTH=true`, set
+  `AI_OWNER_PROFILES`, and Caddy `basic_auth` is then belt-and-suspenders,
+  not the only lock. (The running pre-2026-07-17 build has NO gate — rebuild
+  before relying on this.)
+- **iOS push (APNs), optional.** To enable server-driven reminders on the
+  phone, set in `.env` (server-only secrets): `APNS_KEY_ID`, `APNS_TEAM_ID`,
+  the `.p8` at `APNS_KEY_PATH` (drop it in `data/secrets/`, which the cloud
+  compose already mounts), `PUSH_SUBSCRIPTION_SECRET` (a long random value),
+  and `AI_SERVICE_PUBLIC_URL=http://healmedaily-ai:8000` — the INTERNAL
+  service name, because it is the Medplum **server** container that calls
+  `/push/dispatch`, over the Docker network, so push works without exposing
+  the ai-service publicly. Then `make bots` wires the Medplum Subscription.
+  No APNs config ⇒ push is simply inert. Payloads carry no medication name.
 - The UI's "On this device" VaultChip language is now aspirational — the record is on your VM.
   Consider that copy debt if option B becomes permanent.
 
