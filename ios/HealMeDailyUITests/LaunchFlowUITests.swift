@@ -72,4 +72,56 @@ final class LaunchFlowUITests: XCTestCase {
         // sign-in and reached the authenticated shell.
         XCTAssertTrue(app.buttons["Today"].waitForExistence(timeout: 20))
     }
+
+    /// Drives every dashboard against a live seeded Medplum stack and captures
+    /// screenshots. Runs only when HMD_UITEST_* is configured (same skip as
+    /// above), so it is a developer/integration check, never a CI gate.
+    func testDashboardsRenderAgainstLiveStack() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let userEmail = env["HMD_UITEST_EMAIL"],
+              let password = env["HMD_UITEST_PASSWORD"] else {
+            throw XCTSkip("Set HMD_UITEST_EMAIL/PASSWORD to run the live dashboard flow")
+        }
+        let app = XCUIApplication()
+        app.launch()
+
+        let email = app.textFields["login.email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 10))
+        email.tap()
+        email.typeText(userEmail)
+        app.secureTextFields["login.password"].tap()
+        app.secureTextFields["login.password"].typeText(password)
+        app.buttons["login.signIn"].tap()
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.buttons["Today"].waitForExistence(timeout: 20))
+        attachScreenshot(app, name: "Today")
+
+        // Tab-bar dashboards (query the tab bar specifically — the tab label
+        // can also appear as a nav title, which makes a bare button query
+        // ambiguous).
+        for tab in ["Adherence", "Meds", "Today"] {
+            XCTAssertTrue(tabBar.buttons[tab].waitForExistence(timeout: 5), "\(tab) tab missing")
+            tabBar.buttons[tab].tap()
+            attachScreenshot(app, name: tab)
+        }
+
+        // More hub → the new read-only screens.
+        tabBar.buttons["More"].tap()
+        for row in ["Trends", "Labs & records", "Profile"] {
+            let cell = app.buttons[row].firstMatch
+            if cell.waitForExistence(timeout: 5) {
+                cell.tap()
+                attachScreenshot(app, name: row)
+                app.navigationBars.buttons.firstMatch.tap() // back to More
+            }
+        }
+    }
+
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
 }
