@@ -63,6 +63,13 @@ final class AppModel {
     /// Apple Health sync (opt-in; read-only; see HealthKitService).
     let healthKit = HealthKitService()
 
+    /// Remote push (opt-in; server-driven reminders; see PushService).
+    let push = PushService.shared
+
+    /// Selected bottom-tab index — a binding for MainTabView, also the target
+    /// of push deep-links. 0 = Today.
+    var selectedTab = 0
+
     // MARK: Shared record caches
 
     private(set) var meds: [MedInfo] = []
@@ -175,6 +182,9 @@ final class AppModel {
         // Settings shows the pending count so nothing is silently held.
         snapshots.clear()
         ReminderScheduler.cancelAll()
+        // Drop the APNs token server-side — a different account may sign in
+        // next; the push preference is kept and re-registers on re-sign-in.
+        await push.handleSignOut()
     }
 
     /// Rebuild clients after the user edits server URLs in Settings.
@@ -218,8 +228,22 @@ final class AppModel {
     private func afterSignIn() async {
         profileName = (try? await client.profileDisplayName()) ?? "Owner"
         healthKit.bootstrap(record: record)
+        push.configure(model: self)
         await drainOutbox()
         await refreshCore()
+    }
+
+    /// Deep-link target from a tapped push notification. Non-clinical by
+    /// contract (a screen name); "today" is the only target the server sends
+    /// today. Switches tabs and refreshes so the panel is current.
+    func route(to target: String) {
+        switch target {
+        case "today":
+            selectedTab = 0
+            _Concurrency.Task { await refreshCore() }
+        default:
+            selectedTab = 0
+        }
     }
 
     // MARK: Shared data

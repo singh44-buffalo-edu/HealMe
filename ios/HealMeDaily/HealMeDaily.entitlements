@@ -11,5 +11,9 @@
 	<true/>
 	<key>com.apple.developer.healthkit.access</key>
 	<array/>
+	<!-- Remote push (opt-in). 'development' matches a debug/sandbox build;
+	     Xcode/App Store signing rewrites this to 'production' for release. -->
+	<key>aps-environment</key>
+	<string>development</string>
 </dict>
 </plist>

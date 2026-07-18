@@ -118,6 +118,7 @@ struct SettingsView: View {
             }
             .listRowBackground(T.card)
 
+            pushSection
             healthKitSection
             aiSection
             accountSection
@@ -256,6 +257,53 @@ struct SettingsView: View {
     }
 
     // MARK: - Account
+
+    // MARK: - Push notifications
+
+    /// Opt-in server-driven push. The device token registers with the owner's
+    /// own ai-service; no APNs secret ever lives in the app, and payloads
+    /// carry no medication name.
+    private var pushSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { model.push.status == .on || model.push.status == .requesting },
+                set: { turnOn in
+                    Task {
+                        if turnOn {
+                            await model.push.enable()
+                        } else {
+                            await model.push.disable()
+                        }
+                    }
+                }
+            )) {
+                Text("Push notifications")
+                    .font(.system(size: 14))
+                    .foregroundStyle(T.ink)
+            }
+            .tint(T.green)
+
+            if model.push.status == .denied {
+                Text("Notifications are turned off for HealMeDaily in iOS Settings — enable them there first.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(T.watch)
+            }
+            if let error = model.push.lastError {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(T.outOfRange)
+            }
+        } header: {
+            Text("Push notifications")
+        } footer: {
+            Text(
+                "Server-sent reminders (e.g. an overdue dose) from your own stack. The alert says only "
+                    + "that a reminder is waiting — never the medication name — and tapping it opens Today. "
+                    + "Requires the server's APNs credentials; without them nothing is sent."
+            )
+        }
+        .listRowBackground(T.card)
+    }
 
     // MARK: - Apple Health
 

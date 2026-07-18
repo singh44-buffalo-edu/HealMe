@@ -57,6 +57,17 @@ public struct AIService: Sendable {
         public var status: String
         public var medplum_configured: Bool
         public var ai: AiStatus
+        /// Whether the server has APNs credentials (nil on older servers).
+        public var push_configured: Bool?
+    }
+
+    public struct PushRegisterResult: Codable, Sendable {
+        public var registered: Bool
+        public var push_configured: Bool
+    }
+
+    public struct PushUnregisterResult: Codable, Sendable {
+        public var unregistered: Bool
     }
 
     public struct ReviewResult: Codable, Sendable, Identifiable {
@@ -180,6 +191,18 @@ public struct AIService: Sendable {
     /// AI surfaces show a "configure a provider" state, never an error wall.
     public func health() async throws -> Health {
         try await get("health")
+    }
+
+    /// Register this device's APNs token so the server can push reminders.
+    /// `environment` is "sandbox" for development builds, "production"
+    /// otherwise (which APNs host the server addresses this token on).
+    public func registerPush(deviceToken: String, environment: String) async throws -> PushRegisterResult {
+        try await post("push/register", json: ["device_token": deviceToken, "environment": environment])
+    }
+
+    /// Drop this device's token (push disabled / sign-out). Idempotent.
+    public func unregisterPush(deviceToken: String) async throws {
+        _ = try await post("push/unregister", json: ["device_token": deviceToken]) as PushUnregisterResult
     }
 
     /// Generate an AI Health Review (slow — one LLM round trip). Organizes
