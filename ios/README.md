@@ -54,6 +54,16 @@ written back to Apple Health.
 caller's Medplum session token (`AI_REQUIRE_AUTH`, default on). The app
 forwards its own token automatically — nothing to configure.
 
+**Push (opt-in, server-driven):** Settings ▸ Push notifications registers the
+device's APNs token with your own ai-service (`/push/register`). A Medplum
+Subscription fans active push-medium `CommunicationRequest`s (the
+reminders-runner bot's overdue-dose nudges) to `/push/dispatch`, which sends
+a **generic** alert ("You have a health reminder" — never the med name) with
+a deep-link target; tapping opens Today. The APNs signing key (.p8) is a
+server secret (`APNS_*` in `.env`) and never ships in the app. No push
+config ⇒ the feature is simply inert. On-device dose reminders
+(ReminderScheduler) still work independently and need no server.
+
 Safety behavior is identical to the web app: no-log ⇒ no-resource, AI output
 always labeled (indigo + ✦ AI pill), extraction proposals never commit
 without explicit approval, no clinical judgment anywhere, disclaimer on
