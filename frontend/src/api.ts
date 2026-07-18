@@ -300,13 +300,16 @@ export interface AiSettings {
 /** Current providers + per-feature routing + chosen cloud provider. */
 export const getAiSettings = () => request<AiSettings>('ai/settings');
 
-/** Partial-update AI settings (routing, cloud provider, model overrides);
- * returns the full updated settings. Setting a feature to 'cloud' only
- * routes it — every actual cloud call still writes its boundary AuditEvent. */
+/** Partial-update AI settings (routing, cloud provider, model overrides,
+ * per-provider base URL overrides); returns the full updated settings.
+ * Setting a feature to 'cloud' only routes it — every actual cloud call still
+ * writes its boundary AuditEvent. `base_urls` maps provider → endpoint (e.g.
+ * an OpenAI-compatible server); an empty string clears the override. */
 export const putAiSettings = (body: {
   routing?: Partial<Record<AiFeature, AiRoute>>;
   cloud_provider?: string;
   models?: Record<string, string>;
+  base_urls?: Record<string, string>;
 }) => request<AiSettings>('ai/settings', { ...json(body), method: 'PUT' });
 
 /** Store a BYOK API key. Server keeps it in the macOS Keychain (0600 file

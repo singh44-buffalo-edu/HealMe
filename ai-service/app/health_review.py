@@ -366,7 +366,11 @@ def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: 
     if not provider.is_local:
         # Boundary ledger: written BEFORE any data leaves this device.
         log_boundary_event(
-            medplum, "health-review", provider.name, f"AI Health Review · last {window_days} days of record"
+            medplum,
+            "health-review",
+            provider.name,
+            f"AI Health Review · last {window_days} days of record",
+            endpoint_host=provider.endpoint_host,
         )
 
     user_prompt = (

@@ -89,6 +89,8 @@ class FakeMedplum:
 
 
 class FakeProvider:
+    endpoint_host = None
+
     def __init__(self, result, name="anthropic", is_local=False, medplum=None):
         self.result = result
         self.name = name

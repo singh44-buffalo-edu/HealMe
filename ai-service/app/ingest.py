@@ -213,7 +213,13 @@ def ingest_document(
         # Boundary ledger: written BEFORE the document text (or the full base64
         # document/image via the vision fallback) leaves this device.
         sent = "full document (vision)" if isinstance(content_blocks, list) else f"{len(text)} chars of text"
-        log_boundary_event(medplum, "ingest-extraction", provider.name, f"Document extraction · {filename} · {sent}")
+        log_boundary_event(
+            medplum,
+            "ingest-extraction",
+            provider.name,
+            f"Document extraction · {filename} · {sent}",
+            endpoint_host=provider.endpoint_host,
+        )
 
     result = provider.generate_json(EXTRACTION_SYSTEM, content_blocks, PROPOSAL_SCHEMA)
 

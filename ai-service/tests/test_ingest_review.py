@@ -165,6 +165,7 @@ class _FakeCloudProvider:
     name = "anthropic"
     model = "claude-x"
     is_local = False
+    endpoint_host = None
 
     def __init__(self, result):
         self._result = result

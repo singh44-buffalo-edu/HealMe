@@ -131,6 +131,19 @@ public struct AIService: Sendable {
         public var cloud_provider: String?
     }
 
+    /// Reply to POST/DELETE /ai/keys/{provider}: the server echoes only the
+    /// provider name, its configured state and (on save) a masked key — never
+    /// the raw key. Deliberately NOT AiProviderInfo: that endpoint returns this
+    /// narrower shape (no name/is_local/model), so callers reload aiSettings()
+    /// for the full picture after a mutation.
+    public struct AiKeyResult: Codable, Sendable {
+        public var provider: String
+        public var configured: Bool
+        public var masked_key: String?
+        /// Present on delete only.
+        public var deleted: Bool?
+    }
+
     public struct AiTestResult: Codable, Sendable {
         public var ok: Bool
         public var provider: String
@@ -276,20 +289,48 @@ public struct AIService: Sendable {
         try await get("ai/settings")
     }
 
-    /// Partial-update routing / cloud provider. Setting 'cloud' only routes —
-    /// every actual cloud call still writes its boundary AuditEvent.
-    public func updateAiSettings(routing: [String: AiRoute]? = nil, cloudProvider: String? = nil) async throws -> AiSettings {
+    /// Partial-update routing / cloud provider / per-provider base URL. Setting
+    /// 'cloud' only routes — every actual cloud call still writes its boundary
+    /// AuditEvent. `baseUrls` maps provider → endpoint (e.g. an OpenAI-compatible
+    /// server); an empty string clears the override. Omitted (nil) fields keep
+    /// their current value — the JSON encoder drops nil so this stays a patch.
+    public func updateAiSettings(
+        routing: [String: AiRoute]? = nil,
+        cloudProvider: String? = nil,
+        baseUrls: [String: String]? = nil
+    ) async throws -> AiSettings {
         struct Body: Encodable {
             var routing: [String: AiRoute]?
             var cloud_provider: String?
+            var base_urls: [String: String]?
         }
         var req = request(path: "ai/settings")
         req.httpMethod = "PUT"
-        req.httpBody = try JSONEncoder().encode(Body(routing: routing, cloud_provider: cloudProvider))
+        req.httpBody = try JSONEncoder().encode(Body(routing: routing, cloud_provider: cloudProvider, base_urls: baseUrls))
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await perform(req)
         try Self.throwOnError(response, data)
         return try Self.decode(AiSettings.self, from: data)
+    }
+
+    /// Store a BYOK API key for a cloud provider. The raw key rides ONE
+    /// authenticated request to the owner's server keystore (Keychain / 0600
+    /// file — never FHIR, never .env, never this phone) and the reply echoes
+    /// only a masked form. Callers must drop the raw key from view state the
+    /// moment this returns.
+    public func setProviderKey(_ provider: String, key: String) async throws -> AiKeyResult {
+        try await post("ai/keys/\(urlEncode(provider))", json: ["key": key])
+    }
+
+    /// Remove a stored key from the server keystore. The provider reverts to
+    /// unconfigured (unless an .env key still configures it — the reply's
+    /// `configured` tells the truth) and any feature routed to it degrades to
+    /// the "configure a provider" state. Idempotent.
+    public func deleteProviderKey(_ provider: String) async throws {
+        var req = request(path: "ai/keys/\(urlEncode(provider))")
+        req.httpMethod = "DELETE"
+        let (data, response) = try await perform(req)
+        try Self.throwOnError(response, data)
     }
 
     public func testProvider(_ provider: String) async throws -> AiTestResult {

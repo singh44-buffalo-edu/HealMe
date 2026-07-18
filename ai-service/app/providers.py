@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -64,6 +65,8 @@ DEFAULT_MODELS = {
     "gemini": DEFAULT_GEMINI_MODEL,
     "ollama": DEFAULT_OLLAMA_MODEL,
 }
+
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -147,6 +150,10 @@ class _BaseProvider:
     name = ""
     is_local = False
     model = ""
+    # The egress host to disclose in the boundary ledger when a provider is
+    # pointed at a NON-default endpoint (e.g. a custom OpenAI-compatible
+    # gateway). None means the well-known default host — no extra disclosure.
+    endpoint_host: str | None = None
 
     def generate(
         self,
@@ -273,18 +280,29 @@ def _openai_content(user_content: str | list[dict[str, Any]]) -> str | list[dict
 
 class OpenAIProvider(_BaseProvider):
     """Cloud adapter speaking the Chat Completions REST API via httpx (no SDK
-    dependency). OPENAI_BASE_URL supports proxies/Azure-style gateways."""
+    dependency). The base URL supports proxies/Azure-style gateways — "any
+    custom OpenAI-compatible endpoint with your own key"."""
 
     name = "openai"
     is_local = False
 
-    def __init__(self, model: str | None = None) -> None:
+    def __init__(self, model: str | None = None, base_url: str | None = None) -> None:
         key = resolve_key("openai")
         if not key:
             raise ProviderNotConfigured("No OpenAI key — add one in AI Settings or set OPENAI_API_KEY in .env")
         self._api_key = key
-        # OPENAI_BASE_URL supports the "custom endpoint" option (proxies, Azure-style gateways).
-        self.base_url = (settings.openai_base_url or "https://api.openai.com/v1").rstrip("/")
+        # base_url precedence: AI Settings base_urls['openai'] (passed here) >
+        # OPENAI_BASE_URL env > default. Supports the "custom endpoint" option
+        # (proxies, Azure-style gateways, any OpenAI-compatible service).
+        self.base_url = (base_url or settings.openai_base_url or DEFAULT_OPENAI_BASE_URL).rstrip("/")
+        # Disclose the egress host in the boundary ledger when it is not the
+        # well-known OpenAI host (a custom gateway means data leaves elsewhere).
+        # Use hostname[:port] — never netloc — so any userinfo embedded in the
+        # URL can't leak a credential into the ledger.
+        if self.base_url != DEFAULT_OPENAI_BASE_URL:
+            parts = urlsplit(self.base_url)
+            host = parts.hostname
+            self.endpoint_host = f"{host}:{parts.port}" if (host and parts.port) else host or None
         self.model = resolve_model("openai", model)
 
     def generate(
@@ -550,8 +568,10 @@ PROVIDER_CLASSES: dict[str, type[_BaseProvider]] = {
 }
 
 
-def build_provider(name: str, model: str | None = None) -> _BaseProvider:
-    """Instantiate a provider by name or raise ProviderNotConfigured."""
+def build_provider(name: str, model: str | None = None, base_url: str | None = None) -> _BaseProvider:
+    """Instantiate a provider by name or raise ProviderNotConfigured. `base_url`
+    is an AI-Settings per-provider endpoint override (only OpenAIProvider
+    consumes it today — proxies/gateways); other adapters ignore it."""
     name = (name or "").strip().lower()
     if not name:
         raise ProviderNotConfigured(
@@ -560,6 +580,8 @@ def build_provider(name: str, model: str | None = None) -> _BaseProvider:
     cls = PROVIDER_CLASSES.get(name)
     if cls is None:
         raise ProviderNotConfigured(f"Unknown AI provider '{name}' (anthropic | openai | gemini | ollama)")
+    if name == "openai":
+        return cls(model=model, base_url=base_url)
     return cls(model=model)
 
 
@@ -568,8 +590,8 @@ def get_provider() -> _BaseProvider:
     AI_PROVIDER default. Feature-aware callers use ai_settings.get_provider_for."""
     from .ai_settings import default_provider_spec  # lazy — avoids import cycle
 
-    name, model = default_provider_spec()
-    return build_provider(name, model=model)
+    name, model, base_url = default_provider_spec()
+    return build_provider(name, model=model, base_url=base_url)
 
 
 def provider_status() -> dict[str, Any]:

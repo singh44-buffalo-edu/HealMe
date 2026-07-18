@@ -34,6 +34,7 @@ import os
 import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -100,25 +101,40 @@ def _effective() -> dict[str, Any]:
         if cloud not in CLOUD_PROVIDERS:
             cloud = None
         models = {k: v for k, v in (data.get("models") or {}).items() if k in ALL_PROVIDERS and v}
-        return {"routing": routing, "cloud_provider": cloud, "models": models, "from_file": True}
+        base_urls = {k: v for k, v in (data.get("base_urls") or {}).items() if k in ALL_PROVIDERS and v}
+        return {
+            "routing": routing,
+            "cloud_provider": cloud,
+            "models": models,
+            "base_urls": base_urls,
+            "from_file": True,
+        }
     env_name = settings.ai_provider.strip().lower()
     if env_name == "ollama":
-        return {"routing": dict.fromkeys(FEATURES, "local"), "cloud_provider": None, "models": {}, "from_file": False}
+        return {
+            "routing": dict.fromkeys(FEATURES, "local"),
+            "cloud_provider": None,
+            "models": {},
+            "base_urls": {},
+            "from_file": False,
+        }
     return {
         "routing": dict.fromkeys(FEATURES, "cloud"),
         "cloud_provider": env_name or None,
         "models": {},
+        "base_urls": {},
         "from_file": False,
     }
 
 
-def default_provider_spec() -> tuple[str, str | None]:
-    """(name, model) for feature-less legacy callers (providers.get_provider)."""
+def default_provider_spec() -> tuple[str, str | None, str | None]:
+    """(name, model, base_url) for feature-less legacy callers
+    (providers.get_provider)."""
     eff = _effective()
     if eff["from_file"]:
         name = eff["cloud_provider"] or ""
-        return name, eff["models"].get(name)
-    return settings.ai_provider.strip().lower(), None
+        return name, eff["models"].get(name), eff["base_urls"].get(name)
+    return settings.ai_provider.strip().lower(), None, None
 
 
 def get_provider_for(feature: str) -> _BaseProvider:
@@ -141,13 +157,19 @@ def get_provider_for(feature: str) -> _BaseProvider:
         raise ProviderNotConfigured(
             "No AI provider configured — pick one in AI Settings or set AI_PROVIDER in .env (AI features are optional)"
         )
-    return providers.build_provider(name, model=eff["models"].get(name))
+    return providers.build_provider(name, model=eff["models"].get(name), base_url=eff["base_urls"].get(name))
 
 
 # --- Privacy-boundary ledger ---------------------------------------------------
 
 
-def log_boundary_event(medplum: Any, feature: str, provider_name: str, description: str) -> dict[str, Any]:
+def log_boundary_event(
+    medplum: Any,
+    feature: str,
+    provider_name: str,
+    description: str,
+    endpoint_host: str | None = None,
+) -> dict[str, Any]:
     """One AuditEvent per AI request whose data leaves this device — the
     cloud-boundary ledger (FHIR-MAPPING §11). Call sites invoke this for cloud
     providers only (skip when provider.is_local), and MUST call it BEFORE the
@@ -156,12 +178,19 @@ def log_boundary_event(medplum: Any, feature: str, provider_name: str, descripti
     short human line for the Privacy Vault UI (truncated to 200 chars) —
     metadata only, never record content.
 
+    `endpoint_host` names the egress host when a provider is pointed at a
+    NON-default endpoint (a custom OpenAI-compatible gateway) — it is folded
+    into the human description so the ledger discloses exactly where data went.
+    It is a hostname only, never a secret. When None (the well-known default
+    host) the description keeps its exact legacy format below.
+
     Machine-readable identity: type = local {CS_AUDIT}|cloud-egress with
     subtype = the feature slug, so the ledger is one server-side token search
     (AuditEvent?type=...|cloud-egress) instead of a regex over descriptions.
     HistoryPage.tsx keys on exactly this coding — the two must stay in
     lockstep. The human entity.description keeps its exact legacy format:
     pre-coding events are still recognized by it, and it names the provider."""
+    provider_label = f"{provider_name} ({endpoint_host})" if endpoint_host else provider_name
     event = {
         "resourceType": "AuditEvent",
         "type": {"system": fc.CS_AUDIT, "code": "cloud-egress", "display": "Data left this device (cloud AI)"},
@@ -174,7 +203,7 @@ def log_boundary_event(medplum: Any, feature: str, provider_name: str, descripti
         "entity": [
             {
                 "name": str(description)[:200],
-                "description": f"AI request · {feature} → {provider_name} · data left this device",
+                "description": f"AI request · {feature} → {provider_label} · data left this device",
             }
         ],
     }
@@ -192,6 +221,9 @@ class SettingsUpdate(BaseModel):
     routing: dict[str, str] | None = None
     cloud_provider: str | None = None
     models: dict[str, str] | None = None
+    # Per-provider endpoint override (custom OpenAI-compatible gateways). Keyed
+    # by provider name; only 'openai' is honored at present. Not a secret.
+    base_urls: dict[str, str] | None = None
 
 
 class KeyBody(BaseModel):
@@ -227,6 +259,13 @@ def _settings_payload() -> dict[str, Any]:
             entry["masked_key"] = keystore.mask(key)
         if is_local:
             entry["base_url"] = settings.ollama_base_url
+        elif name == "openai":
+            # Effective endpoint (never a secret): settings-file override >
+            # OPENAI_BASE_URL env > default. Lets the UI show/edit the custom
+            # OpenAI-compatible gateway.
+            entry["base_url"] = (
+                eff["base_urls"].get("openai") or settings.openai_base_url or providers.DEFAULT_OPENAI_BASE_URL
+            )
         provider_list.append(entry)
     return {"providers": provider_list, "routing": eff["routing"], "cloud_provider": eff["cloud_provider"]}
 
@@ -277,7 +316,40 @@ def update_settings(body: SettingsUpdate) -> dict[str, Any]:
             else:
                 models.pop(name, None)  # empty string clears the override
 
-    _save({"routing": routing, "cloud_provider": cloud, "models": models})
+    base_urls = {k: v for k, v in (stored.get("base_urls") or {}).items() if k in ALL_PROVIDERS}
+    if body.base_urls is not None:
+        # Validate every entry BEFORE mutating (all-or-nothing, matches the
+        # rest of this handler). Unknown provider → 400. Only http(s) URLs, and
+        # cleartext http:// is allowed ONLY for loopback — a remote http host
+        # would send record contents (PHI) unencrypted over the network.
+        for name, url in body.base_urls.items():
+            if name not in ALL_PROVIDERS:
+                raise HTTPException(status_code=400, detail=f"unknown provider '{name}' in base_urls")
+            trimmed = (url or "").strip()
+            if not trimmed:
+                continue
+            parts = urlsplit(trimmed)
+            if parts.scheme not in ("http", "https") or not parts.netloc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"base_url for '{name}' must be an http:// or https:// URL",
+                )
+            if parts.scheme == "http" and (parts.hostname or "").lower() not in ("localhost", "127.0.0.1", "::1"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"base_url for '{name}' must use https:// for non-local hosts "
+                        "(http:// is allowed only for localhost)"
+                    ),
+                )
+        for name, url in body.base_urls.items():
+            trimmed = (url or "").strip()
+            if trimmed:
+                base_urls[name] = trimmed
+            else:
+                base_urls.pop(name, None)  # empty string clears the override
+
+    _save({"routing": routing, "cloud_provider": cloud, "models": models, "base_urls": base_urls})
     return _settings_payload()
 
 
@@ -311,7 +383,7 @@ def test_provider(provider_name: str) -> dict[str, Any]:
     eff = _effective()
     started = time.perf_counter()
     try:
-        provider = providers.build_provider(name, model=eff["models"].get(name))
+        provider = providers.build_provider(name, model=eff["models"].get(name), base_url=eff["base_urls"].get(name))
         reply = provider.generate(
             "You are a connectivity test. Answer exactly as instructed.",
             "Reply with exactly: ok",

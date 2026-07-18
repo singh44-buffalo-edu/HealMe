@@ -292,7 +292,11 @@ def _ask(question: str) -> dict[str, Any]:
     if not provider.is_local:
         # Boundary ledger: written BEFORE any data leaves this device.
         log_boundary_event(
-            medplum, "assistant", provider.name, f"Assistant Q&A · {len(index)} record elements in context"
+            medplum,
+            "assistant",
+            provider.name,
+            f"Assistant Q&A · {len(index)} record elements in context",
+            endpoint_host=provider.endpoint_host,
         )
 
     user_prompt = (
@@ -476,7 +480,13 @@ def _nl_import(text: str) -> dict[str, Any]:
     provider = get_provider_for("nl-import")  # ProviderNotConfigured → 503 before any write
     if not provider.is_local:
         # Boundary ledger: written BEFORE the note leaves this device.
-        log_boundary_event(medplum, "nl-import", provider.name, f"NL quick capture · {len(text)} chars")
+        log_boundary_event(
+            medplum,
+            "nl-import",
+            provider.name,
+            f"NL quick capture · {len(text)} chars",
+            endpoint_host=provider.endpoint_host,
+        )
 
     try:
         tz = ZoneInfo(settings.hmd_time_zone)
