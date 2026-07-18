@@ -74,8 +74,8 @@ jobs:
 
   ios:
     # macOS runner: SwiftLint/SwiftFormat, the Kit's dose-engine parity tests
-    # (they must stay green in lockstep with frontend/src/fhir.test.ts), and
-    # an unsigned simulator build of the full app.
+    # (they must stay green in lockstep with frontend/src/fhir.test.ts), an
+    # unsigned simulator build, and the deterministic launch/sign-in UI tests.
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -85,9 +85,20 @@ jobs:
       - run: swiftformat --lint ios
       - run: swift test
         working-directory: ios/HealMeDailyKit
-      - run: |
+      - name: Build app + run UI tests
+        working-directory: ios
+        run: |
           xcodegen generate
           xcodebuild -project HealMeDaily.xcodeproj -scheme HealMeDaily \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build
-        working-directory: ios
+          # Pick whatever iPhone simulator the runner image ships (names drift
+          # across Xcode versions) so the UI-test destination is never stale.
+          DEVICE_ID=$(xcrun simctl list devices available -j \
+            | python3 -c "import json,sys; ds=json.load(sys.stdin)['devices']; print(next(d['udid'] for v in ds.values() for d in v if 'iPhone' in d['name']))")
+          # Only the backend-free launch/sign-in tests run in CI; the live
+          # sign-in flow self-skips without HMD_UITEST_* env.
+          xcodebuild test -project HealMeDaily.xcodeproj -scheme HealMeDaily \
+            -destination "id=$DEVICE_ID" CODE_SIGNING_ALLOWED=NO \
+            -only-testing:HealMeDailyUITests/LaunchFlowUITests/testLaunchesToSignIn \
+            -only-testing:HealMeDailyUITests/LaunchFlowUITests/testSignInDisabledUntilCredentialsEntered

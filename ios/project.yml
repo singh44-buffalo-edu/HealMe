@@ -77,3 +77,29 @@ targets:
           self-hosted health record. Nothing is shared with anyone else.
         # Uses only standard TLS (exempt) — no proprietary encryption.
         ITSAppUsesNonExemptEncryption: false
+
+  HealMeDailyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HealMeDailyUITests
+    dependencies:
+      - target: HealMeDaily
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.healmedaily.app.uitests
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  # `xcodebuild ... -scheme HealMeDaily build` still just builds the app;
+  # `-scheme HealMeDaily test` additionally runs the UI tests on a simulator.
+  HealMeDaily:
+    build:
+      targets:
+        HealMeDaily: all
+        HealMeDailyUITests: [test]
+    test:
+      targets:
+        - HealMeDailyUITests
