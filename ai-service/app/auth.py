@@ -43,8 +43,12 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 
-#: Paths that stay reachable without a session: liveness only.
-EXEMPT_PATHS = frozenset({"/health"})
+#: Paths that stay reachable without a Medplum session:
+#: - /health: liveness only.
+#: - /push/dispatch: called by the Medplum server's Subscription rest-hook,
+#:   not a user; it authenticates with the push shared secret instead
+#:   (push.py _authorize_subscription), so the session gate must not block it.
+EXEMPT_PATHS = frozenset({"/health", "/push/dispatch"})
 
 #: Positive-verification cache TTL. Short on purpose: a revoked token stays
 #: usable here for at most this long.

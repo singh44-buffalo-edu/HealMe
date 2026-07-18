@@ -389,7 +389,102 @@ def main() -> None:
                 )
             log(f"switched off duplicate Subscription/{extra['id']}")
 
+    reconcile_push_subscription(base, headers)
+
     log("done")
+
+
+def reconcile_push_subscription(base: str, headers: dict) -> None:
+    """Wire (or reconcile) the APNs push Subscription: a URL rest-hook that
+    POSTs active push CommunicationRequests to the ai-service /push/dispatch
+    endpoint, which fans a generic notification out to registered devices.
+
+    Unlike the bot Subscriptions above this points at an external URL, not a
+    Bot, and carries the shared secret in its channel header so the
+    dispatcher can tell it is really Medplum calling (auth.py exempts that one
+    path from the session gate). Skipped with a note when the two required
+    env vars are absent — push is optional and the stack must deploy without
+    it.
+    """
+    dispatch_url = env("AI_SERVICE_PUBLIC_URL", "").strip().rstrip("/")
+    secret = env("PUSH_SUBSCRIPTION_SECRET", "").strip()
+    if not dispatch_url or not secret:
+        log(
+            "push Subscription skipped — set AI_SERVICE_PUBLIC_URL (a URL the "
+            "Medplum server can reach) and PUSH_SUBSCRIPTION_SECRET to enable it"
+        )
+        return
+    endpoint = f"{dispatch_url}/push/dispatch"
+    # The dispatcher re-checks medium=push itself, so the criteria only needs
+    # to bound the firehose to active CommunicationRequests.
+    criteria = "CommunicationRequest?status=active"
+    desired_channel = {
+        "type": "rest-hook",
+        "endpoint": endpoint,
+        "payload": "application/fhir+json",
+        # Medplum sends this verbatim on the webhook; the dispatcher checks it.
+        "header": [f"Authorization: Bearer {secret}"],
+    }
+    desired_extensions = [{"url": SUPPORTED_INTERACTION_URL, "valueCode": "create"}]
+
+    subs = httpx.get(
+        base + "fhir/R4/Subscription",
+        params={"status": "active", "_count": 100},
+        headers=headers,
+        timeout=15,
+    ).json()
+    existing = [
+        e["resource"]
+        for e in subs.get("entry", [])
+        if e["resource"].get("channel", {}).get("endpoint") == endpoint
+    ]
+    body = {
+        "resourceType": "Subscription",
+        "status": "active",
+        "reason": "APNs push for active push-medium CommunicationRequests",
+        "criteria": criteria,
+        "channel": desired_channel,
+        "extension": desired_extensions,
+    }
+    if not existing:
+        resp = httpx.post(
+            base + "fhir/R4/Subscription", json=body, headers=headers, timeout=15
+        )
+        if resp.status_code >= 400:
+            die(
+                f"push subscription create failed: {resp.status_code} {resp.text[:300]}"
+            )
+        log(f"created push Subscription/{resp.json()['id']} -> {endpoint}")
+        return
+    current = existing[0]
+    if (
+        current.get("criteria") != criteria
+        or current.get("channel") != desired_channel
+        or current.get("extension") != desired_extensions
+    ):
+        current.update(body)
+        resp = httpx.put(
+            base + f"fhir/R4/Subscription/{current['id']}",
+            json=current,
+            headers=headers,
+            timeout=15,
+        )
+        if resp.status_code >= 400:
+            die(
+                f"push subscription update failed: {resp.status_code} {resp.text[:300]}"
+            )
+        log(f"updated push Subscription/{current['id']} in place (definition drifted)")
+    else:
+        log(f"push subscription exists: Subscription/{current['id']}")
+    for extra in existing[1:]:
+        extra["status"] = "off"
+        httpx.put(
+            base + f"fhir/R4/Subscription/{extra['id']}",
+            json=extra,
+            headers=headers,
+            timeout=15,
+        )
+        log(f"switched off duplicate push Subscription/{extra['id']}")
 
 
 if __name__ == "__main__":

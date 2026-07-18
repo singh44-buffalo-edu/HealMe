@@ -57,6 +57,22 @@ class Settings(BaseSettings):
     # unauthenticated surface is only tolerable on a fully-loopback dev box —
     # set AI_REQUIRE_AUTH=false there if you must.
     ai_require_auth: bool = True
+
+    # APNs push (Phase 7) — the owner's Apple credentials, server-only (never
+    # in the app). Absent ⇒ push is "not configured" and the app still works.
+    # APNS_KEY_P8 is the .p8 PEM inline (\n-escaped ok); APNS_KEY_PATH is a
+    # file path alternative. Env is 'sandbox' (development builds) or
+    # 'production'; the per-device value registered by the app wins over this
+    # default.
+    apns_key_id: str = ""
+    apns_team_id: str = ""
+    apns_bundle_id: str = "com.healmedaily.app"
+    apns_key_p8: str = ""
+    apns_key_path: str = ""
+    # Shared secret the push Subscription presents to /push/dispatch (that one
+    # endpoint is called by the Medplum server, not a user, so it is gated by
+    # this secret instead of a session token). Empty ⇒ dispatch refuses.
+    push_subscription_secret: str = ""
     # Watched-folder ingestion (watcher.py): relative paths resolve against REPO_ROOT.
     ingest_watch_dir: str = "./data/inbox"
     ingest_scan_seconds: int = 60

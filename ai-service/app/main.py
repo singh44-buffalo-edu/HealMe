@@ -29,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import ai_settings, assistant, auth, export, health_review, importers, ingest, watcher
+from . import ai_settings, assistant, auth, export, health_review, importers, ingest, push, watcher
+from .apns import configured as push_apns_configured
 from .config import settings
 from .medplum import MedplumError, medplum
 from .providers import ProviderError, ProviderNotConfigured, provider_status
@@ -61,6 +62,7 @@ app.add_middleware(
 
 app.include_router(ai_settings.router)
 app.include_router(assistant.router)
+app.include_router(push.router)
 
 
 def _patient_id() -> str:
@@ -94,6 +96,7 @@ def health() -> dict:
         "status": "ok",
         "medplum_configured": medplum.configured,
         "auth_required": settings.ai_require_auth,
+        "push_configured": push_apns_configured(),
         "ai": provider_status(),
     }
 

@@ -11,5 +11,7 @@ pypdf>=5.0
 pdf2image>=1.17
 pytesseract>=0.3.13
 pillow>=10.4
+cryptography>=43  # APNs provider-token ES256 signing (app/apns.py)
+h2>=4  # HTTP/2 for httpx — APNs requires it (app/apns.py)
 pytest>=8.0
 ruff>=0.6  # lint/format (make lint)
