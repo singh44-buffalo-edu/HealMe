@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 
 from .config import REPO_ROOT
 
@@ -28,6 +29,11 @@ SECRETS_DIR = REPO_ROOT / "data" / "secrets"
 _FILENAME = "push-tokens.json"
 # Cap the dedup ledger so it cannot grow without bound; oldest entries drop.
 _MAX_DELIVERED = 500
+
+# FastAPI runs sync path operations in a threadpool, so /push/register and a
+# concurrent /push/dispatch mark_delivered can race the whole-file
+# read-modify-write and lose one side's changes. Serialize every mutation.
+_lock = threading.Lock()
 
 
 def _path():
@@ -77,16 +83,18 @@ def register_token(device_token: str, environment: str, now_iso: str) -> None:
     if not device_token:
         raise ValueError("device_token must be non-empty")
     env = "sandbox" if environment.strip().lower() == "sandbox" else "production"
-    store = _read()
-    store["tokens"][device_token] = {"environment": env, "updated_at": now_iso}
-    _write(store)
+    with _lock:
+        store = _read()
+        store["tokens"][device_token] = {"environment": env, "updated_at": now_iso}
+        _write(store)
 
 
 def remove_token(device_token: str) -> None:
     """Idempotent unregister (sign-out / disable, or an APNs 410/400 prune)."""
-    store = _read()
-    if store["tokens"].pop(device_token.strip(), None) is not None:
-        _write(store)
+    with _lock:
+        store = _read()
+        if store["tokens"].pop(device_token.strip(), None) is not None:
+            _write(store)
 
 
 def all_tokens() -> dict[str, dict]:
@@ -102,13 +110,14 @@ def already_delivered(communication_request_id: str) -> bool:
 
 
 def mark_delivered(communication_request_id: str, now_iso: str) -> None:
-    store = _read()
-    delivered = store["delivered"]
-    delivered[communication_request_id] = now_iso
-    if len(delivered) > _MAX_DELIVERED:
-        # Drop the oldest by timestamp — the ledger only guards against a
-        # near-term duplicate fire, not forever.
-        for key in sorted(delivered, key=lambda k: delivered[k])[: len(delivered) - _MAX_DELIVERED]:
-            del delivered[key]
-    store["delivered"] = delivered
-    _write(store)
+    with _lock:
+        store = _read()
+        delivered = store["delivered"]
+        delivered[communication_request_id] = now_iso
+        if len(delivered) > _MAX_DELIVERED:
+            # Drop the oldest by timestamp — the ledger only guards against a
+            # near-term duplicate fire, not forever.
+            for key in sorted(delivered, key=lambda k: delivered[k])[: len(delivered) - _MAX_DELIVERED]:
+                del delivered[key]
+        store["delivered"] = delivered
+        _write(store)

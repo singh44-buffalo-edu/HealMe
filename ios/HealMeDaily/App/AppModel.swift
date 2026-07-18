@@ -169,6 +169,12 @@ final class AppModel {
     }
 
     func signOut() async {
+        // Drop the APNs token server-side FIRST, while the session token is
+        // still valid — /push/unregister is session-gated, so unregistering
+        // after client.signOut() would go out tokenless, 401, and leave the
+        // token live (the signed-out device would keep getting pushes). The
+        // push preference is kept and re-registers on re-sign-in.
+        await push.handleSignOut()
         await client.signOut()
         authState = .signedOut
         patient = nil
@@ -182,9 +188,6 @@ final class AppModel {
         // Settings shows the pending count so nothing is silently held.
         snapshots.clear()
         ReminderScheduler.cancelAll()
-        // Drop the APNs token server-side — a different account may sign in
-        // next; the push preference is kept and re-registers on re-sign-in.
-        await push.handleSignOut()
     }
 
     /// Rebuild clients after the user edits server URLs in Settings.

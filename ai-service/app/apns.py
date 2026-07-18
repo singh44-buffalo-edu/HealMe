@@ -87,17 +87,27 @@ def _provider_token() -> str:
     pem = _load_private_key_pem()
     if not pem:
         raise APNsError("APNs signing key is not configured")
-    key = load_pem_private_key(pem.encode("utf-8"), password=None)
-    if not isinstance(key, ec.EllipticCurvePrivateKey):
-        raise APNsError("APNs key is not an EC private key (.p8 expected)")
-
-    header = {"alg": "ES256", "kid": settings.apns_key_id}
-    claims = {"iss": settings.apns_team_id, "iat": int(now)}
-    signing_input = f"{_b64url(json.dumps(header).encode())}.{_b64url(json.dumps(claims).encode())}"
-    der = key.sign(signing_input.encode("ascii"), ec.ECDSA(hashes.SHA256()))
-    # APNs wants the raw R||S pair (64 bytes), not DER.
-    r, s = utils.decode_dss_signature(der)
-    raw_sig = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    # A malformed / wrong-curve .p8 must surface as an APNsError (which
+    # dispatch handles as a graceful skip) — NEVER an uncaught ValueError/
+    # OverflowError that would 500 the gate-exempt /push/dispatch and drive
+    # the Medplum Subscription into a retry storm.
+    try:
+        key = load_pem_private_key(pem.encode("utf-8"), password=None)
+        if not isinstance(key, ec.EllipticCurvePrivateKey):
+            raise APNsError("APNs key is not an EC private key (.p8 expected)")
+        if key.curve.name != "secp256r1":
+            raise APNsError("APNs key must be a P-256 EC key (ES256)")
+        header = {"alg": "ES256", "kid": settings.apns_key_id}
+        claims = {"iss": settings.apns_team_id, "iat": int(now)}
+        signing_input = f"{_b64url(json.dumps(header).encode())}.{_b64url(json.dumps(claims).encode())}"
+        der = key.sign(signing_input.encode("ascii"), ec.ECDSA(hashes.SHA256()))
+        # APNs wants the raw R||S pair (64 bytes), not DER.
+        r, s = utils.decode_dss_signature(der)
+        raw_sig = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    except APNsError:
+        raise
+    except Exception as err:  # noqa: BLE001 — any crypto failure ⇒ not configured, not a 500
+        raise APNsError("APNs signing key is invalid") from err
     token = f"{signing_input}.{_b64url(raw_sig)}"
     _jwt_cache = (token, now)
     return token

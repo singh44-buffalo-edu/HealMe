@@ -57,12 +57,24 @@ final class PushService {
     // MARK: Lifecycle
 
     /// Called once the session is up. Re-arms registration if the owner had
-    /// push on (the OS may mint a fresh token across launches/reinstalls).
+    /// push on (the OS may mint a fresh token across launches/reinstalls) —
+    /// but reconciles against the REAL OS authorization first, so a user who
+    /// turned notifications off in iOS Settings sees the toggle reflect that
+    /// instead of a false "on".
     func configure(model: AppModel) {
         self.model = model
-        if enabled {
-            status = .on
-            UIApplication.shared.registerForRemoteNotifications()
+        guard enabled else { return }
+        _Concurrency.Task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                self.status = .on
+                UIApplication.shared.registerForRemoteNotifications()
+            case .denied:
+                self.status = .denied
+            default: // .notDetermined — treat as off until the owner re-enables
+                self.status = .off
+            }
         }
     }
 
@@ -103,6 +115,10 @@ final class PushService {
     // MARK: UIApplicationDelegate hand-offs
 
     func didRegister(deviceToken: Data) {
+        // A token callback can arrive AFTER the owner toggled push off (the OS
+        // delivers it asynchronously). Registering it then would re-arm push
+        // for a disabled device — drop it.
+        guard enabled else { return }
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         lastDeviceToken = token
         guard let model else { return }

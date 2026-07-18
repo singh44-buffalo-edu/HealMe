@@ -80,7 +80,10 @@ def _authorize_subscription(authorization: str | None) -> None:
     presented = ""
     if authorization and authorization.lower().startswith("bearer "):
         presented = authorization[7:].strip()
-    if not presented or not hmac.compare_digest(presented, expected):
+    # Compare as bytes: a non-ASCII header (Starlette decodes headers as
+    # latin-1) makes the str form of compare_digest raise TypeError → a 500 on
+    # a gate-exempt endpoint. Bytes compare cleanly to a 401.
+    if not presented or not hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8")):
         raise HTTPException(status_code=401, detail="invalid subscription secret")
 
 
@@ -135,6 +138,7 @@ async def dispatch(request: Request, authorization: str | None = Header(default=
     tokens = pushstore.all_tokens()
     sent = 0
     pruned = 0
+    failed = 0
     for device_token, info in list(tokens.items()):
         try:
             result = await apns.send(
@@ -146,15 +150,23 @@ async def dispatch(request: Request, authorization: str | None = Header(default=
                 data={"target": target, "kind": kind},
             )
         except apns.APNsError:
-            # A signing/transport failure hits every token equally — stop and
-            # let the next Subscription fire (or a later reminder) retry.
-            break
+            # A per-request timeout/reset is device-specific, not global —
+            # keep going so one flaky device can't block the others.
+            failed += 1
+            continue
         if result.ok:
             sent += 1
         elif result.should_prune:
             pushstore.remove_token(device_token)
             pruned += 1
+        else:
+            failed += 1
 
     if sent > 0 and cr_id:
         pushstore.mark_delivered(cr_id, _now_iso())
-    return {"sent": sent, "pruned": pruned, "devices": len(tokens)}
+        return {"sent": sent, "pruned": pruned, "devices": len(tokens)}
+    if failed > 0:
+        # Nobody got it and it wasn't a clean skip — 503 so Medplum retries
+        # this webhook. Not marked delivered, so the retry re-attempts.
+        raise HTTPException(status_code=503, detail="all push sends failed; retry")
+    return {"sent": 0, "pruned": pruned, "devices": len(tokens)}

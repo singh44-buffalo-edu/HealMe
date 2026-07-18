@@ -433,11 +433,24 @@ def reconcile_push_subscription(base: str, headers: dict) -> None:
         headers=headers,
         timeout=15,
     ).json()
-    existing = [
-        e["resource"]
-        for e in subs.get("entry", [])
-        if e["resource"].get("channel", {}).get("endpoint") == endpoint
-    ]
+    all_subs = [e["resource"] for e in subs.get("entry", [])]
+    existing = [s for s in all_subs if s.get("channel", {}).get("endpoint") == endpoint]
+    # Any OTHER active push-dispatch Subscription is a stale one from a
+    # previous AI_SERVICE_PUBLIC_URL — it keeps firing at a dead URL and, worse,
+    # still carries the live shared secret in its header. Switch those off.
+    for orphan in all_subs:
+        orphan_endpoint = orphan.get("channel", {}).get("endpoint", "")
+        if orphan_endpoint.endswith("/push/dispatch") and orphan_endpoint != endpoint:
+            orphan["status"] = "off"
+            httpx.put(
+                base + f"fhir/R4/Subscription/{orphan['id']}",
+                json=orphan,
+                headers=headers,
+                timeout=15,
+            )
+            log(
+                f"switched off stale push Subscription/{orphan['id']} ({orphan_endpoint})"
+            )
     body = {
         "resourceType": "Subscription",
         "status": "active",

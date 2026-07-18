@@ -188,3 +188,81 @@ def test_apns_provider_token_is_es256_jwt(monkeypatch):
 def test_apns_not_configured_without_key():
     apns.reset_token_cache()
     assert apns.configured() is False
+
+
+def test_malformed_key_is_graceful_not_500(client, monkeypatch):
+    # A present-but-garbled .p8 must not 500 /push/dispatch (which would drive
+    # the Subscription into a retry storm) — _provider_token raises APNsError,
+    # send() surfaces it, dispatch skips.
+    monkeypatch.setattr(settings, "push_subscription_secret", "s3cret")
+    monkeypatch.setattr(settings, "apns_key_id", "KEY123")
+    monkeypatch.setattr(settings, "apns_team_id", "TEAM123")
+    monkeypatch.setattr(settings, "apns_bundle_id", "com.healmedaily.app")
+    monkeypatch.setattr(settings, "apns_key_p8", "-----BEGIN PRIVATE KEY-----\ngarbage\n-----END PRIVATE KEY-----")
+    monkeypatch.setattr(settings, "apns_key_path", "")
+    apns.reset_token_cache()
+    pushstore.register_token("tok", "sandbox", "t")
+    resp = client.post("/push/dispatch", json=push_cr(), headers={"Authorization": "Bearer s3cret"})
+    # No device got it and it was a (per-device) failure → 503 retry, not 500.
+    assert resp.status_code == 503
+
+
+def test_provider_token_raises_apnserror_on_bad_key(monkeypatch):
+    monkeypatch.setattr(settings, "apns_key_id", "K")
+    monkeypatch.setattr(settings, "apns_team_id", "T")
+    monkeypatch.setattr(settings, "apns_key_p8", "not a pem")
+    monkeypatch.setattr(settings, "apns_key_path", "")
+    apns.reset_token_cache()
+    with pytest.raises(apns.APNsError):
+        apns._provider_token()
+
+
+def test_authorize_non_ascii_secret_is_401_not_500(monkeypatch):
+    from fastapi import HTTPException
+
+    from app.push import _authorize_subscription
+
+    monkeypatch.setattr(settings, "push_subscription_secret", "s3cret")
+    # Starlette decodes header bytes as latin-1, so a non-ASCII value reaches
+    # the app as a str with chars >127 (httpx blocks it client-side, so test
+    # the function directly). A str compare_digest would TypeError → 500; the
+    # bytes compare must raise a clean 401.
+    with pytest.raises(HTTPException) as exc:
+        _authorize_subscription("Bearer caféÿ")
+    assert exc.value.status_code == 401
+
+
+def test_dispatch_total_failure_is_503_for_retry(client, monkeypatch):
+    monkeypatch.setattr(settings, "push_subscription_secret", "s3cret")
+    monkeypatch.setattr(apns, "configured", lambda: True)
+    pushstore.register_token("a", "sandbox", "t")
+    pushstore.register_token("b", "sandbox", "t")
+    attempted = []
+
+    async def fake_send(device_token, environment, title, body, data):
+        attempted.append(device_token)
+        raise apns.APNsError("timeout")
+
+    monkeypatch.setattr(apns, "send", fake_send)
+    resp = client.post("/push/dispatch", json=push_cr(), headers={"Authorization": "Bearer s3cret"})
+    # BOTH devices attempted (no early break), nobody delivered → 503.
+    assert set(attempted) == {"a", "b"}
+    assert resp.status_code == 503
+    assert not pushstore.already_delivered("cr1")
+
+
+def test_dispatch_partial_failure_still_delivers_others(client, monkeypatch):
+    monkeypatch.setattr(settings, "push_subscription_secret", "s3cret")
+    monkeypatch.setattr(apns, "configured", lambda: True)
+    pushstore.register_token("good", "sandbox", "t")
+    pushstore.register_token("bad", "sandbox", "t")
+
+    async def fake_send(device_token, environment, title, body, data):
+        if device_token == "bad":
+            raise apns.APNsError("timeout")
+        return apns.SendResult(ok=True, status=200, should_prune=False)
+
+    monkeypatch.setattr(apns, "send", fake_send)
+    resp = client.post("/push/dispatch", json=push_cr(), headers={"Authorization": "Bearer s3cret"})
+    assert resp.status_code == 200
+    assert resp.json()["sent"] == 1  # the good device got it despite bad's failure
