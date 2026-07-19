@@ -18,6 +18,12 @@ services:
   healmedaily-ai:
     build: ../ai-service
     restart: unless-stopped
+    # Run as the host user so the bind-mounted data/secrets (0700, owner-only)
+    # stays writable: on macOS Docker Desktop a root container cannot write a
+    # 0700 host dir owned by another uid, which 500s the BYOK key/settings
+    # writes. Defaults to 0:0 (root, prior behavior) when the vars are unset;
+    # set HMD_AI_UID/HMD_AI_GID in .env to your `id -u`/`id -g`.
+    user: "${HMD_AI_UID:-0}:${HMD_AI_GID:-0}"
     env_file: ../.env
     environment:
       # Inside the compose network the server is reachable by service name,

@@ -9,7 +9,10 @@
 # needs brewed python3.12 — system python is too old, CLAUDE.md §4).
 SHELL := /bin/zsh
 COMPOSE := docker compose -f infra/docker-compose.yml
-COMPOSE_ALL := docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml
+# --env-file .env so ${HMD_AI_UID}/${HMD_AI_GID} in docker-compose.app.yml resolve
+# from the repo .env (compose otherwise reads its interpolation .env from the
+# compose-file dir, infra/, not the repo root).
+COMPOSE_ALL := docker compose --env-file .env -f infra/docker-compose.yml -f infra/docker-compose.app.yml
 PY := ai-service/.venv/bin/python
 
 .PHONY: up down logs dev seed smoke bootstrap install test lint format check bots prod-up prod-down prod-logs backup rotate-superadmin
