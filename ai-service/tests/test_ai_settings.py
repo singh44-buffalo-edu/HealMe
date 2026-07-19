@@ -110,6 +110,55 @@ def test_put_settings_persists_and_round_trips(client):
     assert body["cloud_provider"] == "openai"
 
 
+# --- per-provider base_url (custom OpenAI-compatible endpoint) --------------------
+
+
+def test_get_settings_shows_default_openai_base_url(client):
+    body = client.get("/ai/settings").json()
+    assert _provider_entry(body, "openai")["base_url"] == "https://api.openai.com/v1"
+
+
+def test_put_settings_base_url_persists_and_round_trips(client):
+    resp = client.put("/ai/settings", json={"base_urls": {"openai": "https://gw.example/v1"}})
+    assert resp.status_code == 200
+    assert _provider_entry(resp.json(), "openai")["base_url"] == "https://gw.example/v1"
+
+    # surfaced on GET and written into the settings file
+    body = client.get("/ai/settings").json()
+    assert _provider_entry(body, "openai")["base_url"] == "https://gw.example/v1"
+    import json
+
+    stored = json.loads(ai_settings.SETTINGS_FILE.read_text())
+    assert stored["base_urls"]["openai"] == "https://gw.example/v1"
+
+    # empty string clears the override → back to the default host
+    client.put("/ai/settings", json={"base_urls": {"openai": ""}})
+    body = client.get("/ai/settings").json()
+    assert _provider_entry(body, "openai")["base_url"] == "https://api.openai.com/v1"
+
+
+def test_put_settings_base_url_rejects_bad_scheme_and_unknown(client):
+    assert client.put("/ai/settings", json={"base_urls": {"openai": "ftp://x/v1"}}).status_code == 400
+    assert client.put("/ai/settings", json={"base_urls": {"openai": "gw.example/v1"}}).status_code == 400
+    assert client.put("/ai/settings", json={"base_urls": {"hal9000": "https://x/v1"}}).status_code == 400
+    # all-or-nothing: a valid entry beside a bad one is not persisted
+    assert (
+        client.put("/ai/settings", json={"base_urls": {"openai": "https://ok/v1", "gemini": "nope"}}).status_code == 400
+    )
+    assert not ai_settings.SETTINGS_FILE.exists()  # nothing persisted on any validation failure
+
+
+def test_put_settings_base_url_http_only_for_loopback(client):
+    # cleartext http:// to a remote host would ship record contents (PHI)
+    # unencrypted — rejected. http:// is allowed only for loopback proxies.
+    assert client.put("/ai/settings", json={"base_urls": {"openai": "http://gw.example/v1"}}).status_code == 400
+    assert not ai_settings.SETTINGS_FILE.exists()  # nothing persisted on rejection
+    for loopback in ("http://localhost:8080/v1", "http://127.0.0.1:1234/v1", "http://[::1]/v1"):
+        resp = client.put("/ai/settings", json={"base_urls": {"openai": loopback}})
+        assert resp.status_code == 200, loopback
+        assert _provider_entry(resp.json(), "openai")["base_url"] == loopback
+
+
 # --- key endpoints ---------------------------------------------------------------
 
 
@@ -258,3 +307,11 @@ def test_log_boundary_event_writes_audit_event():
     assert entity["description"] == "AI request · health-review → anthropic · data left this device"
     assert entity["name"] == "90-day review"
     assert event["recorded"]
+
+
+def test_log_boundary_event_discloses_custom_endpoint_host():
+    fake = _FakeMedplum()
+    ai_settings.log_boundary_event(fake, "assistant", "openai", "Q&A", endpoint_host="gw.example")
+    entity = fake.created[0]["entity"][0]
+    # Custom egress host is folded into the human description (hostname only).
+    assert entity["description"] == "AI request · assistant → openai (gw.example) · data left this device"

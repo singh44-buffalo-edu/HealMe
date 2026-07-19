@@ -30,8 +30,23 @@ server**. You do not need the App Store to run it on your own iPhone:
    re-run `make ios-project`).
 2. Open the project in Xcode → target **HealMeDaily** → *Signing &
    Capabilities* → check **Automatically manage signing**, pick your Team.
-   Xcode creates the App ID + certificates for you.
-3. Sanity check on a real device: select your iPhone, Run. Sign in against
+   Xcode creates the App ID + certificates for you. The project ships a
+   HealthKit entitlement (read-only sync, opt-in in Settings) — Xcode adds
+   the HealthKit capability to the App ID automatically; App Review will
+   expect the Apple Health toggle to be demonstrable, and the App Privacy
+   answers below still hold (health data goes only to the user's own
+   server, the developer collects nothing).
+3. **Push (optional).** The project ships an `aps-environment` entitlement
+   (`development`; Xcode/App Store signing rewrites it to `production`).
+   Enable **Push Notifications** on the App ID and create an **APNs Auth Key
+   (.p8)** in the Developer portal; put its Key ID, your Team ID and the .p8
+   into the server's `.env` (`APNS_*`) — the key is a SERVER secret and is
+   never in the app binary. Set `PUSH_SUBSCRIPTION_SECRET` + `AI_SERVICE_PUBLIC_URL`
+   and run `make bots` to wire the Medplum Subscription. Push is entirely
+   optional: with no APNs config the entitlement is harmless and nothing is
+   sent. Notification payloads carry no medical content, so the App Privacy
+   answers are unaffected.
+4. Sanity check on a real device: select your iPhone, Run. Sign in against
    `http://<mac-lan-ip>:8103/`.
 
 ## 2. App Store Connect record

@@ -13,6 +13,11 @@ import Foundation
 public struct AIService: Sendable {
     public let baseURL: URL
     private let session: URLSession
+    /// Supplies the caller's Medplum access token: the ai-service requires it
+    /// on every endpoint except /health (its session gate). Async so the
+    /// provider can refresh a near-expiry token first. nil ⇒ no header (the
+    /// service answers 401 and the UI shows its message).
+    public var tokenProvider: (@Sendable () async -> String?)?
 
     public init(baseURL: URL, session: URLSession = .shared) {
         var normalized = baseURL.absoluteString
@@ -52,6 +57,17 @@ public struct AIService: Sendable {
         public var status: String
         public var medplum_configured: Bool
         public var ai: AiStatus
+        /// Whether the server has APNs credentials (nil on older servers).
+        public var push_configured: Bool?
+    }
+
+    public struct PushRegisterResult: Codable, Sendable {
+        public var registered: Bool
+        public var push_configured: Bool
+    }
+
+    public struct PushUnregisterResult: Codable, Sendable {
+        public var unregistered: Bool
     }
 
     public struct ReviewResult: Codable, Sendable, Identifiable {
@@ -115,6 +131,19 @@ public struct AIService: Sendable {
         public var cloud_provider: String?
     }
 
+    /// Reply to POST/DELETE /ai/keys/{provider}: the server echoes only the
+    /// provider name, its configured state and (on save) a masked key — never
+    /// the raw key. Deliberately NOT AiProviderInfo: that endpoint returns this
+    /// narrower shape (no name/is_local/model), so callers reload aiSettings()
+    /// for the full picture after a mutation.
+    public struct AiKeyResult: Codable, Sendable {
+        public var provider: String
+        public var configured: Bool
+        public var masked_key: String?
+        /// Present on delete only.
+        public var deleted: Bool?
+    }
+
     public struct AiTestResult: Codable, Sendable {
         public var ok: Bool
         public var provider: String
@@ -175,6 +204,18 @@ public struct AIService: Sendable {
     /// AI surfaces show a "configure a provider" state, never an error wall.
     public func health() async throws -> Health {
         try await get("health")
+    }
+
+    /// Register this device's APNs token so the server can push reminders.
+    /// `environment` is "sandbox" for development builds, "production"
+    /// otherwise (which APNs host the server addresses this token on).
+    public func registerPush(deviceToken: String, environment: String) async throws -> PushRegisterResult {
+        try await post("push/register", json: ["device_token": deviceToken, "environment": environment])
+    }
+
+    /// Drop this device's token (push disabled / sign-out). Idempotent.
+    public func unregisterPush(deviceToken: String) async throws {
+        _ = try await post("push/unregister", json: ["device_token": deviceToken]) as PushUnregisterResult
     }
 
     /// Generate an AI Health Review (slow — one LLM round trip). Organizes
@@ -248,20 +289,48 @@ public struct AIService: Sendable {
         try await get("ai/settings")
     }
 
-    /// Partial-update routing / cloud provider. Setting 'cloud' only routes —
-    /// every actual cloud call still writes its boundary AuditEvent.
-    public func updateAiSettings(routing: [String: AiRoute]? = nil, cloudProvider: String? = nil) async throws -> AiSettings {
+    /// Partial-update routing / cloud provider / per-provider base URL. Setting
+    /// 'cloud' only routes — every actual cloud call still writes its boundary
+    /// AuditEvent. `baseUrls` maps provider → endpoint (e.g. an OpenAI-compatible
+    /// server); an empty string clears the override. Omitted (nil) fields keep
+    /// their current value — the JSON encoder drops nil so this stays a patch.
+    public func updateAiSettings(
+        routing: [String: AiRoute]? = nil,
+        cloudProvider: String? = nil,
+        baseUrls: [String: String]? = nil
+    ) async throws -> AiSettings {
         struct Body: Encodable {
             var routing: [String: AiRoute]?
             var cloud_provider: String?
+            var base_urls: [String: String]?
         }
         var req = request(path: "ai/settings")
         req.httpMethod = "PUT"
-        req.httpBody = try JSONEncoder().encode(Body(routing: routing, cloud_provider: cloudProvider))
+        req.httpBody = try JSONEncoder().encode(Body(routing: routing, cloud_provider: cloudProvider, base_urls: baseUrls))
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await perform(req)
         try Self.throwOnError(response, data)
         return try Self.decode(AiSettings.self, from: data)
+    }
+
+    /// Store a BYOK API key for a cloud provider. The raw key rides ONE
+    /// authenticated request to the owner's server keystore (Keychain / 0600
+    /// file — never FHIR, never .env, never this phone) and the reply echoes
+    /// only a masked form. Callers must drop the raw key from view state the
+    /// moment this returns.
+    public func setProviderKey(_ provider: String, key: String) async throws -> AiKeyResult {
+        try await post("ai/keys/\(urlEncode(provider))", json: ["key": key])
+    }
+
+    /// Remove a stored key from the server keystore. The provider reverts to
+    /// unconfigured (unless an .env key still configures it — the reply's
+    /// `configured` tells the truth) and any feature routed to it degrades to
+    /// the "configure a provider" state. Idempotent.
+    public func deleteProviderKey(_ provider: String) async throws {
+        var req = request(path: "ai/keys/\(urlEncode(provider))")
+        req.httpMethod = "DELETE"
+        let (data, response) = try await perform(req)
+        try Self.throwOnError(response, data)
     }
 
     public func testProvider(_ provider: String) async throws -> AiTestResult {
@@ -322,11 +391,11 @@ public struct AIService: Sendable {
     private func postMultipart<T: Decodable>(_ path: String, data: Data, filename: String, mimeType: String) async throws -> T {
         let boundary = "hmd-\(UUID().uuidString)"
         var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
         body.append(data)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
         var req = request(path: path, timeout: 300) // OCR + model: tens of seconds
         req.httpMethod = "POST"
@@ -338,6 +407,12 @@ public struct AIService: Sendable {
     }
 
     private func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var request = request
+        // Session token added here so every call path (GET/POST/multipart)
+        // carries it — never in a URL parameter.
+        if let tokenProvider, let token = await tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
@@ -354,7 +429,7 @@ public struct AIService: Sendable {
     /// Surfaces FastAPI's `{detail}` verbatim so server-side reasons
     /// ("no provider configured", validation) reach the UI.
     private static func throwOnError(_ response: HTTPURLResponse, _ data: Data) throws {
-        guard !(200...299).contains(response.statusCode) else { return }
+        guard !(200 ... 299).contains(response.statusCode) else { return }
         var detail = "\(response.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: response.statusCode))"
         if let value = try? JSONDecoder().decode(JSONValue.self, from: data),
            let message = value["detail"]?.stringValue {

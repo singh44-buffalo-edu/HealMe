@@ -238,6 +238,13 @@ public actor MedplumClient {
         store.clear()
     }
 
+    /// Current valid access token (proactively refreshed near expiry) — for
+    /// forwarding to the ai-service's session gate. nil when signed out or
+    /// when a refresh is impossible right now.
+    public func bearerToken() async -> String? {
+        try? await currentAccessToken()
+    }
+
     /// Display name of the signed-in profile (GET auth/me).
     public func profileDisplayName() async throws -> String {
         let data = try await authorizedRequest(path: "auth/me", method: "GET", body: nil, contentType: nil, extraHeaders: [:])
@@ -321,11 +328,23 @@ public actor MedplumClient {
     }
 
     public func update<T: FHIRResource>(_ resource: T) async throws -> T {
+        try await update(resource, ifMatchVersion: nil)
+    }
+
+    /// Version-checked update: sends `If-Match: W/"<versionId>"` so a
+    /// concurrent writer surfaces as HTTP 412 instead of a lost update
+    /// (FHIR-MAPPING.md §5 read-modify-write convention). Pass nil to skip
+    /// the check (plain PUT).
+    public func update<T: FHIRResource>(_ resource: T, ifMatchVersion versionId: String?) async throws -> T {
         guard let id = resource.id else {
             throw MedplumError.invalidResponse("Cannot update a resource without an id")
         }
+        var headers: [String: String] = [:]
+        if let versionId {
+            headers["If-Match"] = "W/\"\(versionId)\""
+        }
         let body = try Self.encoder.encode(resource)
-        let data = try await authorizedRequest(path: "fhir/R4/\(T.resourceType)/\(id)", method: "PUT", body: body, contentType: "application/fhir+json", extraHeaders: [:])
+        let data = try await authorizedRequest(path: "fhir/R4/\(T.resourceType)/\(id)", method: "PUT", body: body, contentType: "application/fhir+json", extraHeaders: headers)
         return try Self.decode(T.self, from: data)
     }
 
@@ -508,7 +527,7 @@ public actor MedplumClient {
     }
 
     private static func throwOnError(_ response: HTTPURLResponse, _ data: Data) throws {
-        guard !(200...299).contains(response.statusCode) else { return }
+        guard !(200 ... 299).contains(response.statusCode) else { return }
         if response.statusCode == 401 {
             throw MedplumError.unauthenticated
         }
@@ -539,7 +558,7 @@ public actor MedplumClient {
             // Never keep the all-zero buffer: a predictable code_verifier defeats
             // PKCE entirely. Fall back to the system CSPRNG rather than ship zeros.
             var rng = SystemRandomNumberGenerator()
-            bytes = (0..<bytes.count).map { _ in UInt8.random(in: .min ... .max, using: &rng) }
+            bytes = (0 ..< bytes.count).map { _ in UInt8.random(in: .min ... .max, using: &rng) }
         }
         return base64URL(Data(bytes))
     }

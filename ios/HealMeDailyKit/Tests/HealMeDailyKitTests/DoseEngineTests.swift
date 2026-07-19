@@ -189,7 +189,7 @@ final class DoseEngineTests: XCTestCase {
 
     func testStreakCanUseLongerWindowThanStats() {
         let m = med("r1", "med-a", ["09:00:00"])
-        let admins = (1...40).map { admin("med-a", day(-$0), "09:00", "completed") }
+        let admins = (1 ... 40).map { admin("med-a", day(-$0), "09:00", "completed") }
         let statsDays = DoseEngine.summarizeDays(meds: [m], admins: admins, days: 30, today: today)
         let fullDays = DoseEngine.summarizeDays(meds: [m], admins: admins, days: 60, today: today)
         let stats = DoseEngine.adherenceStats(meds: [m], admins: admins, daySummaries: statsDays, streakDays: fullDays)

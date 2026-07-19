@@ -26,10 +26,43 @@ ios/
 | Check-ins (D/W/M cadence, native questionnaire renderer) | Medplum FHIR (`QuestionnaireResponse`, period-idempotent) |
 | Quick add (weight, sleep, mood/energy, symptoms, vitals, rx-questions) | Medplum FHIR (verified LOINC/UCUM + local codes, identical to web) |
 | Vitals dashboard (BP/HR/temp/SpO₂/glucose, Swift Charts) | Medplum FHIR |
+| Trends (weight/sleep/mood/energy, 30D/90D/1Y, raw grain, no goal lines) | Medplum FHIR |
+| Labs & records (analyte trends, source-stated reference ranges, flagged view) | Medplum FHIR (`Observation` category=laboratory) |
+| Profile (problem list, allergies, immunizations — verbatim, read-only) | Medplum FHIR (`Condition`, `AllergyIntolerance`, `Immunization`) |
 | Assistant (record-grounded Q&A with citations) + NL quick capture | ai-service `/assistant` |
 | Health Review (AI review + deterministic data summary, PDF share) | ai-service `/health-review` |
 | Documents (camera/photo/file upload, structured imports, review queue) | ai-service `/ingest`, `/import` |
-| Settings (server URLs, Face ID lock, dose reminders, AI routing) | ai-service `/ai`, local device settings |
+| Settings (server URLs, Face ID lock, dose reminders, Apple Health sync, AI routing) | ai-service `/ai`, local device settings |
+
+**Offline:** the three capture paths (dose log, check-ins, quick add) keep
+working without connectivity — writes queue in an on-device outbox
+(encrypted at rest via iOS Data Protection) and replay in order when the
+server is reachable again; the same stable identifiers the online path uses
+make replays converge instead of duplicating. Today shows an "Offline /
+Syncing" strip plus a per-dose "pending sync" note; a cold offline launch
+falls back to the last core snapshot, clearly labeled. Server-rejected
+queued writes are dropped **loudly** (listed on Today until dismissed).
+
+**Apple Health (opt-in, read-only):** Settings ▸ Apple Health syncs steps,
+resting heart rate, HRV (SDNN), sleep, weight, blood pressure, SpO₂ and body
+temperature into your record as FHIR Observations (verified LOINC/UCUM,
+`healthkit` identifier system — see FHIR-MAPPING §7). Daily aggregates sync
+finished days only; per-sample types use anchored queries. Nothing is ever
+written back to Apple Health.
+
+**ai-service auth:** every ai-service endpoint except `/health` requires the
+caller's Medplum session token (`AI_REQUIRE_AUTH`, default on). The app
+forwards its own token automatically — nothing to configure.
+
+**Push (opt-in, server-driven):** Settings ▸ Push notifications registers the
+device's APNs token with your own ai-service (`/push/register`). A Medplum
+Subscription fans active push-medium `CommunicationRequest`s (the
+reminders-runner bot's overdue-dose nudges) to `/push/dispatch`, which sends
+a **generic** alert ("You have a health reminder" — never the med name) with
+a deep-link target; tapping opens Today. The APNs signing key (.p8) is a
+server secret (`APNS_*` in `.env`) and never ships in the app. No push
+config ⇒ the feature is simply inert. On-device dose reminders
+(ReminderScheduler) still work independently and need no server.
 
 Safety behavior is identical to the web app: no-log ⇒ no-resource, AI output
 always labeled (indigo + ✦ AI pill), extraction proposals never commit
@@ -53,6 +86,10 @@ make ios-project   # xcodegen generate → ios/HealMeDaily.xcodeproj
 make ios-build     # compile for iOS simulator (no signing)
 open ios/HealMeDaily.xcodeproj   # run on a simulator or your iPhone from Xcode
 ```
+
+Lint/format: `swiftlint` and `swiftformat --lint .` run from `ios/`
+(configs: `.swiftlint.yml`, `.swiftformat`; both enforced by the CI `ios`
+job alongside `swift test` and an unsigned simulator build).
 
 Troubleshooting: if `make ios-build` fails at the asset-catalog step with
 `No available simulator runtimes for platform iphonesimulator` right after

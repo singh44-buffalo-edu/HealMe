@@ -294,7 +294,14 @@ def _store_review(
     with the Patient securityContext (FHIR-MAPPING §6 — review content is
     patient data). Each run appends a new document — history is kept,
     nothing overwritten."""
-    pdf_bytes = markdown_to_pdf(markdown, title="HealMeDaily Health Review")
+    pdf_bytes = markdown_to_pdf(
+        markdown,
+        title="HealMeDaily Health Review",
+        # Disclaimer on every page footer (can't scroll off) + window/date
+        # subtitle in the running header.
+        footer_note=fc.DISCLAIMER,
+        subtitle=f"Window: last {window_days} days · generated {context['generated_at']}",
+    )
     security_context = f"Patient/{patient_id}"
     md_binary = medplum.create_binary(markdown.encode(), "text/markdown", security_context=security_context)
     pdf_binary = medplum.create_binary(pdf_bytes, "application/pdf", security_context=security_context)
@@ -359,7 +366,11 @@ def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: 
     if not provider.is_local:
         # Boundary ledger: written BEFORE any data leaves this device.
         log_boundary_event(
-            medplum, "health-review", provider.name, f"AI Health Review · last {window_days} days of record"
+            medplum,
+            "health-review",
+            provider.name,
+            f"AI Health Review · last {window_days} days of record",
+            endpoint_host=provider.endpoint_host,
         )
 
     user_prompt = (

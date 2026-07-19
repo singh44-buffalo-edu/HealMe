@@ -7,13 +7,17 @@ struct MainTabView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        TabView {
+        @Bindable var model = model
+        // selection bound to the model so a push deep-link (model.route) can
+        // switch tabs; tags are the same indices route(to:) uses.
+        TabView(selection: $model.selectedTab) {
             NavigationStack {
                 TodayView()
             }
             .tabItem {
                 Label("Today", systemImage: "sun.max")
             }
+            .tag(0)
 
             NavigationStack {
                 MedsView()
@@ -21,6 +25,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Meds", systemImage: "pills")
             }
+            .tag(1)
 
             NavigationStack {
                 AdherenceView()
@@ -28,6 +33,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Adherence", systemImage: "chart.bar")
             }
+            .tag(2)
 
             NavigationStack {
                 AssistantView()
@@ -35,6 +41,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Assistant", systemImage: "sparkles")
             }
+            .tag(3)
 
             NavigationStack {
                 MoreView()
@@ -43,6 +50,7 @@ struct MainTabView: View {
                 Label("More", systemImage: "ellipsis.circle")
             }
             .badge(model.reviewQueueCount > 0 ? model.reviewQueueCount : 0)
+            .tag(4)
         }
     }
 }
@@ -69,9 +77,24 @@ struct MoreView: View {
                 } label: {
                     Label("Vitals", systemImage: "heart")
                 }
+                NavigationLink {
+                    TrendsView()
+                } label: {
+                    Label("Trends", systemImage: "chart.xyaxis.line")
+                }
             }
 
             Section {
+                NavigationLink {
+                    RecordsView()
+                } label: {
+                    Label("Labs & records", systemImage: "testtube.2")
+                }
+                NavigationLink {
+                    ProfileView()
+                } label: {
+                    Label("Profile", systemImage: "person.text.rectangle")
+                }
                 NavigationLink {
                     DocumentsView()
                 } label: {

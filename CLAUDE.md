@@ -45,7 +45,23 @@ Not a certified medical device. Not medical advice. Human-in-the-loop for all AI
                 its tests mirror fhir.test.ts — change both in lockstep) +
                 HealMeDaily app target (XcodeGen project.yml, .xcodeproj
                 gitignored). make ios-project / ios-test / ios-build; docs:
-                ios/README.md + APPSTORE.md.
+                ios/README.md + APPSTORE.md. 2026-07-17: offline write outbox
+                + core snapshot (Sync.swift), opt-in read-only HealthKit sync
+                (HealthKitMapping + HealthKitService, identifier suffix
+                `healthkit` — mapping §7), Labs/Trends/Profile screens,
+                SwiftLint/SwiftFormat + CI ios job. ai-service requires a
+                Medplum bearer token on all endpoints except /health
+                (AI_REQUIRE_AUTH, web+iOS forward it automatically).
+                2026-07-17 (APNs): server-driven push — Medplum Subscription on
+                active push-medium CommunicationRequests → ai-service
+                /push/dispatch (app/push.py, HMAC shared-secret, gate-exempt)
+                → APNs (app/apns.py, ES256 provider token; cryptography+h2
+                deps). Device tokens in data/secrets (pushstore.py, non-FHIR,
+                keystore pattern). Payloads carry NO med name (generic body +
+                screen target). iOS PushService + UIApplicationDelegateAdaptor,
+                opt-in Settings toggle, aps-environment entitlement. APNS_* +
+                PUSH_SUBSCRIPTION_SECRET + AI_SERVICE_PUBLIC_URL in .env
+                (absent ⇒ push inert). deploy_bots wires the Subscription.
 /personal-health-record-system 2/project/design_handoff_healmedaily/   design handoff (canonical UI reference)
 CLAUDE.md  FHIR-MAPPING.md  APPSTORE.md  Makefile  .env  .env.example
 ```
@@ -166,7 +182,7 @@ app **:3000** · server **:8103** · Vite **:5173** · FastAPI **:8000** · Post
 | 4 | Ingestion depth: FHIR-bundle/CSV/Apple-Health importers (deterministic, dedup by content-hash identifier, `imported` tag + Provenance, direct commit — review queue is for AI extractions only), watched folder `data/inbox` (60s scan + `/ingest/scan-now`, processed/failed archive). 2026-07-15: + C-CDA (stdlib XML, verified-OID code systems only) and HL7v2 ORU (ER7, DiagnosticReport per OBR) importers; NL quick capture (`/assistant/nl-import`) proposes via the review queue | ✅ |
 | 5 | More dashboards: trends, symptom-vs-med timeline, labs, explorer (✅ pulled forward); correlations | partial ✅ |
 | 6 | Question engine: cadence-tagged questionnaire bank (D/W/M), due engine + multi-check-in UI, symptom→follow-up-Task bot, home due-panel. Remaining: more bank domains (spec §12), adaptive cadence, PHQ/GAD screenings | mostly ✅ |
-| 7 | More AI (2026-07-15): all 4 providers live (Anthropic/OpenAI/Gemini via httpx + Ollama local), BYOK keystore (macOS Keychain, 0600 file fallback in `data/secrets/`, keys never in FHIR/env dumps), per-feature routing local\|cloud\|off (`/ai` endpoints + AI Settings page), boundary-ledger AuditEvent before every cloud call, record-grounded Assistant with mandatory citations (`/assistant`, sessions = deletable Communications), NL quick capture. Remaining: PDF polish, ask-data chat streaming | mostly ✅ |
+| 7 | More AI (2026-07-15): all 4 providers live (Anthropic/OpenAI/Gemini via httpx + Ollama local), BYOK keystore (macOS Keychain, 0600 file fallback in `data/secrets/`, keys never in FHIR/env dumps), per-feature routing local\|cloud\|off (`/ai` endpoints + AI Settings page), boundary-ledger AuditEvent before every cloud call, record-grounded Assistant with mandatory citations (`/assistant`, sessions = deletable Communications), NL quick capture. 2026-07-17: APNs push (iOS) — Subscription → `/push/dispatch` → APNs, no-PHI payloads, opt-in. Remaining: PDF polish, ask-data chat streaming | mostly ✅ |
 | 8 | Hardware (2026-07-15): `pi-dispenser/` package sim-first — HAL (spindle/load-cell/chime/camera) with simulated+GPIO backends, scheduler shares the app's dose-event identity, MedicationDispense→Administration w/ `administration-verification` (weight>camera>self), escalation ladder per Dose Ritual design, `make pi-sim`/`pi-test`, systemd unit. Remaining: real-hardware bring-up (servo/load-cell calibration, picamera), dispenser ClientApplication, voice check-ins, Pi dashboard | partial ✅ |
 | 9 | Hardening: ai-service least-privilege AccessPolicy (bootstrap, applied), care circle (`scripts/care_circle.py` — scoped read-only AccessPolicies per member, clinician shares w/ expiry), break-glass bot (24h + owner notify + permanent AuditEvent), reminders-runner cron bot (15min, CommunicationRequest only), `scripts/backup.py` + `make backup`, Access Control + History pages. registerEnabled=false active in compose (flip to true once for a fresh install's `make bootstrap`), `make rotate-superadmin` script ready (owner runs it deliberately). Remaining: actually rotating the super-admin password, encryption-at-rest, pin/upgrade discipline (containerize ✅: `make prod-up` → frontend :8080, ai-service :8000, `data/secrets` mounted for shared AI settings) | mostly ✅ |
 

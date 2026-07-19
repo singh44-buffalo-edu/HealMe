@@ -321,6 +321,20 @@ public struct ObservationComponent: Codable, Hashable, Sendable {
     }
 }
 
+/// Observation.referenceRange — source-provided bounds only. The app
+/// displays these verbatim and never invents its own thresholds (SR-3).
+public struct ObservationReferenceRange: Codable, Hashable, Sendable {
+    public var low: Quantity?
+    public var high: Quantity?
+    public var text: String?
+
+    public init(low: Quantity? = nil, high: Quantity? = nil, text: String? = nil) {
+        self.low = low
+        self.high = high
+        self.text = text
+    }
+}
+
 public struct FHIRObservation: FHIRResource, Hashable {
     public static let resourceType = "Observation"
     public var resourceType: String = Self.resourceType
@@ -339,6 +353,10 @@ public struct FHIRObservation: FHIRResource, Hashable {
     public var component: [ObservationComponent]?
     public var derivedFrom: [Reference]?
     public var focus: [Reference]?
+    /// Lab display fields (read-only): the source's reference range and
+    /// interpretation flags (H/L/A…), rendered as-is, never computed here.
+    public var referenceRange: [ObservationReferenceRange]?
+    public var interpretation: [CodeableConcept]?
 
     public init(
         id: String? = nil,
@@ -655,6 +673,122 @@ public struct DocumentReference: FHIRResource, Hashable {
     }
 }
 
+// MARK: - Condition / AllergyIntolerance / Immunization (profile display, read-only)
+
+public struct Condition: FHIRResource, Hashable {
+    public static let resourceType = "Condition"
+    public var resourceType: String = Self.resourceType
+    public var id: String?
+    public var meta: Meta?
+    public var identifier: [Identifier]?
+    public var clinicalStatus: CodeableConcept?
+    public var verificationStatus: CodeableConcept?
+    public var code: CodeableConcept?
+    public var subject: Reference?
+    public var onsetDateTime: String?
+    public var recordedDate: String?
+
+    public init(id: String? = nil, code: CodeableConcept? = nil) {
+        self.id = id
+        self.code = code
+    }
+}
+
+public struct AllergyReaction: Codable, Hashable, Sendable {
+    public var manifestation: [CodeableConcept]?
+    public var severity: String?
+
+    public init(manifestation: [CodeableConcept]? = nil, severity: String? = nil) {
+        self.manifestation = manifestation
+        self.severity = severity
+    }
+}
+
+public struct AllergyIntolerance: FHIRResource, Hashable {
+    public static let resourceType = "AllergyIntolerance"
+    public var resourceType: String = Self.resourceType
+    public var id: String?
+    public var meta: Meta?
+    public var identifier: [Identifier]?
+    public var clinicalStatus: CodeableConcept?
+    public var verificationStatus: CodeableConcept?
+    /// low | high | unable-to-assess (source-provided, displayed verbatim)
+    public var criticality: String?
+    public var code: CodeableConcept?
+    public var patient: Reference?
+    public var recordedDate: String?
+    public var reaction: [AllergyReaction]?
+
+    public init(id: String? = nil, code: CodeableConcept? = nil) {
+        self.id = id
+        self.code = code
+    }
+}
+
+public struct Immunization: FHIRResource, Hashable {
+    public static let resourceType = "Immunization"
+    public var resourceType: String = Self.resourceType
+    public var id: String?
+    public var meta: Meta?
+    public var identifier: [Identifier]?
+    public var status: String?
+    public var vaccineCode: CodeableConcept?
+    public var patient: Reference?
+    public var occurrenceDateTime: String?
+    public var lotNumber: String?
+
+    public init(id: String? = nil, vaccineCode: CodeableConcept? = nil) {
+        self.id = id
+        self.vaccineCode = vaccineCode
+    }
+}
+
+// MARK: - MedicationStatement (ingestion-sourced meds, read-only)
+
+public struct MedicationStatement: FHIRResource, Hashable {
+    public static let resourceType = "MedicationStatement"
+    public var resourceType: String = Self.resourceType
+    public var id: String?
+    public var meta: Meta?
+    public var identifier: [Identifier]?
+    public var status: String?
+    public var medicationCodeableConcept: CodeableConcept?
+    public var medicationReference: Reference?
+    public var subject: Reference?
+    public var effectiveDateTime: String?
+    public var effectivePeriod: Period?
+    public var dateAsserted: String?
+
+    public init(id: String? = nil, medicationCodeableConcept: CodeableConcept? = nil) {
+        self.id = id
+        self.medicationCodeableConcept = medicationCodeableConcept
+    }
+}
+
+// MARK: - DiagnosticReport (labs, read-only)
+
+public struct DiagnosticReport: FHIRResource, Hashable {
+    public static let resourceType = "DiagnosticReport"
+    public var resourceType: String = Self.resourceType
+    public var id: String?
+    public var meta: Meta?
+    public var identifier: [Identifier]?
+    public var status: String?
+    public var category: [CodeableConcept]?
+    public var code: CodeableConcept?
+    public var subject: Reference?
+    public var effectiveDateTime: String?
+    public var issued: String?
+    /// Member lab Observations (fetched via `_include=DiagnosticReport:result`).
+    public var result: [Reference]?
+    public var conclusion: String?
+
+    public init(id: String? = nil, code: CodeableConcept? = nil) {
+        self.id = id
+        self.code = code
+    }
+}
+
 // MARK: - Bundle
 
 public struct BundleLink: Codable, Sendable {
@@ -666,11 +800,15 @@ public struct BundleRequest: Codable, Sendable {
     public var method: String?
     public var url: String?
     public var ifNoneExist: String?
+    /// Version-aware update inside a transaction (weak ETag, e.g. `W/"3"`) —
+    /// the dispenser-style read-modify-write guard from FHIR-MAPPING.md §5.
+    public var ifMatch: String?
 
-    public init(method: String? = nil, url: String? = nil, ifNoneExist: String? = nil) {
+    public init(method: String? = nil, url: String? = nil, ifNoneExist: String? = nil, ifMatch: String? = nil) {
         self.method = method
         self.url = url
         self.ifNoneExist = ifNoneExist
+        self.ifMatch = ifMatch
     }
 }
 

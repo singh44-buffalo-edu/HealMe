@@ -7,6 +7,8 @@ import SwiftUI
 @main
 struct HealMeDailyApp: App {
     @State private var model = AppModel()
+    // Bridges the UIKit remote-notification lifecycle into PushService.shared.
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
 
     var body: some Scene {
         WindowGroup {

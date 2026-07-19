@@ -157,7 +157,8 @@ struct VitalsView: View {
                 HStack(alignment: .top, spacing: 12) {
                     PageHeader(
                         title: "Vitals",
-                        subtitle: "Trends over the last year — log readings under Quick add. Values are shown without clinical judgment; thresholds worth flagging are something to set with your clinician."
+                        subtitle: "Trends over the last year — log readings under Quick add. Values are shown "
+                            + "without clinical judgment; thresholds worth flagging are something to set with your clinician."
                     )
                     VaultChip()
                 }
@@ -303,7 +304,7 @@ struct VitalsView: View {
         // 40–200 mmHg is a stable DISPLAY window so the chart doesn't rescale
         // between visits — NOT a clinical band (SR-3: thresholds are set with
         // a clinician, never fabricated by the UI).
-        .chartYScale(domain: 40...200)
+        .chartYScale(domain: 40 ... 200)
         .chartYAxis(.hidden)
         .chartXAxis { monthAxis }
         .chartLegend(.hidden)

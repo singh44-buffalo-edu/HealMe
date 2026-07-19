@@ -11,7 +11,7 @@ let package = Package(
     name: "HealMeDailyKit",
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "HealMeDailyKit", targets: ["HealMeDailyKit"])
+        .library(name: "HealMeDailyKit", targets: ["HealMeDailyKit"]),
     ],
     targets: [
         .target(name: "HealMeDailyKit", path: "Sources/HealMeDailyKit"),

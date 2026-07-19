@@ -236,6 +236,12 @@ export function AiSettingsPage() {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
 
+  // OpenAI-compatible custom endpoint draft (only surfaced for the openai
+  // provider); seeded from the stored base_url and re-seeded on any settings
+  // change so a save reflects the persisted value.
+  const [baseUrlDraft, setBaseUrlDraft] = useState('');
+  const [savingBaseUrl, setSavingBaseUrl] = useState(false);
+
   const [tests, setTests] = useState<TestState>({});
   const [savingRoute, setSavingRoute] = useState<AiFeature | null>(null);
 
@@ -258,6 +264,14 @@ export function AiSettingsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Keep the endpoint field in sync with the selected provider's stored value
+  // (fires only when settings identity or the picked provider changes, so an
+  // in-progress edit is never clobbered mid-type).
+  useEffect(() => {
+    const p = settings?.providers.find((x) => x.name === selProvider);
+    setBaseUrlDraft(p?.base_url ?? '');
+  }, [settings, selProvider]);
 
   /** Patch one provider entry in place (after key save/delete). */
   const patchProvider = (name: string, patch: Partial<AiProviderInfo>) => {
@@ -322,6 +336,35 @@ export function AiSettingsPage() {
       });
     } finally {
       setSavingKey(false);
+    }
+  };
+
+  /** Persist an OpenAI-compatible custom endpoint for the selected provider.
+   * An empty value clears the override (back to the provider default). This
+   * only routes requests to a different host — the cloud boundary is
+   * unchanged: record data still leaves this machine to whatever host is set. */
+  const saveBaseUrl = async () => {
+    if (savingBaseUrl) {
+      return;
+    }
+    const url = baseUrlDraft.trim();
+    setSavingBaseUrl(true);
+    try {
+      setSettings(await putAiSettings({ base_urls: { [selProvider]: url } }));
+      notifications.show({
+        color: 'hmdGreen',
+        message: url
+          ? `${label(selProvider)} endpoint saved`
+          : `${label(selProvider)} endpoint cleared — back to the default`,
+      });
+    } catch (err) {
+      notifications.show({
+        color: 'hmdRed',
+        title: 'Could not save the endpoint',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setSavingBaseUrl(false);
     }
   };
 
@@ -559,10 +602,60 @@ export function AiSettingsPage() {
             })}
           </div>
           {selProvider === 'openai' && (
-            <span style={{ ...mono(10, 400, T.quaternary), lineHeight: 1.6 }}>
-              custom endpoint? OpenAI here talks to any compatible server — set{' '}
-              <Code>OPENAI_BASE_URL</Code> in <Code>.env</Code>
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span
+                style={{
+                  ...mono(10, 500, T.quaternary),
+                  letterSpacing: '.12em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Custom endpoint (OpenAI-compatible)
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  value={baseUrlDraft}
+                  onChange={(e) => setBaseUrlDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      void saveBaseUrl();
+                    }
+                  }}
+                  placeholder="https://api.openai.com/v1 (default)"
+                  aria-label="Custom endpoint for OpenAI"
+                  style={{
+                    ...mono(12, 500, T.ink),
+                    flex: 1,
+                    minWidth: 0,
+                    border: `1px solid ${T.hairline}`,
+                    borderRadius: 13,
+                    padding: '9px 14px',
+                    outline: 'none',
+                    background: '#ffffff',
+                  }}
+                />
+                <PillButton
+                  variant="secondary"
+                  size={12}
+                  onClick={() => void saveBaseUrl()}
+                  disabled={savingBaseUrl || baseUrlDraft.trim() === (selected?.base_url ?? '')}
+                  disabledReason={savingBaseUrl ? 'Saving…' : undefined}
+                >
+                  Save
+                </PillButton>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <span style={{ paddingTop: 3 }}>
+                  <StatusDot color={T.watch} size={6} />
+                </span>
+                <span style={{ ...mono(10.5, 400, T.tertiary), lineHeight: 1.6 }}>
+                  point OpenAI at any compatible server · leave blank for the default. Record data
+                  still leaves this machine to whatever host you set.
+                </span>
+              </div>
+            </div>
           )}
 
           {/* key field */}

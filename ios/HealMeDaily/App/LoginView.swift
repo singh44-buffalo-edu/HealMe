@@ -41,12 +41,14 @@ struct LoginView: View {
                                     .textContentType(.username)
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
+                                    .accessibilityIdentifier("login.email")
                             }
                             VStack(alignment: .leading, spacing: 5) {
                                 FieldLabel(text: "Password")
                                 SecureField("••••••••", text: $password)
                                     .textFieldStyle(BandFieldStyle())
                                     .textContentType(.password)
+                                    .accessibilityIdentifier("login.password")
                             }
 
                             if showServerField {
@@ -80,6 +82,7 @@ struct LoginView: View {
                                 signIn()
                             }
                             .disabled(email.isEmpty || password.isEmpty)
+                            .accessibilityIdentifier("login.signIn")
                         }
                     }
                     .padding(.horizontal, 20)

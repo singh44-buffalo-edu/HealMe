@@ -32,7 +32,8 @@ import { marked } from 'marked';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { AiStatus, ReviewResult } from '../api';
-import { generateDataSummary, generateReview, getAiHealth, getLatestReview, reviewPdfUrl } from '../api';
+import { normalizeErrorString } from '@medplum/core';
+import { downloadReviewPdf, generateDataSummary, generateReview, getAiHealth, getLatestReview } from '../api';
 import {
   AIPill,
   BoundaryRow,
@@ -258,8 +259,14 @@ export function ReviewPage() {
     review?.description ||
     (dataOnly ? 'Data summary (no AI)' : 'AI Health Review') +
       (reviewWindow ? ` — last ${reviewWindow} days` : '');
-  const pdfHref = review ? reviewPdfUrl(review.document_reference_id) : undefined;
   const aiSelectable = ai?.configured === true;
+  // fetch → blob (not an href): the PDF endpoint needs the session token.
+  const printPdf = review
+    ? () =>
+        downloadReviewPdf(review.document_reference_id).catch((err) =>
+          notifications.show({ color: 'hmdRed', message: normalizeErrorString(err) })
+        )
+    : undefined;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -272,16 +279,17 @@ export function ReviewPage() {
           </>
         }
         right={
-          pdfHref ? (
-            <a
-              href={pdfHref}
-              target="_blank"
-              rel="noreferrer"
+          printPdf ? (
+            <button
+              type="button"
+              onClick={printPdf}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
-                textDecoration: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
                 fontSize: 12.5,
                 fontWeight: 500,
                 color: T.secondary,
@@ -293,7 +301,7 @@ export function ReviewPage() {
             >
               <IconPrinter size={14} stroke={1.7} />
               Print one-pager
-            </a>
+            </button>
           ) : undefined
         }
       />
@@ -485,26 +493,28 @@ export function ReviewPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {!dataOnly && <AIPill />}
                 <span style={mono(10.5, 400, T.tertiary)}>generated {generatedAt}</span>
-                {pdfHref && (
-                  <a
-                    href={pdfHref}
-                    target="_blank"
-                    rel="noreferrer"
+                {printPdf && (
+                  <button
+                    type="button"
+                    onClick={printPdf}
                     style={{
                       marginLeft: 'auto',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 5,
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
                       fontSize: 12.5,
                       fontWeight: 500,
                       color: T.green,
-                      textDecoration: 'none',
                       whiteSpace: 'nowrap',
                     }}
                   >
                     <IconDownload size={14} stroke={1.7} />
                     Download PDF
-                  </a>
+                  </button>
                 )}
               </div>
               {hairline}
@@ -564,22 +574,24 @@ export function ReviewPage() {
                     the full review as one clean PDF · for the desk between you
                   </span>
                 </div>
-                {pdfHref && (
-                  <a
-                    href={pdfHref}
-                    target="_blank"
-                    rel="noreferrer"
+                {printPdf && (
+                  <button
+                    type="button"
+                    onClick={printPdf}
                     style={{
                       marginLeft: 'auto',
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
                       fontSize: 12.5,
                       fontWeight: 500,
                       whiteSpace: 'nowrap',
                       color: T.green,
-                      textDecoration: 'none',
                     }}
                   >
-                    Preview →
-                  </a>
+                    Download →
+                  </button>
                 )}
               </DsCard>
             </div>

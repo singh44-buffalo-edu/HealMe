@@ -126,6 +126,38 @@ def test_openai_custom_base_url(monkeypatch):
     assert calls[0]["url"] == "http://localhost:9999/v1/chat/completions"
 
 
+def test_openai_base_url_precedence_and_endpoint_host(monkeypatch):
+    monkeypatch.setattr(providers.settings, "openai_api_key", "sk-x")
+    # explicit base_url (from AI Settings) wins over the OPENAI_BASE_URL env var
+    monkeypatch.setattr(providers.settings, "openai_base_url", "https://env-host/v1")
+    provider = providers.build_provider("openai", base_url="https://custom.gw/v1/")
+    assert provider.base_url == "https://custom.gw/v1"
+    assert provider.endpoint_host == "custom.gw"  # non-default host is disclosable
+    # default host → nothing extra to disclose in the boundary ledger
+    monkeypatch.setattr(providers.settings, "openai_base_url", "https://api.openai.com/v1")
+    assert providers.build_provider("openai").endpoint_host is None
+
+
+def test_openai_settings_file_base_url_beats_env(monkeypatch):
+    # env points one way; the settings file points at a custom gateway and must win
+    monkeypatch.setattr(providers.settings, "openai_base_url", "https://env-host/v1")
+    monkeypatch.setattr(providers.settings, "openai_api_key", "sk-x")
+    ai_settings._save(
+        {
+            "routing": dict.fromkeys(ai_settings.FEATURES, "cloud"),
+            "cloud_provider": "openai",
+            "models": {},
+            "base_urls": {"openai": "https://gw.example/v1"},
+        }
+    )
+    calls = _record_posts(monkeypatch, [_openai_ok()])
+    provider = ai_settings.get_provider_for("assistant")
+    provider.generate("s", "u")
+    assert provider.base_url == "https://gw.example/v1"
+    assert provider.endpoint_host == "gw.example"
+    assert calls[0]["url"] == "https://gw.example/v1/chat/completions"
+
+
 def test_openai_bad_key_maps_to_not_configured(monkeypatch):
     monkeypatch.setattr(providers.settings, "openai_api_key", "sk-bad")
     _record_posts(monkeypatch, [_response(401, {"error": {"message": "bad key"}})])

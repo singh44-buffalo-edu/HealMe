@@ -29,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import ai_settings, assistant, export, health_review, importers, ingest, watcher
+from . import ai_settings, assistant, auth, export, health_review, importers, ingest, push, watcher
+from .apns import configured as push_apns_configured
 from .config import settings
 from .medplum import MedplumError, medplum
 from .providers import ProviderError, ProviderNotConfigured, provider_status
@@ -46,6 +47,11 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="HealMeDaily AI service", version="0.3.0", lifespan=lifespan)
 
+# Session gate (auth.py) registered BEFORE CORSMiddleware is added: Starlette
+# treats the last-added middleware as outermost, so CORS must come after this
+# for 401/502 responses to still carry CORS headers in the browser.
+app.middleware("http")(auth.require_medplum_token)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.ai_allowed_origins.split(",") if o.strip()],
@@ -56,6 +62,7 @@ app.add_middleware(
 
 app.include_router(ai_settings.router)
 app.include_router(assistant.router)
+app.include_router(push.router)
 
 
 def _patient_id() -> str:
@@ -88,6 +95,8 @@ def health() -> dict:
     return {
         "status": "ok",
         "medplum_configured": medplum.configured,
+        "auth_required": settings.ai_require_auth,
+        "push_configured": push_apns_configured(),
         "ai": provider_status(),
     }
 

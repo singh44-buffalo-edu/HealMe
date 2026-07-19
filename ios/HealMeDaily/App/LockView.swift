@@ -6,6 +6,9 @@ import LocalAuthentication
 struct LockView: View {
     @Environment(AppModel.self) private var model
     @State private var failed = false
+    /// The device has no passcode/biometrics, so there is no OS auth to gate
+    /// with — surface an explicit choice instead of silently unlocking.
+    @State private var noPasscode = false
 
     var body: some View {
         ZStack {
@@ -15,7 +18,21 @@ struct LockView: View {
                 Text("HealMeDaily is locked")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(T.ink)
-                if failed {
+
+                if noPasscode {
+                    // No silent bypass: the owner enabled the lock but the
+                    // device has no passcode. Explain, and require a conscious
+                    // tap to proceed unprotected (or go set a passcode).
+                    Text("This iPhone has no passcode, so the record can't be locked. Set a passcode in iOS Settings for protection.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(T.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    PillButton(title: "Continue without lock") {
+                        model.unlocked = true
+                    }
+                    .frame(maxWidth: 240)
+                } else if failed {
                     PillButton(title: "Unlock") {
                         authenticate()
                     }
@@ -30,22 +47,36 @@ struct LockView: View {
 
     private func authenticate() {
         failed = false
+        noPasscode = false
         let context = LAContext()
         var error: NSError?
         // Device passcode fallback included — being locked out of your own
         // health record is worse than passcode-level protection.
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            model.unlocked = true // no passcode set on device — nothing to gate with
+            // No passcode/biometrics enrolled: do NOT silently unlock — show
+            // the explicit no-passcode state so exposure is a conscious choice.
+            noPasscode = true
             return
         }
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock your health record") { success, _ in
-            DispatchQueue.main.async {
+            _Concurrency.Task { @MainActor in
                 if success {
                     model.unlocked = true
                 } else {
                     failed = true
                 }
             }
+        }
+    }
+}
+
+/// Opaque cover shown while the app is not active, so the health record never
+/// appears in the app-switcher snapshot. No auth — purely visual privacy.
+struct PrivacyShade: View {
+    var body: some View {
+        ZStack {
+            T.canvas.ignoresSafeArea()
+            BrandMark(size: 44)
         }
     }
 }

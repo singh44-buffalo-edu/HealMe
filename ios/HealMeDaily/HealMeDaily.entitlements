@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Read-only Apple Health sync (opt-in, Settings toggle). Background
+	     delivery lets new samples nudge a sync; without a paid team the
+	     capability degrades to foreground syncs. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.background-delivery</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
+	<!-- Remote push (opt-in). 'development' matches a debug/sandbox build;
+	     Xcode/App Store signing rewrites this to 'production' for release. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

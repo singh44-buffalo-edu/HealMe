@@ -207,8 +207,11 @@ Representative identifier systems:
 | Structured import | `import` | sha256 content hash (first 32 hex chars) |
 | NL capture proposal | `nl-import` | sha256 of raw text payload |
 | Dose reminder | `reminder` | request + occurrence |
+| HealthKit sample (iOS, owner-approved 2026-07-17) | `healthkit` | HKSample UUID (per-sample kinds: weight, BP, SpO₂, temperature) or `{kind}-{YYYY-MM-DD}` (daily aggregates: steps, resting HR, HRV SDNN, sleep — finished days only, so values are final) |
 
 Imported identifiers from hospitals or health apps retain their original `system` and `value`; project identifiers supplement rather than replace them.
+
+HealthKit-sourced Observations (iOS app, read-only sync): verified LOINC + UCUM only — steps `55423-8` (`{steps}`, category `activity`), resting heart rate `40443-4` (`/min`), HRV SDNN `80404-7` (`ms`), body weight `29463-7` (`kg`), BP panel `85354-9` w/ components `8480-6`/`8462-4` (`mm[Hg]`), SpO₂ `59408-5` (`%`), body temperature `8310-5` (`Cel`); sleep reuses the project-local `sleep-duration` code (§4) so HealthKit nights and manual entries form one series. Every one carries `meta.tag` `healthkit` ("Apple Health") — measured data, never presented as AI-derived.
 
 ## 8. Dashboard read model
 

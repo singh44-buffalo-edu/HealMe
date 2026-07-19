@@ -23,16 +23,43 @@
  * a boundary-ledger AuditEvent (CLAUDE.md §6 AI guardrails).
  */
 
+import { medplum } from './medplum';
+
 const RAW_BASE: string = import.meta.env.VITE_AI_SERVICE_URL ?? 'http://localhost:8000/';
 const AI_BASE = RAW_BASE.endsWith('/') ? RAW_BASE : `${RAW_BASE}/`;
+
+/** The ai-service requires the caller's Medplum session token on every
+ * endpoint except /health (its auth.py gate) — forward the one the signed-in
+ * app already holds. Never in a URL parameter, always a header.
+ *
+ * Refreshes first when the access token is expired: raw fetch (unlike the
+ * SDK's own request path) does not auto-refresh, so after ~1 h idle the token
+ * would be stale and the gate would answer a false "sign in again". */
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    // refreshIfExpired() self-guards (no-op when the token is still valid) —
+    // needed because raw fetch, unlike the SDK's own request path, does not
+    // auto-refresh; without it a call after ~1h idle sends a stale token.
+    await medplum.refreshIfExpired();
+  } catch {
+    // Refresh failed (offline / refresh token gone) — send whatever we have;
+    // the gate's 401 then surfaces the real reason.
+  }
+  const token = medplum.getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // Shared fetch wrapper: distinguishes "service down" (friendly `make dev`
 // hint) from real HTTP errors, and surfaces FastAPI's {detail} verbatim so
 // server-side reasons ("no provider configured", validation) reach the UI.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const auth = await authHeaders();
   let res: Response;
   try {
-    res = await fetch(AI_BASE + path, init);
+    res = await fetch(AI_BASE + path, {
+      ...init,
+      headers: { ...auth, ...(init?.headers as Record<string, string> | undefined) },
+    });
   } catch {
     throw new Error('AI service is not reachable — is `make dev` running?');
   }
@@ -47,6 +74,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(detail);
   }
   return res.json() as Promise<T>;
+}
+
+/** Authenticated file download: fetch → blob → synthetic <a download> click.
+ * Replaces plain hrefs — those cannot carry the Authorization header the
+ * ai-service now requires, and tokens never belong in URLs. */
+async function downloadBlob(path: string, filename: string): Promise<void> {
+  const auth = await authHeaders();
+  let res: Response;
+  try {
+    res = await fetch(AI_BASE + path, { headers: auth });
+  } catch {
+    throw new Error('AI service is not reachable — is `make dev` running?');
+  }
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = String(body.detail);
+    } catch {
+      // non-JSON error body
+    }
+    throw new Error(detail);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  // Revoke on the next tick, not synchronously: some browsers abort a
+  // large in-flight download if the object URL is freed the instant after
+  // click().
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // POST-a-JSON-body shorthand.
@@ -95,16 +154,18 @@ export const generateReview = (windowDays: number) =>
 export const generateDataSummary = (windowDays: number) =>
   request<ReviewResult>('health-review/data-summary', json({ window_days: windowDays }));
 
-/** Direct-download URLs (used as <a href>/window.open, not via request()). */
-export const exportFhirUrl = `${AI_BASE}export/fhir`;
-export const exportCsvUrl = `${AI_BASE}export/observations.csv`;
+/** Authenticated exports (replacing the old direct-href URLs — plain links
+ * cannot carry the session token the ai-service now requires). */
+export const downloadFhirExport = () => downloadBlob('export/fhir', 'healmedaily-record.json');
+export const downloadCsvExport = () => downloadBlob('export/observations.csv', 'observations.csv');
 
 /** Most recent stored review; rejects (404 detail) when none exists yet. */
 export const getLatestReview = () => request<ReviewResult>('health-review/latest');
 
-/** Download URL for a stored review PDF (every PDF carries the
- * not-medical-advice disclaimer — CLAUDE.md §6 AI guardrails). */
-export const reviewPdfUrl = (docId: string) => `${AI_BASE}health-review/${docId}/pdf`;
+/** Download a stored review PDF (every PDF carries the not-medical-advice
+ * disclaimer — CLAUDE.md §6 AI guardrails). */
+export const downloadReviewPdf = (docId: string) =>
+  downloadBlob(`health-review/${encodeURIComponent(docId)}/pdf`, `health-review-${docId}.pdf`);
 
 /** Outcome of a document upload: where the original landed and how many
  * extraction proposals now await human review. */
@@ -239,13 +300,16 @@ export interface AiSettings {
 /** Current providers + per-feature routing + chosen cloud provider. */
 export const getAiSettings = () => request<AiSettings>('ai/settings');
 
-/** Partial-update AI settings (routing, cloud provider, model overrides);
- * returns the full updated settings. Setting a feature to 'cloud' only
- * routes it — every actual cloud call still writes its boundary AuditEvent. */
+/** Partial-update AI settings (routing, cloud provider, model overrides,
+ * per-provider base URL overrides); returns the full updated settings.
+ * Setting a feature to 'cloud' only routes it — every actual cloud call still
+ * writes its boundary AuditEvent. `base_urls` maps provider → endpoint (e.g.
+ * an OpenAI-compatible server); an empty string clears the override. */
 export const putAiSettings = (body: {
   routing?: Partial<Record<AiFeature, AiRoute>>;
   cloud_provider?: string;
   models?: Record<string, string>;
+  base_urls?: Record<string, string>;
 }) => request<AiSettings>('ai/settings', { ...json(body), method: 'PUT' });
 
 /** Store a BYOK API key. Server keeps it in the macOS Keychain (0600 file

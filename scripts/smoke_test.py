@@ -174,11 +174,31 @@ def main() -> None:
             assert resp.status_code in (200, 204), f"delete status {resp.status_code}"
         return f"Observation/{obs_id} created+verified+deleted"
 
+    def ai_headers() -> dict:
+        """Bearer header for the ai-service's session gate (auth.py): the
+        script forwards the same client-credentials token it uses for FHIR."""
+        return (
+            {"Authorization": f"Bearer {token['value']}"} if token.get("value") else {}
+        )
+
+    def check_ai_auth_gate():
+        """Proves: the ai-service session gate is live — a protected endpoint
+        refuses tokenless callers with 401 while /health stays open. Skipped
+        (reported, not failed) when AI_REQUIRE_AUTH=false."""
+        health = httpx.get(ai_base + "health", timeout=5).json()
+        if not health.get("auth_required"):
+            return "AI_REQUIRE_AUTH=false — gate off, skipping 401 check"
+        resp = httpx.get(ai_base + "ingest/tasks", timeout=10)
+        assert resp.status_code == 401, (
+            f"expected 401 without a token, got {resp.status_code}"
+        )
+        return "tokenless request correctly refused (401)"
+
     def check_ai_medplum_roundtrip():
         """Proves: the ai-service ITSELF can reach Medplum — /medplum/status
         makes a server-side FHIR read with the service's own token cache
         (distinct from this script's direct calls above)."""
-        resp = httpx.get(ai_base + "medplum/status", timeout=10)
+        resp = httpx.get(ai_base + "medplum/status", timeout=10, headers=ai_headers())
         assert resp.status_code == 200, f"status {resp.status_code}: {resp.text[:200]}"
         return f"patients={resp.json().get('patients')}"
 
@@ -199,7 +219,7 @@ def main() -> None:
         """Proves: the ingestion review queue is reachable — the endpoint the
         human-in-the-loop gate lives behind (proposal Tasks, FHIR-MAPPING §6).
         Read-only: nothing is enqueued or committed here."""
-        resp = httpx.get(ai_base + "ingest/tasks", timeout=15)
+        resp = httpx.get(ai_base + "ingest/tasks", timeout=15, headers=ai_headers())
         assert resp.status_code == 200, f"status {resp.status_code}: {resp.text[:200]}"
         assert isinstance(resp.json(), list), "expected a list of review tasks"
         return f"{len(resp.json())} task(s) awaiting review"
@@ -210,14 +230,19 @@ def main() -> None:
         must refuse with a clean 503, never crash and never call out."""
         health = httpx.get(ai_base + "health", timeout=5).json()
         configured = health.get("ai", {}).get("configured")
-        latest = httpx.get(ai_base + "health-review/latest", timeout=15)
+        latest = httpx.get(
+            ai_base + "health-review/latest", timeout=15, headers=ai_headers()
+        )
         assert latest.status_code in (200, 404), (
             f"latest: {latest.status_code} {latest.text[:200]}"
         )
         if not configured:
             # Without a provider the endpoint must refuse politely, not crash.
             resp = httpx.post(
-                ai_base + "health-review", json={"window_days": 30}, timeout=15
+                ai_base + "health-review",
+                json={"window_days": 30},
+                timeout=15,
+                headers=ai_headers(),
             )
             assert resp.status_code == 503, (
                 f"expected 503 without provider, got {resp.status_code}"
@@ -351,6 +376,7 @@ def main() -> None:
     step("medplum /healthcheck", check_server)
     step("ai-service /health", check_ai_health)
     step("oauth2 client-credentials token", get_token)
+    step("ai-service auth gate (401 without token)", check_ai_auth_gate)
     step("FHIR read: Patient by identifier", read_patient)
     step("FHIR write+read+delete: Observation", write_read_delete_observation)
     step("ai-service -> Medplum round-trip", check_ai_medplum_roundtrip)
@@ -374,12 +400,16 @@ def main() -> None:
             f"smoke-import-{marker},Smoke import,42,,final,survey\n"
         )
         files = {"file": ("smoke.csv", csv_text, "text/csv")}
-        first = httpx.post(ai_base + "import/csv", files=files, timeout=30)
+        first = httpx.post(
+            ai_base + "import/csv", files=files, timeout=30, headers=ai_headers()
+        )
         assert first.status_code == 200, (
             f"import: {first.status_code} {first.text[:200]}"
         )
         assert first.json()["imported"] == 1, f"expected 1 imported: {first.json()}"
-        second = httpx.post(ai_base + "import/csv", files=files, timeout=30)
+        second = httpx.post(
+            ai_base + "import/csv", files=files, timeout=30, headers=ai_headers()
+        )
         assert second.json()["already_existed"] == 1, (
             f"re-import should dedup: {second.json()}"
         )

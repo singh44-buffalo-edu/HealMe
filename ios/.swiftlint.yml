@@ -1,0 +1,49 @@
+# SwiftLint config for the iOS app + Kit. Tuned to the codebase's existing
+# idioms rather than fighting them: design-token enum `T`, long view files,
+# trailing commas in multiline collections (SwiftFormat enforces those).
+included:
+  - HealMeDaily
+  - HealMeDailyKit/Sources
+  - HealMeDailyKit/Tests
+excluded:
+  - HealMeDailyKit/.build
+
+disabled_rules:
+  - todo                 # tracked in the phase plan, not as lint noise
+  - trailing_comma       # we WANT trailing commas (SwiftFormat --commas always)
+  - large_tuple          # small internal tuples (e.g. night aggregation) are fine
+  - orphaned_doc_comment # /// file headers are the established style
+
+line_length:
+  warning: 180
+  error: 250
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 1000          # FHIRModels.swift is a deliberate one-file model catalog
+  error: 1400
+
+type_body_length:
+  warning: 600
+  error: 900
+
+function_body_length:
+  warning: 120           # the native questionnaire renderer is one long switch
+  error: 200
+
+cyclomatic_complexity:
+  warning: 20            # switches over FHIR item/value types are idiomatic
+  error: 30
+
+identifier_name:
+  min_length: 1          # T (tokens), c/d/e in tight local scopes are idiomatic here
+  max_length: 60
+  allowed_symbols: ["_"] # wire-mirror structs keep the server's snake_case field names
+
+type_name:
+  min_length: 1          # the design-token namespace enum `T`
+  max_length: 50
+
+nesting:
+  type_level: 3
