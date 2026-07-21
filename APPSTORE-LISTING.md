@@ -16,7 +16,7 @@ demo-server URL/credentials placeholders before submitting.
 | Secondary category | Health & Fitness |
 | Age rating | Medical/Treatment Information → "Infrequent/Mild"; everything else None/No |
 | Price | Free |
-| Privacy Policy URL | *(pending — GitHub Pages / antriksh.cloud)* |
+| Privacy Policy URL | https://singh44-buffalo-edu.github.io/HealMe/privacy.html ✅ set in ASC |
 | Support URL | https://github.com/singh44-buffalo-edu/HealMe (or antriksh.cloud page) |
 
 ## Description
@@ -120,15 +120,15 @@ Generate: boot simulator, sign into the local stack, ⌘S — or
 
 ## Submission checklist
 
-1. [ ] Privacy policy URL live
-2. [ ] ASC app record created (name HealMeNow, bundle `cloud.antriksh.healmenow`)
-3. [ ] ASC API key (.p8 + Key ID + Issuer ID) → headless `make ios-upload`
+1. [x] Privacy policy URL live + set in ASC
+2. [x] ASC app record created (app id 6793022643)
+3. [x] ASC API key wired → headless `make ios-upload` proven (build 1 VALID)
 4. [ ] Demo server deployed with HTTPS + seeded synthetic data + demo account
        (scripts/deploy_demo_vm.sh; DEPLOYMENT.md Part 4)
-5. [ ] Build uploaded, attached to the version
-6. [ ] Screenshots 6.9" + 6.5" uploaded
-7. [ ] Description/keywords/support URL/privacy URL filled (this file)
+5. [x] Build 1 uploaded + attached to 1.0.0
+6. [x] Screenshots uploaded via API (12/12 COMPLETE; 6.9" class = APP_IPHONE_67 enum)
+7. [x] Description/keywords/support URL/subtitle/categories/price(Free)/175 territories/content-rights set via API
 8. [ ] App Privacy questionnaire answered (this file)
-9. [ ] Age rating questionnaire (this file)
-10. [ ] Review notes with demo credentials (this file)
+9. [x] Age rating set via API (medical Infrequent/Mild + health-topics true)
+10. [~] Review notes set — demo URL/password + REAL contact phone still placeholders (PATCH after demo VM)
 11. [ ] Submit for Review
