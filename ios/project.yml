@@ -91,6 +91,12 @@ targets:
           pressure, oxygen saturation and body temperature from Apple Health
           — only if you turn the sync on — and stores them in your own
           self-hosted health record. Nothing is shared with anyone else.
+        # Required by App Store validation because HealthKit APIs are linked,
+        # even though the app never writes to Apple Health (read-only sync).
+        NSHealthUpdateUsageDescription: >-
+          HealMeNow does not write data to Apple Health. This permission is
+          never requested; the description exists only because Apple requires
+          it for any app that links HealthKit.
         # Uses only standard TLS (exempt) — no proprietary encryption.
         ITSAppUsesNonExemptEncryption: false
 

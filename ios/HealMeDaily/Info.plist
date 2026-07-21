@@ -43,6 +43,8 @@
 	<string>HealMeNow can require Face ID to open the app, keeping your health record private if someone else uses this phone.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>HealMeNow can read steps, heart rate, HRV, sleep, weight, blood pressure, oxygen saturation and body temperature from Apple Health — only if you turn the sync on — and stores them in your own self-hosted health record. Nothing is shared with anyone else.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>HealMeNow does not write data to Apple Health. This permission is never requested; the description exists only because Apple requires it for any app that links HealthKit.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>HealMeNow connects to your own Medplum health-record server on your local network.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
