@@ -212,6 +212,16 @@ all URLs derive from `HMD_DOMAIN`; TLS is automatic (Let's Encrypt via the check
 - The UI's "On this device" VaultChip language is now aspirational — the record is on your VM.
   Consider that copy debt if option B becomes permanent.
 
+### 4.7 Demo review server (App Store review)
+
+For the disposable App-Review demo box — synthetic data only, AI deliberately unconfigured —
+skip 4.3–4.5 and run `scripts/deploy_demo_vm.sh root@<vm-ip> demo.your.example` from this Mac
+(one DNS A record required). It installs Docker + Caddy, rsyncs the repo (never `data/` or
+`.env`), does the one-time registration flip + bootstrap + seed, creates the
+`demo@healmenow.example` reviewer account, and prints the exact strings for
+APPSTORE-LISTING.md. Port layout: `:443` → FHIR server (the iOS server URL), `:8443` →
+ai-service, `:9443` → admin UI. Idempotent — re-run to ship code updates.
+
 ### What deliberately does NOT move to the cloud
 
 - **BYOK AI keys** — `data/secrets/` goes with wherever the ai-service runs; if that's the VM,

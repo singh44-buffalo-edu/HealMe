@@ -31,5 +31,6 @@ ios/*.xcodeproj/
 ios/DerivedData/
 ios/Signing.xcconfig
 ios/build/
+ios/private/
 **/xcuserdata/
 .build/

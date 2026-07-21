@@ -159,7 +159,24 @@ ios-archive: ios-project
 		-destination 'generic/platform=iOS' -archivePath build/HealMeDaily.xcarchive \
 		-allowProvisioningUpdates archive
 
+# Headless upload needs an App Store Connect API key — the Apple ID session
+# only works inside Xcode's GUI ("Failed to Use Accounts" otherwise).
+# Create one at App Store Connect ▸ Users and Access ▸ Integrations
+# (role: App Manager), then put in .env:
+#   ASC_KEY_ID=XXXXXXXXXX  ASC_ISSUER_ID=<uuid>
+# and drop the key file at ios/private/AuthKey_<ASC_KEY_ID>.p8 (gitignored).
 ios-upload:
-	cd ios && xcodebuild -exportArchive -archivePath build/HealMeDaily.xcarchive \
-		-exportOptionsPlist ExportOptions.plist -exportPath build/export \
-		-allowProvisioningUpdates
+	@set -a; source .env; set +a; \
+	if [ -n "$$ASC_KEY_ID" ] && [ -f "ios/private/AuthKey_$$ASC_KEY_ID.p8" ]; then \
+		cd ios && xcodebuild -exportArchive -archivePath build/HealMeDaily.xcarchive \
+			-exportOptionsPlist ExportOptions.plist -exportPath build/export \
+			-allowProvisioningUpdates \
+			-authenticationKeyPath "$$(pwd)/private/AuthKey_$$ASC_KEY_ID.p8" \
+			-authenticationKeyID "$$ASC_KEY_ID" \
+			-authenticationKeyIssuerID "$$ASC_ISSUER_ID"; \
+	else \
+		echo "No ASC API key (ASC_KEY_ID/.p8) — trying the Xcode account session (works only from Xcode GUI runs)"; \
+		cd ios && xcodebuild -exportArchive -archivePath build/HealMeDaily.xcarchive \
+			-exportOptionsPlist ExportOptions.plist -exportPath build/export \
+			-allowProvisioningUpdates; \
+	fi
