@@ -29,5 +29,7 @@ htmlcov/
 # iOS: generated project + Xcode local state (project.yml is the source of truth)
 ios/*.xcodeproj/
 ios/DerivedData/
+ios/Signing.xcconfig
+ios/build/
 **/xcuserdata/
 .build/

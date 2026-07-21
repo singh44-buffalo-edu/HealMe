@@ -24,13 +24,15 @@ server**. You do not need the App Store to run it on your own iPhone:
 
 ## 1. Bundle identity & signing
 
-1. Pick a bundle id you own, e.g. `cloud.antriksh.healmedaily`
-   (current default: `com.healmedaily.app` — change it in
+1. Bundle id: the default is **`cloud.antriksh.healmenow`** (change it in
    [ios/project.yml](ios/project.yml) → `PRODUCT_BUNDLE_IDENTIFIER`, then
    re-run `make ios-project`).
-2. Open the project in Xcode → target **HealMeDaily** → *Signing &
-   Capabilities* → check **Automatically manage signing**, pick your Team.
-   Xcode creates the App ID + certificates for you. The project ships a
+2. Put your Team ID in `ios/Signing.xcconfig` (gitignored; `make
+   ios-project` seeds it from `Signing.xcconfig.example` — Team ID is in
+   Xcode ▸ Settings ▸ Accounts). This survives `.xcodeproj` regeneration,
+   so you never re-enter signing in Xcode. First build per Mac still wants
+   Xcode signed into the account (Settings ▸ Accounts) so automatic signing
+   can mint the App ID + certificates. The project ships a
    HealthKit entitlement (read-only sync, opt-in in Settings) — Xcode adds
    the HealthKit capability to the App ID automatically; App Review will
    expect the Apple Health toggle to be demonstrable, and the App Privacy
@@ -52,8 +54,9 @@ server**. You do not need the App Store to run it on your own iPhone:
 ## 2. App Store Connect record
 
 1. <https://appstoreconnect.apple.com> → My Apps → **+ New App**.
-2. Platform iOS · Name (must be globally unique — e.g. "HealMeDaily Personal
-   Record") · primary language · your bundle id · SKU (any string).
+2. Platform iOS · Name (must be globally unique — e.g. "HealMeNow") ·
+   primary language · your bundle id (`cloud.antriksh.healmenow`) · SKU
+   (any string).
 3. Category: **Medical** (or Health & Fitness). Age rating questionnaire:
    the medical/treatment question → "Infrequent/Mild Medical Information";
    everything else No.
@@ -82,16 +85,12 @@ In Xcode: Product ▸ Destination ▸ **Any iOS Device (arm64)** → Product ▸
 Upload. Xcode handles signing, the privacy manifest and the icon (both are
 already in the target).
 
-CLI alternative:
+CLI alternative (uses `ios/Signing.xcconfig` + `ios/ExportOptions.plist`,
+uploads directly to App Store Connect):
 
 ```bash
-cd ios
-xcodebuild -project HealMeDaily.xcodeproj -scheme HealMeDaily \
-  -destination 'generic/platform=iOS' -archivePath build/HealMeDaily.xcarchive \
-  archive DEVELOPMENT_TEAM=<YOUR_TEAM_ID>
-xcodebuild -exportArchive -archivePath build/HealMeDaily.xcarchive \
-  -exportOptionsPlist ExportOptions.plist -exportPath build/export
-xcrun altool --upload-app -f build/export/HealMeDaily.ipa ... # or use Transporter.app
+make ios-archive   # signed release archive -> ios/build/HealMeDaily.xcarchive
+make ios-upload    # export + upload to App Store Connect (destination: upload)
 ```
 
 ## 5. TestFlight (recommended stopping point)

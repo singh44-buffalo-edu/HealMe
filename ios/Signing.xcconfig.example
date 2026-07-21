@@ -1,0 +1,8 @@
+// Copy to Signing.xcconfig (gitignored) and fill in your team.
+// `make ios-project` seeds Signing.xcconfig from this file automatically.
+//
+// DEVELOPMENT_TEAM: Xcode ▸ Settings ▸ Accounts ▸ select team ▸ "Team ID"
+// (10 characters, e.g. AB12CD34EF). With it set, `make ios-archive` signs
+// automatically and Xcode device runs need no manual signing step —
+// and it survives `make ios-project` regenerating the .xcodeproj.
+DEVELOPMENT_TEAM =

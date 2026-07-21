@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- TestFlight/App Store export+upload options for `make ios-upload`.
+     method app-store-connect + destination upload sends the build straight
+     to App Store Connect using the Apple ID signed into Xcode (Settings ▸
+     Accounts). Automatic signing infers the team from Signing.xcconfig. -->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>upload</string>
+	<key>uploadSymbols</key>
+	<true/>
+</dict>
+</plist>

@@ -130,12 +130,14 @@ pi-test:
 
 # --- iOS app (SwiftUI, ios/) ---
 # ios-project regenerates the .xcodeproj from ios/project.yml (the project
-# file itself is gitignored — project.yml is the source of truth).
+# file itself is gitignored — project.yml is the source of truth) and seeds
+# Signing.xcconfig (gitignored, holds your DEVELOPMENT_TEAM) on first run.
 # ios-test runs the HealMeDailyKit unit tests natively on macOS (dose-engine
 # parity with the web frontend); ios-build compiles the full app for the
 # iOS simulator without code signing.
-.PHONY: ios-project ios-test ios-build
+.PHONY: ios-project ios-test ios-build ios-archive ios-upload
 ios-project:
+	@test -f ios/Signing.xcconfig || cp ios/Signing.xcconfig.example ios/Signing.xcconfig
 	cd ios && xcodegen generate
 
 ios-test:
@@ -145,3 +147,19 @@ ios-build: ios-project
 	cd ios && xcodebuild -project HealMeDaily.xcodeproj -scheme HealMeDaily \
 		-destination 'generic/platform=iOS Simulator' \
 		CODE_SIGNING_ALLOWED=NO build
+
+# TestFlight pipeline (APPSTORE.md). Requires DEVELOPMENT_TEAM in
+# ios/Signing.xcconfig and Xcode signed into the Apple Developer account.
+# ios-archive builds the signed release archive; ios-upload exports it and
+# uploads straight to App Store Connect (ExportOptions.plist: destination
+# upload). Bump MARKETING_VERSION/CURRENT_PROJECT_VERSION in ios/project.yml
+# before each upload.
+ios-archive: ios-project
+	cd ios && xcodebuild -project HealMeDaily.xcodeproj -scheme HealMeDaily \
+		-destination 'generic/platform=iOS' -archivePath build/HealMeDaily.xcarchive \
+		-allowProvisioningUpdates archive
+
+ios-upload:
+	cd ios && xcodebuild -exportArchive -archivePath build/HealMeDaily.xcarchive \
+		-exportOptionsPlist ExportOptions.plist -exportPath build/export \
+		-allowProvisioningUpdates

@@ -78,20 +78,32 @@ optional. C is listed for completeness; it trades away the reason this app is se
 
 ## Part 3 — Option A: Tailscale (access from anywhere, record stays home)
 
-1. Install Tailscale on the home machine and your phone/laptop (`brew install --cask tailscale`,
-   app stores for mobile). Sign both into the same tailnet.
+**This Mac's actual setup (2026-07-21, no-sudo variant):** the GUI app needs an
+admin password to install, so this machine runs the brew *formula* in
+userspace mode instead — functionally identical for inbound server traffic:
+
+- `brew install tailscale` (binaries only, no system extension)
+- daemon: `tailscaled --tun=userspace-networking
+  --statedir=~/.local/share/tailscaled
+  --socket=~/.local/share/tailscaled/tailscaled.sock`, kept alive by the
+  LaunchAgent `~/Library/LaunchAgents/io.tailscale.tailscaled-userspace.plist`
+- CLI needs the socket flag:
+  `tailscale --socket=$HOME/.local/share/tailscaled/tailscaled.sock <cmd>`
+  (alias: `alias ts='tailscale --socket=$HOME/.local/share/tailscaled/tailscaled.sock'`)
+- node hostname: `healmenow-mac`. (Switching to the Tailscale.app GUI later is
+  fine — install it, stop the LaunchAgent, sign in; same tailnet, same IP.)
+
+1. Sign the Mac into your tailnet (`ts up` prints a login URL) and install
+   the Tailscale app on the iPhone (App Store) with the same account.
 2. Run the normal prod stack locally: `make prod-up` (frontend :8080, ai-service :8000,
    Medplum :8103/:3000).
-3. Expose the frontend over HTTPS inside the tailnet only:
-   ```bash
-   tailscale serve --bg 8080          # https://<machine-name>.<tailnet>.ts.net → :8080
-   ```
-   For the API and ai-service, either serve them on paths/ports the same way, or (simpler)
-   rebuild the web image with `VITE_MEDPLUM_BASE_URL`/`VITE_AI_SERVICE_URL` pointing at
-   `https://<machine>.<tailnet>.ts.net:<port>` equivalents via `tailscale serve` mappings.
-4. On the phone: open the ts.net URL, install the PWA (Add to Home Screen). Done — WireGuard
-   encryption end-to-end, no public exposure, no DNS, no certificates to manage, record never
-   leaves the house.
+3. **iOS app**: point the sign-in server field at the Mac's tailnet IP —
+   `http://100.x.y.z:8103/` (find it with `ts ip -4`). Plain HTTP is fine
+   here: ATS exempts raw-IP URLs, and the tailnet link is WireGuard-encrypted
+   end-to-end anyway. The ai-service is reached the same way (`:8000`).
+4. **Web app on the phone (optional)**: serve over HTTPS inside the tailnet
+   (`ts serve --bg 8080` → `https://healmenow-mac.<tailnet>.ts.net`), or just
+   use the iOS app.
 
 Limitations: only devices in your tailnet can reach it (that's the point); clinician share links
 would need the clinician added as a tailnet guest or option B.

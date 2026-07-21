@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>HealMeDaily</string>
+	<string>HealMeNow</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -28,15 +28,15 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>HealMeDaily uses the camera to photograph medical documents (lab reports, prescriptions) so they can be added to your personal health record. Photos go only to your own self-hosted server.</string>
+	<string>HealMeNow uses the camera to photograph medical documents (lab reports, prescriptions) so they can be added to your personal health record. Photos go only to your own self-hosted server.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>HealMeDaily can require Face ID to open the app, keeping your health record private if someone else uses this phone.</string>
+	<string>HealMeNow can require Face ID to open the app, keeping your health record private if someone else uses this phone.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>HealMeDaily can read steps, heart rate, HRV, sleep, weight, blood pressure, oxygen saturation and body temperature from Apple Health — only if you turn the sync on — and stores them in your own self-hosted health record. Nothing is shared with anyone else.</string>
+	<string>HealMeNow can read steps, heart rate, HRV, sleep, weight, blood pressure, oxygen saturation and body temperature from Apple Health — only if you turn the sync on — and stores them in your own self-hosted health record. Nothing is shared with anyone else.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>HealMeDaily connects to your own Medplum health-record server on your local network.</string>
+	<string>HealMeNow connects to your own Medplum health-record server on your local network.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HealMeDaily lets you pick existing photos of medical documents to add to your personal health record on your own server.</string>
+	<string>HealMeNow lets you pick existing photos of medical documents to add to your personal health record on your own server.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
