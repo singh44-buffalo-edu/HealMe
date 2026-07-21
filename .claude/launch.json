@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
       "port": 5173
+    },
+    {
+      "name": "ai-service",
+      "runtimeExecutable": "ai-service/.venv/bin/uvicorn",
+      "runtimeArgs": ["app.main:app", "--app-dir", "ai-service", "--port", "8000"],
+      "port": 8000
     }
   ]
 }

@@ -65,6 +65,15 @@ services:
       timeout: 5s
       retries: 5
 
+  # One-shot: the medplum-binary volume must be writable by the server's
+  # uid 1000 (distroless image, no root shell to fix it from inside).
+  binary-init:
+    image: busybox:1.36
+    restart: 'no'
+    command: ['chown', '1000:1000', '/binary']
+    volumes:
+      - medplum-binary:/binary
+
   # Medplum server container
   medplum-server:
     image: medplum/medplum-server:5.1.26 # pinned (was :latest); bump deliberately per Upgrading-Server doc
@@ -74,6 +83,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      binary-init:
+        condition: service_completed_successfully
     ports:
       - '8103:8103'
     command: ['env']
@@ -93,9 +104,13 @@ services:
       MEDPLUM_REDIS_PORT: 6379
       MEDPLUM_REDIS_PASSWORD: 'medplum'
 
-      # File-based binary store INSIDE the container (uploaded PDFs/photos,
-      # generated review PDFs). backup.py tars this dir; note attachment URLs
-      # are rewritten to presigned /storage/ links on read (CLAUDE.md §9).
+      # File-based binary store (uploaded PDFs/photos, generated review PDFs,
+      # AND deployed bot code). Backed by the medplum-binary named volume
+      # below — without it the store lives in the container's writable layer
+      # and every `make down` silently destroys bot code + documents
+      # (observed 2026-07-21: bots failed "File not found" after a container
+      # recreate). backup.py tars this dir; note attachment URLs are
+      # rewritten to presigned /storage/ links on read (CLAUDE.md §9).
       MEDPLUM_BINARY_STORAGE: 'file:./binary/'
       MEDPLUM_SUPPORT_EMAIL: '\"Medplum\" <support@medplum.com>'
       # Google login + recaptcha intentionally disabled for this private single-user
@@ -122,6 +137,11 @@ services:
       # API exactly once, so set it to 'true' (or comment it out) for the
       # one-time `make bootstrap`, then back to 'false' and re-up.
       MEDPLUM_REGISTER_ENABLED: 'false'
+
+    volumes:
+      # Binary storage must outlive the container (workdir is
+      # /usr/src/medplum, so file:./binary/ resolves here).
+      - medplum-binary:/usr/src/medplum/binary
 
     healthcheck:
       test:
@@ -153,3 +173,4 @@ services:
 
 volumes:
   medplum-postgres-data:
+  medplum-binary:

@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from . import fhir_consts as fc
-from .medplum import MedplumFhirClient
+from .medplum import MedplumError, MedplumFhirClient
 from .pdfgen import markdown_to_pdf
 
 SYSTEM_PROMPT = f"""You are a health-data summarizer preparing notes to help a person discuss
@@ -392,31 +392,36 @@ def run_health_review(medplum: MedplumFhirClient, window_days: int, patient_id: 
 
 
 def latest_review(medplum: MedplumFhirClient) -> dict[str, Any] | None:
-    """Newest `health-review` DocumentReference with its markdown body, or
-    None. Uses medplum.read_attachment because Attachment.url comes back as a
-    presigned /storage URL (see medplum.py)."""
+    """Newest *readable* `health-review` DocumentReference with its markdown
+    body, or None. Uses medplum.read_attachment because Attachment.url comes
+    back as a presigned /storage URL (see medplum.py). A document whose
+    binary content no longer exists (e.g. the pre-volume binary-storage wipe,
+    infra/docker-compose.yml) is skipped — a stale reference must not brick
+    the endpoint."""
     docs = medplum.search_resources(
         "DocumentReference",
-        {"type": f"{fc.CS_DOC}|health-review", "_sort": "-date", "_count": 1},
+        {"type": f"{fc.CS_DOC}|health-review", "_sort": "-date", "_count": 10},
     )
-    if not docs:
-        return None
-    doc = docs[0]
-    md_url = next(
-        (
-            c["attachment"]["url"]
-            for c in doc.get("content", [])
-            if c["attachment"].get("contentType") == "text/markdown"
-        ),
-        None,
-    )
-    markdown = medplum.read_attachment(md_url).decode() if md_url else ""
-    return {
-        "document_reference_id": doc["id"],
-        "generated_at": doc.get("date"),
-        "description": doc.get("description", ""),
-        "markdown": markdown,
-    }
+    for doc in docs:
+        md_url = next(
+            (
+                c["attachment"]["url"]
+                for c in doc.get("content", [])
+                if c["attachment"].get("contentType") == "text/markdown"
+            ),
+            None,
+        )
+        try:
+            markdown = medplum.read_attachment(md_url).decode() if md_url else ""
+        except MedplumError:
+            continue
+        return {
+            "document_reference_id": doc["id"],
+            "generated_at": doc.get("date"),
+            "description": doc.get("description", ""),
+            "markdown": markdown,
+        }
+    return None
 
 
 def review_pdf(medplum: MedplumFhirClient, doc_id: str) -> bytes:

@@ -328,7 +328,20 @@ def ensure_service_access_policy(base: str, token: str, client_id: str) -> None:
     policy = {
         "resourceType": "AccessPolicy",
         "name": SERVICE_POLICY_NAME,
-        "resource": SERVICE_POLICY_RESOURCES,
+        "resource": SERVICE_POLICY_RESOURCES
+        + [
+            # The service's OWN ClientApplication, read-only: Medplum's
+            # oauth2/userinfo (what the ai-service auth gate verifies tokens
+            # against) reads the caller's profile resource, and for a
+            # client-credentials session that profile IS this
+            # ClientApplication. Without it userinfo returns 403 and every
+            # token-forwarding caller gets a bogus "sign in again".
+            {
+                "resourceType": "ClientApplication",
+                "readonly": True,
+                "criteria": f"ClientApplication?_id={client_id}",
+            }
+        ],
     }
     bundle = fhir_get(
         base, token, "AccessPolicy", {"name": SERVICE_POLICY_NAME, "_count": 5}
