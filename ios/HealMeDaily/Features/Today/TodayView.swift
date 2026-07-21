@@ -69,6 +69,8 @@ struct TodayView: View {
 
                     checkinsCard
 
+                    feelingCard
+
                     if !followUps.isEmpty {
                         followUpsCard
                     }
@@ -496,6 +498,17 @@ struct TodayView: View {
                         .font(.ui(11, weight: .semibold))
                 }
                 .foregroundStyle(T.green)
+            }
+        }
+    }
+
+    // MARK: - Momentary feeling (one quiet row — the dose panel stays the star)
+
+    private var feelingCard: some View {
+        DsCard {
+            Eyebrow(text: "Right now")
+            PillButton(title: "How are you feeling right now?", variant: .secondary) {
+                model.showFeelingCapture = true
             }
         }
     }

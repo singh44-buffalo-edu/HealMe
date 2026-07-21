@@ -47,8 +47,12 @@
 	<string>HealMeNow does not write data to Apple Health. This permission is never requested; the description exists only because Apple requires it for any app that links HealthKit.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>HealMeNow connects to your own Medplum health-record server on your local network.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>HealMeNow uses the microphone only while you dictate a feeling check-in note. Audio is transcribed on this iPhone and never recorded, stored, or sent anywhere.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>HealMeNow lets you pick existing photos of medical documents to add to your personal health record on your own server.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>HealMeNow transcribes dictated feeling check-ins using on-device speech recognition only — your voice and transcript never leave this iPhone. If on-device recognition is unavailable, dictation is disabled rather than sent to a server.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

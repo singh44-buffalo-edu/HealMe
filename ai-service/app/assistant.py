@@ -17,6 +17,12 @@ review queue as document ingestion (ingest.py): raw text Binary +
 DocumentReference (local type `nl-capture`) + one proposal Binary + review
 Task per candidate. Nothing commits until the owner approves — the review-gate
 invariant of CLAUDE.md §6 holds here too.
+
+POST /assistant/parse-feeling structures a momentary "How am I feeling right
+now?" transcript (FHIR-MAPPING §4) into mood/energy/tags/note for the client's
+confirmation screen. Parse-only: it writes NOTHING to the CDR except the
+cloud-boundary AuditEvent — the user confirms the parsed values on screen and
+the client performs the Observation writes (the human-in-the-loop gate).
 """
 
 from __future__ import annotations
@@ -585,3 +591,136 @@ def nl_import(body: NlImportRequest) -> dict[str, Any]:
     if not text:
         raise HTTPException(status_code=400, detail="text must not be blank")
     return _wrap(_nl_import, text)
+
+
+# --- POST /assistant/parse-feeling ---------------------------------------------------
+
+
+FEELING_SYSTEM = """You structure one short "How am I feeling right now?" transcript (typed or dictated)
+into fields the owner will confirm on a screen before anything is saved. You extract ONLY —
+never diagnose, never interpret, never advise, never add anything the transcript does not say. Rules:
+
+- mood: an integer 1-10 ONLY when the speaker states a mood level or clearly implies one
+  ("terrible, maybe a three" → 3; "mood's a solid eight" → 8). Anything vaguer → null.
+  Never infer a number from tone or word choice alone.
+- energy: same rule for stated/clearly implied energy level; null otherwise.
+- tags: short symptom/context words or phrases that literally appear in the transcript
+  (e.g. "headache", "tired", "anxious", "after workout"). Never add a tag for anything
+  the transcript does not mention. No tags → empty array.
+- note: the transcript lightly cleaned — dictation filler ("um", "uh", false starts) removed,
+  punctuation/casing fixed. Same content in the speaker's own words; nothing added,
+  nothing reworded, nothing dropped.
+- confidence: "high" | "medium" | "low" — your honest confidence that mood/energy/tags
+  faithfully reflect what was actually said.
+The output is data for a confirmation screen only — no advice, no conclusions, no diagnoses.
+"""
+
+# mood/energy are optional (omit or null when not stated) rather than union-typed:
+# every adapter's structured-output mode accepts this shape (Gemini's responseSchema
+# rejects JSON-schema type arrays).
+FEELING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "mood": {"type": "integer", "description": "1-10, only when stated or clearly implied; omit/null otherwise"},
+        "energy": {"type": "integer", "description": "1-10, only when stated or clearly implied; omit/null otherwise"},
+        "tags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "short symptom/context words present verbatim in the transcript",
+        },
+        "note": {"type": "string", "description": "the transcript, lightly cleaned — content unchanged"},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+    },
+    "required": ["tags", "note", "confidence"],
+    "additionalProperties": False,
+}
+
+MAX_FEELING_TAGS = 10
+
+
+class ParseFeelingRequest(BaseModel):
+    transcript: str = Field(min_length=1, max_length=2000)
+
+
+def _clamp_scale(value: Any) -> int | None:
+    """1-10 int or None — never trust the model's typing. Numeric strings/floats
+    are rounded then clamped; anything non-numeric (or a bool) is null, never a
+    guess."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(1, min(10, round(number)))
+
+
+def _grounded_tags(tags: Any, transcript: str) -> list[str]:
+    """Server-authoritative grounding, same spirit as /ask's citation check: a
+    tag survives only if it literally appears in the transcript (case-
+    insensitive) — an invented symptom can never reach the confirmation
+    screen. Deduped, length-capped, at most MAX_FEELING_TAGS."""
+    lowered = transcript.lower()
+    out: list[str] = []
+    seen: set[str] = set()
+    for tag in tags if isinstance(tags, list) else []:
+        if not isinstance(tag, str):
+            continue
+        cleaned = tag.strip().lower()
+        if not cleaned or len(cleaned) > 40 or cleaned in seen or cleaned not in lowered:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+        if len(out) >= MAX_FEELING_TAGS:
+            break
+    return out
+
+
+def _parse_feeling(transcript: str) -> dict[str, Any]:
+    """Core parse flow: route the 'feeling' feature → boundary ledger (cloud
+    only, BEFORE the call) → structured model call → server-side clamping and
+    tag grounding. Parse-only: the sole write is the cloud-boundary AuditEvent;
+    the client shows the ✦ AI-labeled values for confirmation and performs the
+    Observation writes itself (FHIR-MAPPING §4)."""
+    provider = get_provider_for("feeling")  # ProviderNotConfigured → 503 before any read or send
+    if not provider.is_local:
+        # Boundary ledger: written BEFORE the transcript leaves this device.
+        log_boundary_event(
+            medplum,
+            "feeling",
+            provider.name,
+            f"Momentary feeling parse · {len(transcript)} chars",
+            endpoint_host=provider.endpoint_host,
+        )
+
+    result = provider.generate_json(FEELING_SYSTEM, f"Transcript:\n{transcript}", FEELING_SCHEMA)
+
+    confidence = str(result.get("confidence") or "").strip().lower()
+    if confidence not in ("high", "medium", "low"):
+        confidence = "low"
+    return {
+        "mood": _clamp_scale(result.get("mood")),
+        "energy": _clamp_scale(result.get("energy")),
+        "tags": _grounded_tags(result.get("tags"), transcript),
+        # An empty cleaned note falls back to the raw transcript — the user
+        # always sees (and confirms) real text, never a blank.
+        "note": str(result.get("note") or "").strip() or transcript,
+        "provider": provider.name,
+        "model": provider.model,
+        "confidence": confidence,
+    }
+
+
+@router.post("/parse-feeling")
+def parse_feeling(body: ParseFeelingRequest) -> dict[str, Any]:
+    """Parse a momentary "How am I feeling right now?" transcript into
+    {mood, energy, tags, note} + provider/model/confidence for the client's
+    confirmation screen. Extraction only — mood/energy are null unless actually
+    stated, tags must appear verbatim in the transcript, and nothing is ever
+    written to the record here (the confirmed values are written by the client,
+    tagged `feeling-now` + `ai-parsed`, FHIR-MAPPING §4). 503 when the
+    'feeling' feature is off/unconfigured."""
+    transcript = body.transcript.strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="transcript must not be blank")
+    return _wrap(_parse_feeling, transcript)

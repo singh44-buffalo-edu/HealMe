@@ -127,6 +127,59 @@ final class AIServiceTests: XCTestCase {
         XCTAssertNil(json["cloud_provider"], "cloud_provider omitted ⇒ absent")
     }
 
+    func testParseFeelingPostsTranscriptAndDecodesParse() async throws {
+        var seenAuth: String?
+        var seenMethod: String?
+        var seenPath: String?
+        var seenBody: Data?
+        StubURLProtocol.handler = { request in
+            seenAuth = request.value(forHTTPHeaderField: "Authorization")
+            seenMethod = request.httpMethod
+            seenPath = request.url?.path
+            seenBody = self.bodyData(request)
+            let body = Data("""
+            {"mood": 3, "energy": null, "tags": ["headache", "tired"],
+             "note": "Feeling rough, maybe a three. Headache and tired.",
+             "provider": "ollama", "model": "llama3", "confidence": "high"}
+            """.utf8)
+            return (200, body, [:])
+        }
+        let service = makeService()
+        let parse = try await service.parseFeeling(transcript: "um feeling rough maybe a three headache tired")
+
+        XCTAssertEqual(seenAuth, "Bearer test-token")
+        XCTAssertEqual(seenMethod, "POST")
+        XCTAssertEqual(seenPath, "/assistant/parse-feeling")
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: seenBody ?? Data()) as? [String: Any]
+        )
+        XCTAssertEqual(json["transcript"] as? String, "um feeling rough maybe a three headache tired")
+
+        XCTAssertEqual(parse.mood, 3)
+        XCTAssertNil(parse.energy, "unstated energy must decode as nil, never a guess")
+        XCTAssertEqual(parse.tags, ["headache", "tired"])
+        XCTAssertEqual(parse.confidence, "high")
+        XCTAssertEqual(parse.provider, "ollama")
+    }
+
+    func testParseFeelingSurfacesConfigureProviderStateAs503() async {
+        // 503 is the server's ProviderNotConfigured — the UI keys its
+        // "configure a provider" state off this status + detail.
+        StubURLProtocol.handler = { _ in
+            (503, Data(#"{"detail":"AI is turned off for 'feeling' — enable it in AI Settings"}"#.utf8), [:])
+        }
+        let service = makeService()
+        do {
+            _ = try await service.parseFeeling(transcript: "hello")
+            XCTFail("expected ServiceError.http")
+        } catch let AIService.ServiceError.http(status, detail) {
+            XCTAssertEqual(status, 503)
+            XCTAssertTrue(detail.contains("enable it in AI Settings"))
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
     func testUpdateAiSettingsSendsCloudProvider() async throws {
         var seenBody: Data?
         StubURLProtocol.handler = { request in

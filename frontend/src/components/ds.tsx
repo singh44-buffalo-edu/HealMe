@@ -367,6 +367,60 @@ export function FilterChips<V extends string>({
   );
 }
 
+/**
+ * Numeric scale as one-tap pills (momentary check-in, quick capture). An
+ * undefined value = "not stated" — a real state, distinct from any number;
+ * `clearable` lets a tap on the active pill return there (optional scales
+ * must be able to un-answer). Numbers render mono (data voice); the active
+ * pill lifts to ink like FilterChips' active state.
+ */
+export function ScalePills({
+  value,
+  onChange,
+  min = 1,
+  max = 10,
+  clearable = false,
+}: {
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+  min?: number;
+  max?: number;
+  clearable?: boolean;
+}) {
+  const nums: number[] = [];
+  for (let n = min; n <= max; n++) {
+    nums.push(n);
+  }
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      {nums.map((n) => {
+        const active = n === value;
+        return (
+          <button
+            key={n}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(active ? (clearable ? undefined : n) : n)}
+            style={{
+              border: 'none',
+              cursor: 'pointer',
+              ...mono(11.5, 500, active ? '#ffffff' : T.secondary),
+              background: active ? T.ink : T.band,
+              borderRadius: 10,
+              minWidth: 32,
+              minHeight: 30,
+              padding: '6px 0',
+              textAlign: 'center',
+            }}
+          >
+            {n}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export type PillButtonVariant =
   | 'primary' // green
   | 'ink'

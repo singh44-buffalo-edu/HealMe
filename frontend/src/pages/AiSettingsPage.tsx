@@ -19,6 +19,10 @@
  * unconfigured it renders as "not configured", never disappears (owner
  * decision, CLAUDE.md §8). "Off" is a real state: the feature does nothing.
  *
+ * Also hosts the one client-local (non-AI) preference: the "Feeling
+ * check-ins" cadence card at the bottom — localStorage only, see
+ * FeelingCadenceCard below and ../feeling.ts.
+ *
  * BOUNDARY COPY RULES (CLAUDE.md §2/§6): anything cloud is amber and names
  * the recipient — the route segment's "☁ your key", the per-row note
  * "☁ <Provider> · leaves this machine", and the footer reminder that every
@@ -33,7 +37,9 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import type { AiFeature, AiProviderInfo, AiRoute, AiSettings, AiTestResult } from '../api';
 import { deleteAiKey, getAiSettings, putAiSettings, setAiKey, testAiProvider } from '../api';
-import { AIPill, CardTitle, DsCard, PageHeader, PillButton, StatusDot } from '../components/ds';
+import { AIPill, CardTitle, DsCard, PageHeader, PillButton, SegmentedPills, StatusDot } from '../components/ds';
+import type { FeelingCadence } from '../feeling';
+import { loadFeelingCadence, saveFeelingCadence } from '../feeling';
 import { T, mono } from '../tokens';
 
 // ---------------------------------------------------------------------------
@@ -49,12 +55,14 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 const label = (name: string) => PROVIDER_LABEL[name] ?? name;
 
-/** The four routable features — human words on the surface, slugs on the wire. */
+/** The routable features — human words on the surface, slugs on the wire
+ * (mirror of ai-service ai_settings.py FEATURES). */
 const FEATURES: { slug: AiFeature; name: string; scope: string }[] = [
   { slug: 'health-review', name: 'Health review', scope: 'visit prep · narrative summary of your record' },
   { slug: 'ingest-extraction', name: 'Document extraction', scope: 'scans and photos → values' },
   { slug: 'assistant', name: 'Assistant', scope: 'reads your record, never writes' },
   { slug: 'nl-import', name: 'Quick capture', scope: 'plain sentences → entries for your review' },
+  { slug: 'feeling', name: 'Feeling parse', scope: 'dictated check-in → mood / energy, you confirm' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -203,6 +211,55 @@ function RouteSegment({
         );
       })}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feeling check-in cadence (client-local preference, NOT an AI setting)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Feeling check-ins" — how often the Overview shows the momentary
+ * "How am I feeling right now?" due-card (FHIR-MAPPING §4). Deliberately
+ * CLIENT-LOCAL (localStorage via feeling.ts): cadence reminders create no
+ * server resources and never touch the record, so this lives on the settings
+ * surface but persists on this device only. Off is the default — prompting
+ * is opt-in.
+ */
+function FeelingCadenceCard() {
+  const [cadence, setCadence] = useState<FeelingCadence>(loadFeelingCadence);
+  const pick = (c: FeelingCadence) => {
+    setCadence(c);
+    saveFeelingCadence(c);
+  };
+  return (
+    <DsCard padding="20px 24px" gap={12}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <CardTitle>Feeling check-ins</CardTitle>
+        <span style={mono(10, 400, T.quaternary)}>
+          "How am I feeling right now?" · dashboard prompt
+        </span>
+      </div>
+      <SegmentedPills<FeelingCadence>
+        options={[
+          { value: 'off', label: 'off' },
+          { value: '2x', label: '2× / day' },
+          { value: '3x', label: '3× / day' },
+          { value: '4x', label: '4× / day' },
+        ]}
+        value={cadence}
+        onChange={pick}
+      />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span style={{ paddingTop: 3 }}>
+          <StatusDot color={T.inRange} size={6} />
+        </span>
+        <span style={{ ...mono(10.5, 400, T.tertiary), lineHeight: 1.6 }}>
+          shows a DUE card on the dashboard when the current window has no entry · stored on this
+          device only, never in your record · off hides the card
+        </span>
+      </div>
+    </DsCard>
   );
 }
 
@@ -835,6 +892,9 @@ export function AiSettingsPage() {
           </span>
         </div>
       </DsCard>
+
+      {/* ---------------------------------------------- check-in prompt cadence */}
+      <FeelingCadenceCard />
     </div>
   );
 }

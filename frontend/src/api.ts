@@ -277,8 +277,10 @@ export const rejectTask = (taskId: string) =>
 /** Per-feature routing choice: 'local' = Ollama, data stays home (green) ·
  * 'cloud' = data leaves this machine (always disclosed, amber) · 'off'. */
 export type AiRoute = 'local' | 'cloud' | 'off';
-/** The four independently routable AI features (CLAUDE.md §7 phase 7). */
-export type AiFeature = 'health-review' | 'ingest-extraction' | 'assistant' | 'nl-import';
+/** The independently routable AI features (mirror of ai-service
+ * ai_settings.py FEATURES — the two must match). 'feeling' is the momentary
+ * check-in transcript parse (FHIR-MAPPING §4). */
+export type AiFeature = 'health-review' | 'ingest-extraction' | 'assistant' | 'nl-import' | 'feeling';
 
 /** Provider adapter status; `masked_key` is all the client ever sees of a
  * stored key — full keys never leave the keystore. */
@@ -404,3 +406,30 @@ export const nlImport = (text: string) =>
     'assistant/nl-import',
     json({ text })
   );
+
+/** POST /assistant/parse-feeling reply (assistant.py). mood/energy are null
+ * unless the transcript actually STATED them (the server clamps to 1–10 and
+ * never guesses); `tags` are grounded verbatim in the transcript server-side
+ * and are display context only — never saved as coded data; `note` is the
+ * transcript lightly cleaned (content unchanged). These are PROPOSALS only:
+ * the UI pre-fills its controls with the ✦ AI label + confidence and the
+ * user must press Save themselves (human-in-the-loop — nothing from this
+ * response is ever written directly). */
+export interface ParsedFeeling {
+  mood: number | null;
+  energy: number | null;
+  tags: string[];
+  note: string;
+  provider?: string;
+  model?: string;
+  /** The model's own categorical confidence — shown beside the ✦ AI label. */
+  confidence: 'high' | 'medium' | 'low';
+}
+
+/** Parse a dictated/typed feeling note into mood/energy (1–10) + tags. Reads
+ * the note text only — never the record; parse-only server-side (its sole
+ * write is the cloud-boundary AuditEvent). Fails with a 503-shaped detail
+ * when the 'feeling' route is off/unconfigured; callers show the "configure
+ * a provider" state for that, never the raw error. */
+export const parseFeeling = (transcript: string) =>
+  request<ParsedFeeling>('assistant/parse-feeling', json({ transcript }));

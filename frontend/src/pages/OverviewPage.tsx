@@ -22,6 +22,8 @@
  * - MedicationRequest + Medication + cartridge Devices via loadMeds().
  * - MedicationAdministration via loadAdmins(30) — last 30 days of dose logs.
  * - QuestionnaireResponse _sort=-authored _count=1 — the latest check-in.
+ * - (via FeelingNowCard) Observation code=mood _tag=feeling-now _count=1 —
+ *   the momentary-check due card manages its own tiny query (FHIR-MAPPING §4).
  *
  * Derived-state rules shared with AdherencePage (medical-safety semantics):
  * - A dose slot with no MedicationAdministration is computed live as
@@ -56,6 +58,7 @@ import {
   YAxis,
 } from 'recharts';
 import { CardTitle, DsCard, PageHeader, Sparkline, StatusDot, StatusStrip, TableRow } from '../components/ds';
+import { FeelingNowCard } from '../components/FeelingNow';
 import {
   CS_OBS,
   LOINC,
@@ -312,6 +315,11 @@ export function OverviewPage() {
             : undefined
         }
       />
+
+      {/* Momentary feeling due-card (FHIR-MAPPING §4). Self-contained: its own
+          bounded last-entry query + client-local cadence; renders nothing while
+          the "Feeling check-ins" preference (settings page) is off. */}
+      <FeelingNowCard />
 
       <div
         style={{

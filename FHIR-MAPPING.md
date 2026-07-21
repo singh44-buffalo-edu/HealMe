@@ -121,6 +121,26 @@ Do not configure SDC template extraction for the same form; this project uses th
 - Symptoms use an Observation for a reported event/severity. Create a Condition only when the source represents an enduring diagnosis/problem.
 - Medication-related symptoms may use `Observation.focus` to reference a Medication or MedicationRequest when the relationship is user/source asserted. The system does not infer causality.
 
+### Momentary feeling checks ("How am I feeling right now?", added 2026-07-21)
+
+- A momentary check is one or two **quick Observations** (existing local codes
+  `mood` and, when stated, `energy`) with `effectiveDateTime` = the moment of
+  capture and the existing `quick-observation` identifier (client event UUID) —
+  they join the same series the daily check-in feeds, so trends need no new
+  read model.
+- Every momentary entry carries `meta.tag` `feeling-now` ("Momentary check-in",
+  project tags system) to distinguish cadence-prompted spot checks from the
+  daily questionnaire without forking the code.
+- Free text (typed or voice transcript) rides in `Observation.note`. When the
+  numeric values were parsed from a transcript by an AI provider the entry also
+  carries `meta.tag` `ai-parsed` ("AI-parsed from dictation") and MUST render
+  with the ✦ AI label; the user confirms parsed values on screen before any
+  write (the human-in-the-loop gate — nothing auto-commits). Voice audio itself
+  is never stored; iOS transcription is on-device.
+- Cadence reminders are client-local (iOS `UNUserNotificationCenter`, web
+  due-card) — no new server resources; the Phase 9 reminders-runner remains
+  dose-only.
+
 ## 5. Cartridge and future hardware model
 
 FHIR R4 `Device` does not contain a native Medication reference. The proposed mapping therefore uses one narrow extension:

@@ -31,7 +31,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.antriksh.healmenow
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "2"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1" # iPhone (the design handoff is phone-first)
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -83,6 +83,15 @@ targets:
         NSFaceIDUsageDescription: >-
           HealMeNow can require Face ID to open the app, keeping your
           health record private if someone else uses this phone.
+        NSMicrophoneUsageDescription: >-
+          HealMeNow uses the microphone only while you dictate a feeling
+          check-in note. Audio is transcribed on this iPhone and never
+          recorded, stored, or sent anywhere.
+        NSSpeechRecognitionUsageDescription: >-
+          HealMeNow transcribes dictated feeling check-ins using on-device
+          speech recognition only — your voice and transcript never leave
+          this iPhone. If on-device recognition is unavailable, dictation is
+          disabled rather than sent to a server.
         NSLocalNetworkUsageDescription: >-
           HealMeNow connects to your own Medplum health-record server on
           your local network.

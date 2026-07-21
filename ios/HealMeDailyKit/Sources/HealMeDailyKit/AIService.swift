@@ -208,6 +208,20 @@ public struct AIService: Sendable {
         public var note: String?
     }
 
+    /// POST /assistant/parse-feeling reply. mood/energy are nil unless the
+    /// transcript actually stated them (server clamps to 1–10, grounds every
+    /// tag verbatim in the transcript). `confidence` is the model's own
+    /// "high" | "medium" | "low" and must be shown beside the ✦ AI label.
+    public struct FeelingParse: Codable, Sendable {
+        public var mood: Int?
+        public var energy: Int?
+        public var tags: [String]
+        public var note: String
+        public var provider: String?
+        public var model: String?
+        public var confidence: String
+    }
+
     // MARK: Endpoints
 
     /// Liveness + config probe: is the service up, can it reach Medplum, and
@@ -373,6 +387,16 @@ public struct AIService: Sendable {
     /// as document ingestion, never a direct commit.
     public func nlImport(text: String) async throws -> NlImportResult {
         try await post("assistant/nl-import", json: ["text": text])
+    }
+
+    /// Parse a momentary "How am I feeling right now?" transcript into
+    /// {mood, energy, tags, note, confidence} for the confirmation screen.
+    /// Parse-only server-side: nothing is written to the record here — the
+    /// client shows the values ✦ AI-labeled and the user must tap Save
+    /// (human-in-the-loop, FHIR-MAPPING §4). 503 = the 'feeling' feature is
+    /// off/unconfigured — the caller shows the "configure a provider" state.
+    public func parseFeeling(transcript: String) async throws -> FeelingParse {
+        try await post("assistant/parse-feeling", json: ["transcript": transcript])
     }
 
     // MARK: Internals

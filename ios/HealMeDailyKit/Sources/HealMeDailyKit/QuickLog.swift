@@ -77,6 +77,65 @@ public enum QuickLog {
         }
     }
 
+    // MARK: Momentary feeling ("How am I feeling right now?", FHIR-MAPPING §4)
+
+    /// One momentary feeling check → one or two quick Observations using the
+    /// SAME local codes/displays as the daily check-in (`mood` + optional
+    /// `energy`), so momentary entries join the existing trend series with no
+    /// new read model. Additions over `moodEnergy`:
+    ///
+    /// - Every entry carries `meta.tag` `feeling-now` ("Momentary check-in",
+    ///   project tags system).
+    /// - `moodAiParsed` / `energyAiParsed`: true ⇒ that entry ALSO carries
+    ///   `meta.tag` `ai-parsed` ("AI-parsed from dictation") and must render
+    ///   ✦ AI-labeled. THE RULE: the tag marks a value the user confirmed
+    ///   UNEDITED from the AI parse — if the user manually edits a prefilled
+    ///   value, the caller passes false and the tag is dropped, because the
+    ///   saved number is then the user's own assertion, not the AI's.
+    /// - Free text (typed or voice transcript) rides in `Observation.note`
+    ///   on the mood entry. Voice audio itself is never stored.
+    ///
+    /// `when` is the moment of capture — "right now" is the point, so the
+    /// UI deliberately offers no backdating here.
+    public static func feelingNow(
+        mood: Int,
+        energy: Int? = nil,
+        note: String? = nil,
+        moodAiParsed: Bool = false,
+        energyAiParsed: Bool = false,
+        when: Date = Date()
+    ) throws -> [FHIRObservation] {
+        guard (1 ... 10).contains(mood) else { throw ValidationError("Mood must be 1–10") }
+        if let energy, !(1 ... 10).contains(energy) { throw ValidationError("Energy must be 1–10") }
+
+        var observations = [feelingObservation(code: "mood", value: mood, aiParsed: moodAiParsed, when: when)]
+        if let energy {
+            observations.append(feelingObservation(code: "energy", value: energy, aiParsed: energyAiParsed, when: when))
+        }
+        if let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+            observations[0].note = [Annotation(text: trimmed)]
+        }
+        return observations
+    }
+
+    /// Shared shape with `moodEnergy` (same code/display/category/value slot)
+    /// plus the feeling-now / ai-parsed meta tags.
+    private static func feelingObservation(code: String, value: Int, aiParsed: Bool, when: Date) -> FHIRObservation {
+        var tags = [Coding(system: FHIR.tagsSystem, code: FHIR.tagFeelingNow, display: "Momentary check-in")]
+        if aiParsed {
+            tags.append(Coding(system: FHIR.tagsSystem, code: FHIR.tagAiParsed, display: "AI-parsed from dictation"))
+        }
+        var observation = FHIRObservation(
+            status: "final",
+            category: surveyCategory(),
+            code: CodeableConcept(coding: [Coding(system: FHIR.csObservation, code: code, display: "\(code) (1-10)")]),
+            effectiveDateTime: RecordAPI.isoInstant(when),
+            valueInteger: value
+        )
+        observation.meta = Meta(tag: tags)
+        return observation
+    }
+
     // MARK: Symptom
 
     /// Free-text symptom/side effect — an FHIRObservation, not a Condition; any

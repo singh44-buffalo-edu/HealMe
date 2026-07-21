@@ -453,3 +453,137 @@ def test_nl_import_unconfigured_provider_returns_503_and_writes_nothing(client, 
     assert resp.status_code == 503
     assert fake.created == []
     assert fake.binaries == []
+
+
+# --- POST /assistant/parse-feeling ---------------------------------------------------
+
+
+def _feeling_result(**overrides) -> dict:
+    result = {
+        "mood": 3,
+        "energy": 5,
+        "tags": ["headache", "tired", "dizziness"],
+        "note": "Feeling terrible, maybe a three. Headache and pretty tired, energy about a five.",
+        "confidence": "high",
+    }
+    result.update(overrides)
+    return result
+
+
+def test_parse_feeling_happy_path_cloud(client, fake, monkeypatch):
+    provider = FakeProvider(_feeling_result(), medplum=fake)
+    features = _install_provider(monkeypatch, provider)
+
+    transcript = "um, feeling terrible, maybe a three. headache and pretty tired, energy about a five"
+    resp = client.post("/assistant/parse-feeling", json={"transcript": transcript})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert features == ["feeling"]
+    assert body["mood"] == 3
+    assert body["energy"] == 5
+    # "dizziness" is nowhere in the transcript → server-side grounding drops it
+    # (invented tags never reach the confirmation screen).
+    assert body["tags"] == ["headache", "tired"]
+    assert body["note"] == "Feeling terrible, maybe a three. Headache and pretty tired, energy about a five."
+    assert body["provider"] == "anthropic"
+    assert body["model"] == "test-model"
+    assert body["confidence"] == "high"
+
+    # Boundary AuditEvent written BEFORE the transcript left the device,
+    # standard ledger coding + description format.
+    assert provider.audit_events_at_call is not None
+    assert len(provider.audit_events_at_call) == 1
+    events = _created(fake, "AuditEvent")
+    assert len(events) == 1
+    assert events[0]["type"]["code"] == "cloud-egress"
+    assert events[0]["subtype"] == [{"system": fc.CS_AUDIT, "code": "feeling"}]
+    assert events[0]["entity"][0]["description"] == "AI request · feeling → anthropic · data left this device"
+
+    # Parse-only endpoint: no clinical resource is ever written here — the
+    # client confirms on screen and performs the Observation writes itself.
+    assert {r["resourceType"] for r in fake.created} == {"AuditEvent"}
+    assert fake.binaries == []
+
+    # The transcript reached the model with the feeling schema.
+    assert transcript in provider.calls[0]["user_content"]
+    assert provider.calls[0]["schema"] == assistant.FEELING_SCHEMA
+
+
+def test_parse_feeling_null_values_local_provider(client, fake, monkeypatch):
+    provider = FakeProvider(
+        _feeling_result(mood=None, energy=None, tags=[], note="Just checking in.", confidence="low"),
+        name="ollama",
+        is_local=True,
+        medplum=fake,
+    )
+    _install_provider(monkeypatch, provider)
+    resp = client.post("/assistant/parse-feeling", json={"transcript": "just checking in"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["mood"] is None
+    assert body["energy"] is None
+    assert body["tags"] == []
+    assert body["note"] == "Just checking in."
+    assert body["provider"] == "ollama"
+    assert body["confidence"] == "low"
+    assert fake.created == []  # local route: no boundary event, no writes at all
+
+
+def test_parse_feeling_clamps_and_coerces(client, fake, monkeypatch):
+    # Out-of-scale ints clamp into 1-10; an absent/empty note falls back to the
+    # raw transcript; an unknown confidence degrades to "low".
+    provider = FakeProvider(
+        _feeling_result(mood=15, energy=0, tags=["tired"], note="", confidence="banana"),
+        name="ollama",
+        is_local=True,
+        medplum=fake,
+    )
+    _install_provider(monkeypatch, provider)
+    body = client.post("/assistant/parse-feeling", json={"transcript": "so tired"}).json()
+    assert body["mood"] == 10
+    assert body["energy"] == 1
+    assert body["note"] == "so tired"
+    assert body["confidence"] == "low"
+
+    # Numeric strings/floats round then clamp; non-numeric junk → null, never a guess.
+    provider = FakeProvider(
+        _feeling_result(mood="7.6", energy="unknown", tags=[]), name="ollama", is_local=True, medplum=fake
+    )
+    _install_provider(monkeypatch, provider)
+    body = client.post("/assistant/parse-feeling", json={"transcript": "mood seven point six ish"}).json()
+    assert body["mood"] == 8
+    assert body["energy"] is None
+
+
+def test_parse_feeling_validates_transcript(client, fake, monkeypatch):
+    _install_provider(monkeypatch, FakeProvider({}))
+    assert client.post("/assistant/parse-feeling", json={"transcript": ""}).status_code == 422
+    assert client.post("/assistant/parse-feeling", json={"transcript": "x" * 2001}).status_code == 422
+    assert client.post("/assistant/parse-feeling", json={"transcript": "   "}).status_code == 400
+    assert fake.created == []
+
+
+def test_parse_feeling_routing_off_via_real_ai_settings(client, fake, monkeypatch, tmp_path):
+    # Exercise the real routing path: "feeling" is a first-class FEATURES entry,
+    # and routing it off yields the standard 503 "configure a provider" signal.
+    from app import ai_settings
+
+    monkeypatch.setattr(ai_settings, "SETTINGS_FILE", tmp_path / "ai-settings.json")
+    monkeypatch.setattr(ai_settings.settings, "ai_provider", "")
+    ai_settings._save({"routing": {"feeling": "off"}, "cloud_provider": "anthropic", "models": {}, "base_urls": {}})
+    resp = client.post("/assistant/parse-feeling", json={"transcript": "feeling fine"})
+    assert resp.status_code == 503
+    assert "turned off" in resp.json()["detail"]
+    assert fake.created == []  # nothing written, nothing sent
+
+
+def test_parse_feeling_no_provider_configured_returns_503(client, fake, monkeypatch, tmp_path):
+    from app import ai_settings
+
+    monkeypatch.setattr(ai_settings, "SETTINGS_FILE", tmp_path / "ai-settings.json")
+    monkeypatch.setattr(ai_settings.settings, "ai_provider", "")
+    ai_settings._save({"routing": {"feeling": "cloud"}, "cloud_provider": None, "models": {}, "base_urls": {}})
+    resp = client.post("/assistant/parse-feeling", json={"transcript": "feeling fine"})
+    assert resp.status_code == 503
+    assert "No AI provider configured" in resp.json()["detail"]
+    assert fake.created == []

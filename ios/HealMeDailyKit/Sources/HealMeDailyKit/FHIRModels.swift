@@ -116,6 +116,18 @@ public struct FHIRExtension: Codable, Hashable, Sendable {
     }
 }
 
+/// FHIR Annotation — free text attached to a resource (Observation.note).
+/// `text` is required by R4 (the only field this project writes).
+public struct Annotation: Codable, Hashable, Sendable {
+    public var text: String
+    public var time: String?
+
+    public init(text: String, time: String? = nil) {
+        self.text = text
+        self.time = time
+    }
+}
+
 public struct Meta: Codable, Hashable, Sendable {
     public var versionId: String?
     public var lastUpdated: String?
@@ -353,6 +365,9 @@ public struct FHIRObservation: FHIRResource, Hashable {
     public var component: [ObservationComponent]?
     public var derivedFrom: [Reference]?
     public var focus: [Reference]?
+    /// Free-text annotation(s) — momentary feeling checks carry the typed or
+    /// dictated note here (FHIR-MAPPING §4).
+    public var note: [Annotation]?
     /// Lab display fields (read-only): the source's reference range and
     /// interpretation flags (H/L/A…), rendered as-is, never computed here.
     public var referenceRange: [ObservationReferenceRange]?

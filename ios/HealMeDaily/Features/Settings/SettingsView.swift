@@ -143,6 +143,7 @@ struct SettingsView: View {
             }
             .listRowBackground(T.card)
 
+            feelingSection
             pushSection
             healthKitSection
             aiSection
@@ -437,6 +438,43 @@ struct SettingsView: View {
         } catch {
             aiError = error.localizedDescription
         }
+    }
+
+    // MARK: - Feeling check-ins
+
+    /// Cadence for the momentary "How am I feeling right now?" prompts.
+    /// Local notifications only, evenly spaced 09:00–21:00, no health data
+    /// in the payload (FHIR-MAPPING §4: cadence reminders are client-local).
+    private var feelingSection: some View {
+        Section {
+            Picker(selection: Binding(
+                get: { model.feelingRemindersPerDay },
+                set: { newValue in
+                    model.feelingRemindersPerDay = newValue
+                    model.feelingRemindersSettingChanged()
+                }
+            )) {
+                Text("Off").tag(0)
+                Text("2× per day").tag(2)
+                Text("3× per day").tag(3)
+                Text("4× per day").tag(4)
+            } label: {
+                Text("Feeling check-ins")
+                    .font(.ui(14))
+                    .foregroundStyle(T.ink)
+            }
+            .pickerStyle(.menu)
+            .tint(T.ink)
+        } header: {
+            Text("Feeling check-ins")
+        } footer: {
+            Text(
+                "Asks \"How are you feeling right now?\" at evenly spaced times between 09:00 and "
+                    + "21:00. Scheduled on this phone; the notification carries no health data — "
+                    + "tapping it opens the quick capture sheet."
+            )
+        }
+        .listRowBackground(T.card)
     }
 
     // MARK: - Account

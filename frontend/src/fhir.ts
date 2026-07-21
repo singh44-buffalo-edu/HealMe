@@ -53,6 +53,9 @@ export const EXT_SUPPLY_TARGET = `${BASE}/StructureDefinition/supplydelivery-tar
 export const Q_URL = `${BASE}/Questionnaire/daily-check-in`;
 export const EXT_CADENCE = `${BASE}/StructureDefinition/questionnaire-cadence`;
 export const CS_TASK = `${BASE}/CodeSystem/task`;
+// Project meta.tag system (mirrors ai-service fhir_consts/importers TAGS) —
+// e.g. `imported`, `feeling-now`, `ai-parsed`, `healthkit` (FHIR-MAPPING §4/§7).
+export const TAGS = `${BASE}/tags`;
 // Review-queue Task codes written by the ai-service (mirror of
 // ai-service/app/fhir_consts.py CS_INGEST — the two must match exactly).
 export const CS_INGEST = `${BASE}/CodeSystem/ingestion-task`;

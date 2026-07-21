@@ -52,6 +52,11 @@ struct MainTabView: View {
             .badge(model.reviewQueueCount > 0 ? model.reviewQueueCount : 0)
             .tag(4)
         }
+        // Hosted on the tab shell so the Today card AND the "feeling"
+        // notification deep-link can present it from any tab.
+        .sheet(isPresented: $model.showFeelingCapture) {
+            FeelingCaptureView()
+        }
     }
 }
 

@@ -47,6 +47,13 @@ final class AppModel {
         didSet { UserDefaults.standard.set(remindersShowMedName, forKey: "remindersShowMedName") }
     }
 
+    /// Momentary feeling check-in reminders per day (0 = off; 2/3/4), evenly
+    /// spaced within 09:00–21:00. Client-local notifications only — no server
+    /// resources (FHIR-MAPPING §4), and the payload carries no health data.
+    var feelingRemindersPerDay: Int {
+        didSet { UserDefaults.standard.set(feelingRemindersPerDay, forKey: "feelingRemindersPerDay") }
+    }
+
     // MARK: Session
 
     private(set) var client: MedplumClient
@@ -69,6 +76,11 @@ final class AppModel {
     /// Selected bottom-tab index — a binding for MainTabView, also the target
     /// of push deep-links. 0 = Today.
     var selectedTab = 0
+
+    /// Presents the momentary feeling capture sheet (Today card + the
+    /// "feeling" notification deep-link both flip this; MainTabView hosts
+    /// the sheet so it opens from any tab).
+    var showFeelingCapture = false
 
     // MARK: Shared record caches
 
@@ -123,6 +135,7 @@ final class AppModel {
         requireBiometrics = defaults.bool(forKey: "requireBiometrics")
         remindersEnabled = defaults.bool(forKey: "remindersEnabled")
         remindersShowMedName = defaults.bool(forKey: "remindersShowMedName")
+        feelingRemindersPerDay = defaults.integer(forKey: "feelingRemindersPerDay")
 
         let serverURL = URL(string: defaults.string(forKey: "serverURL") ?? "http://localhost:8103/")
             ?? URL(string: "http://localhost:8103/")!
@@ -210,6 +223,10 @@ final class AppModel {
         // signed-out device keeps no readable clinical files.
         try? FileManager.default.removeItem(at: HealthReviewView.pdfFileURL)
         ReminderScheduler.cancelAll()
+        // Feeling reminders carry no data at all, but a signed-out device
+        // prompting for check-ins it can't record would be noise — cancel;
+        // afterSignIn re-arms them from the kept preference.
+        ReminderScheduler.cancelFeelingCheckins()
     }
 
     /// Rebuild clients after the user edits server URLs in Settings.
@@ -256,19 +273,28 @@ final class AppModel {
         profileName = (try? await client.profileDisplayName()) ?? "Owner"
         healthKit.bootstrap(record: record)
         push.configure(model: self)
+        // Re-arm feeling check-in reminders (sign-out cancels them; the
+        // cadence preference survives). Static daily slots — no data needed.
+        if feelingRemindersPerDay > 0 {
+            ReminderScheduler.rescheduleFeelingCheckins(timesPerDay: feelingRemindersPerDay)
+        }
         // refreshCore drains the outbox first (drain-before-reads), so one
         // pass both delivers queued writes and loads the fresh record.
         await refreshCore()
     }
 
-    /// Deep-link target from a tapped push notification. Non-clinical by
-    /// contract (a screen name); "today" is the only target the server sends
-    /// today. Switches tabs and refreshes so the panel is current.
+    /// Deep-link target from a tapped notification (server push or local
+    /// feeling reminder). Non-clinical by contract (a screen name only).
+    /// "today" refreshes the dose panel; "feeling" additionally presents the
+    /// momentary feeling capture sheet.
     func route(to target: String) {
         switch target {
         case "today":
             selectedTab = 0
             _Concurrency.Task { await refreshCore() }
+        case "feeling":
+            selectedTab = 0
+            showFeelingCapture = true
         default:
             selectedTab = 0
         }
@@ -477,6 +503,16 @@ final class AppModel {
             ReminderScheduler.requestPermissionAndSchedule(meds: meds, showMedName: remindersShowMedName)
         } else {
             ReminderScheduler.cancelAll()
+        }
+    }
+
+    /// Feeling check-in cadence changed — re-request permission and
+    /// reschedule the fixed daily slots (independent of dose reminders).
+    func feelingRemindersSettingChanged() {
+        if feelingRemindersPerDay > 0 {
+            ReminderScheduler.requestPermissionAndScheduleFeelingCheckins(timesPerDay: feelingRemindersPerDay)
+        } else {
+            ReminderScheduler.cancelFeelingCheckins()
         }
     }
 }

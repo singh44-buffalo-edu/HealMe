@@ -35,4 +35,9 @@ public enum FHIR {
 
     /// Meta tag marking deterministic Phase-4 imports.
     public static let tagsSystem = "\(base)/tags"
+    /// Momentary feeling checks (FHIR-MAPPING §4): every entry carries
+    /// `feeling-now`; values the user confirmed UNEDITED from an AI parse
+    /// additionally carry `ai-parsed` (and must render ✦ AI-labeled).
+    public static let tagFeelingNow = "feeling-now"
+    public static let tagAiParsed = "ai-parsed"
 }

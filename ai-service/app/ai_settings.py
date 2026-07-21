@@ -47,7 +47,7 @@ from .providers import ProviderError, ProviderNotConfigured, _BaseProvider
 # The routable AI features. Adding one here automatically gives it a routing
 # row in AI Settings; its call site must use get_provider_for + the boundary
 # ledger discipline described in the module docstring.
-FEATURES = ("health-review", "ingest-extraction", "assistant", "nl-import")
+FEATURES = ("health-review", "ingest-extraction", "assistant", "nl-import", "feeling")
 ROUTES = ("local", "cloud", "off")
 CLOUD_PROVIDERS = ("anthropic", "openai", "gemini")
 ALL_PROVIDERS = CLOUD_PROVIDERS + ("ollama",)
