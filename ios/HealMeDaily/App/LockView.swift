@@ -15,8 +15,8 @@ struct LockView: View {
             T.canvas.ignoresSafeArea()
             VStack(spacing: 16) {
                 BrandMark(size: 44)
-                Text("HealMeDaily is locked")
-                    .font(.system(size: 17, weight: .semibold))
+                Text("HealMeNow is locked")
+                    .font(.ui(17, weight: .semibold))
                     .foregroundStyle(T.ink)
 
                 if noPasscode {
@@ -24,7 +24,7 @@ struct LockView: View {
                     // device has no passcode. Explain, and require a conscious
                     // tap to proceed unprotected (or go set a passcode).
                     Text("This iPhone has no passcode, so the record can't be locked. Set a passcode in iOS Settings for protection.")
-                        .font(.system(size: 13))
+                        .font(.ui(13))
                         .foregroundStyle(T.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
@@ -87,6 +87,8 @@ struct BrandMark: View {
 
     var body: some View {
         Text("H")
+            // Deliberately NOT Dynamic Type-scaled: a decorative logo glyph
+            // proportional to its fixed circle, not informational text.
             .font(.system(size: size * 0.45, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: size, height: size)

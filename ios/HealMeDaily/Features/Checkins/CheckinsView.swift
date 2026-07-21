@@ -173,7 +173,7 @@ struct CheckinsView: View {
             HStack(alignment: .firstTextBaseline, spacing: 9) {
                 StatusDot(color: T.inRange, size: 7)
                 Text("\(def.questionnaire.title ?? "Check-in") — done for this \(def.cadence.label.lowercased()) period")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.ui(14, weight: .semibold))
                     .foregroundStyle(T.ink)
             }
             if let authored = def.existing?.authored {
@@ -215,7 +215,7 @@ struct CheckinsView: View {
                 .foregroundStyle(T.quaternary)
                 .frame(width: 110, alignment: .leading)
             Text(answer?.display ?? "—")
-                .font(numeric ? .mono(13, weight: .medium) : .system(size: 13))
+                .font(numeric ? .mono(13, weight: .medium) : .ui(13))
                 .foregroundStyle(T.ink)
             Spacer(minLength: 0)
         }
@@ -256,7 +256,7 @@ struct CheckinsView: View {
                 submit(def)
             }
             Text("Resubmitting in the same \(def.cadence.label.lowercased()) period updates the same response.")
-                .font(.system(size: 11))
+                .font(.ui(11))
                 .foregroundStyle(T.quaternary)
         }
     }
@@ -302,7 +302,7 @@ struct CheckinsView: View {
         case "display":
             return AnyView(
                 Text(item.text ?? "")
-                    .font(.system(size: 12.5))
+                    .font(.ui(12.5))
                     .foregroundStyle(T.secondary)
             )
 
@@ -405,7 +405,7 @@ struct CheckinsView: View {
     /// Question text is prose — system font, never mono (design rule §2).
     private func questionLabel(_ item: QuestionnaireItem) -> some View {
         Text(item.text ?? item.linkId ?? "")
-            .font(.system(size: 13, weight: .medium))
+            .font(.ui(13, weight: .medium))
             .foregroundStyle(T.ink)
     }
 
@@ -648,7 +648,7 @@ struct CheckinsView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             StatusDot(color: T.inRange, size: 6)
             Text(text)
-                .font(.system(size: 12.5))
+                .font(.ui(12.5))
                 .foregroundStyle(T.ink)
         }
         .padding(.horizontal, 12)
@@ -672,7 +672,7 @@ private struct CheckinTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(def.questionnaire.title ?? "Check-in")
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .font(.ui(13.5, weight: .semibold))
                     .foregroundStyle(T.ink)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)

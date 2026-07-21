@@ -49,11 +49,11 @@ struct PageHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 24, weight: .semibold))
+                .font(.ui(24, weight: .semibold))
                 .foregroundStyle(T.ink)
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 12.5))
+                    .font(.ui(12.5))
                     .foregroundStyle(T.secondary)
             }
         }
@@ -160,6 +160,43 @@ struct BoundaryRow: View {
     }
 }
 
+/// Transport-security disclosure for a user-entered server URL — the mobile
+/// sibling of BoundaryRow's rule that data crossing a trust boundary is
+/// ALWAYS amber and never implicit. Cleartext http on an ordinary network
+/// (LAN IP, mDNS name) gets the amber warning; Tailscale http gets a quiet
+/// "encrypted" caption so the scheme doesn't read scarier than it is;
+/// https / loopback / not-yet-a-URL render nothing.
+struct TransportSecurityNotice: View {
+    let urlString: String
+
+    var body: some View {
+        switch TransportSecurity.classify(urlString) {
+        case .cleartext:
+            HStack(alignment: .top, spacing: 8) {
+                StatusDot(color: T.watch, size: 6)
+                    .padding(.top, 4)
+                Text(
+                    "Unencrypted connection — your password and health data are visible to "
+                        + "others on this network. Use Tailscale or HTTPS for remote access."
+                )
+                .font(.ui(12))
+                .foregroundStyle(T.watch)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(T.watch.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityIdentifier("transport.cleartextWarning")
+        case .tailnet:
+            Text("Encrypted via Tailscale (WireGuard) despite the http:// scheme.")
+                .font(.mono(10))
+                .foregroundStyle(T.tertiary)
+        case .encrypted, .loopback, .indeterminate:
+            EmptyView()
+        }
+    }
+}
+
 // MARK: - Buttons
 
 struct PillButton: View {
@@ -181,7 +218,7 @@ struct PillButton: View {
                         .tint(foreground)
                 }
                 Text(busy ? "Working…" : title)
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .font(.ui(13.5, weight: .semibold))
             }
             .foregroundStyle(foreground)
             .frame(maxWidth: .infinity)
@@ -220,7 +257,7 @@ struct ErrorBanner: View {
             StatusDot(color: T.outOfRange, size: 7)
                 .padding(.top, 4)
             Text(message)
-                .font(.system(size: 12.5))
+                .font(.ui(12.5))
                 .foregroundStyle(T.ink)
         }
         .padding(12)
@@ -245,7 +282,7 @@ struct EmptyNote: View {
 struct DisclaimerFooter: View {
     var body: some View {
         Text("Not medical advice — a personal record & discussion aid; review with a qualified clinician.")
-            .font(.system(size: 11))
+            .font(.ui(11))
             .foregroundStyle(T.quaternary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -271,7 +308,7 @@ struct BandFieldStyle: TextFieldStyle {
             .padding(.horizontal, 12)
             .frame(minHeight: 46)
             .background(T.band, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .font(.system(size: 14))
+            .font(.ui(14))
             .foregroundStyle(T.ink)
     }
 }
@@ -332,12 +369,12 @@ struct MarkdownText: View {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         ) {
             Text(attributed)
-                .font(.system(size: 14))
+                .font(.ui(14))
                 .foregroundStyle(T.ink)
                 .textSelection(.enabled)
         } else {
             Text(markdown)
-                .font(.system(size: 14))
+                .font(.ui(14))
                 .foregroundStyle(T.ink)
                 .textSelection(.enabled)
         }

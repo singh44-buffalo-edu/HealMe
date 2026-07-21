@@ -19,7 +19,7 @@ final class MedplumClientTests: XCTestCase {
 
     /// A MedplumClient whose URLSession routes through StubURLProtocol, seeded
     /// with a valid (non-expiring) token so requests are authorized.
-    private func makeClient() -> MedplumClient {
+    private func makeClient(baseURL: String = "https://example.test/") -> MedplumClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubURLProtocol.self]
         let session = URLSession(configuration: config)
@@ -28,9 +28,9 @@ final class MedplumClientTests: XCTestCase {
             accessToken: "access-1",
             refreshToken: "refresh-1",
             expiresAt: Date().addingTimeInterval(3600),
-            baseURL: "https://example.test/"
+            baseURL: baseURL
         ))
-        return MedplumClient(baseURL: URL(string: "https://example.test/")!, tokenStore: store, session: session)
+        return MedplumClient(baseURL: URL(string: baseURL)!, tokenStore: store, session: session)
     }
 
     private func okObservation(id: String = "obs-1") -> Data {
@@ -154,6 +154,88 @@ final class MedplumClientTests: XCTestCase {
             let stillAuthed = await client.isAuthenticated
             XCTAssertTrue(stillAuthed, "a network blip must not wipe the session")
         }
+    }
+
+    // MARK: Pagination link rebasing (server base URL ≠ client base URL)
+
+    func testSearchAllRebasesNextLinkOntoClientBaseURL() async throws {
+        // Medplum stamps Bundle.link.next with ITS OWN MEDPLUM_BASE_URL
+        // (e.g. http://localhost:8103/); the phone reaches the server at a
+        // different address (Tailscale IP). Page 2 must be fetched from the
+        // client's baseURL host with the link's path + query — never from
+        // the host the response named.
+        var seenRequests: [URLRequest] = []
+        StubURLProtocol.handler = { request in
+            seenRequests.append(request)
+            if seenRequests.count == 1 {
+                let page1 = """
+                {"resourceType":"Bundle","type":"searchset",
+                 "link":[{"relation":"next","url":"http://localhost:8103/fhir/R4/Observation?_offset=20&_count=20"}],
+                 "entry":[{"resource":{"resourceType":"Observation","id":"obs-1","status":"final"}}]}
+                """
+                return (200, Data(page1.utf8), [:])
+            }
+            let page2 = #"{"resourceType":"Bundle","type":"searchset","entry":[{"resource":{"resourceType":"Observation","id":"obs-2","status":"final"}}]}"#
+            return (200, Data(page2.utf8), [:])
+        }
+        let client = makeClient()
+        let results = try await client.searchAll(FHIRObservation.self, [("code", "x")])
+        XCTAssertEqual(results.map(\.id), ["obs-1", "obs-2"])
+        XCTAssertEqual(seenRequests.count, 2, "first page + one rebased next page")
+        let page2URL = try XCTUnwrap(seenRequests.last?.url)
+        XCTAssertEqual(page2URL.scheme, "https")
+        XCTAssertEqual(page2URL.host, "example.test")
+        XCTAssertEqual(page2URL.path, "/fhir/R4/Observation")
+        XCTAssertEqual(page2URL.query, "_offset=20&_count=20")
+        // The bearer token went to OUR host on every page, nowhere else.
+        for request in seenRequests {
+            XCTAssertEqual(request.url?.host, "example.test")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer access-1")
+        }
+    }
+
+    func testSearchAllKeepsBaseURLPathPrefixWhenRebasing() async throws {
+        // A reverse-proxied base (https://host/medplum/) must keep its path
+        // prefix when the stamped link only carries /fhir/R4/…
+        var seenPaths: [String] = []
+        StubURLProtocol.handler = { request in
+            seenPaths.append(request.url?.path ?? "")
+            if seenPaths.count == 1 {
+                let page1 = """
+                {"resourceType":"Bundle","type":"searchset",
+                 "link":[{"relation":"next","url":"http://localhost:8103/fhir/R4/Observation?_offset=20"}],
+                 "entry":[]}
+                """
+                return (200, Data(page1.utf8), [:])
+            }
+            return (200, Data(#"{"resourceType":"Bundle","type":"searchset"}"#.utf8), [:])
+        }
+        let client = makeClient(baseURL: "https://example.test/medplum/")
+        _ = try await client.searchAll(FHIRObservation.self, [])
+        XCTAssertEqual(seenPaths, ["/medplum/fhir/R4/Observation", "/medplum/fhir/R4/Observation"])
+    }
+
+    func testAbsoluteGETRefusesForeignHost() async {
+        // Defense in depth behind the rebase: even if a foreign absolute URL
+        // reaches the authorized-GET path, no request — and therefore no
+        // bearer token — may leave for a host other than the configured one.
+        var sawRequest = false
+        StubURLProtocol.handler = { _ in
+            sawRequest = true
+            return (200, Data("{}".utf8), [:])
+        }
+        let client = makeClient()
+        do {
+            _ = try await client.authorizedAbsoluteGET(urlString: "https://evil.example/fhir/R4/Observation?_offset=20")
+            XCTFail("expected a refusal")
+        } catch let error as MedplumError {
+            guard case .invalidResponse = error else {
+                return XCTFail("expected .invalidResponse, got \(error)")
+            }
+        } catch {
+            XCTFail("unexpected error \(error)")
+        }
+        XCTAssertFalse(sawRequest, "no request may be sent to a foreign host")
     }
 }
 

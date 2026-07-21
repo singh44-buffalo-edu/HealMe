@@ -57,8 +57,10 @@ struct AdherenceView: View {
         let summaries = DoseEngine.summarizeDays(
             meds: model.meds, admins: model.admins, days: days, today: Date()
         )
+        // Streak over 91 days = 13 weeks, the web's HEATMAP_DAYS window
+        // (AdherencePage), so both apps report the same streak.
         let streakWindow = DoseEngine.summarizeDays(
-            meds: model.meds, admins: model.admins, days: 90, today: Date()
+            meds: model.meds, admins: model.admins, days: 91, today: Date()
         )
         let stats = DoseEngine.adherenceStats(
             meds: model.meds, admins: model.admins,
@@ -100,8 +102,10 @@ struct AdherenceView: View {
                 Button {
                     days = n
                 } label: {
+                    // maxScale: three fixed pills share one row — capped so
+                    // the segmented track survives accessibility sizes.
                     Text("\(n) days")
-                        .font(.mono(12, weight: days == n ? .semibold : .regular))
+                        .font(.mono(12, weight: days == n ? .semibold : .regular, maxScale: 1.6))
                         .foregroundStyle(days == n ? T.ink : T.tertiary)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 36)
@@ -130,7 +134,7 @@ struct AdherenceView: View {
                     .font(.mono(44, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Text("of logged doses taken")
-                    .font(.system(size: 12.5))
+                    .font(.ui(12.5))
                     .foregroundStyle(T.secondary)
             }
 
@@ -141,7 +145,7 @@ struct AdherenceView: View {
             }
 
             Text("Counts logged doses only — unlogged doses appear as their own state below and are never counted as missed.")
-                .font(.system(size: 11))
+                .font(.ui(11))
                 .foregroundStyle(T.quaternary)
         }
     }
@@ -212,8 +216,10 @@ struct AdherenceView: View {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(color)
                 .frame(width: 8, height: 8)
+            // maxScale: four legend items share one row under the heatmap —
+            // color-key text, redundant with the cells, so capped growth.
             Text(label)
-                .font(.mono(9))
+                .font(.mono(9, maxScale: 1.5))
                 .foregroundStyle(T.tertiary)
         }
     }
@@ -260,7 +266,7 @@ struct AdherenceView: View {
                     StatusDot(color: T.outOfRange, size: 6)
                 }
                 Text(row.med.name)
-                    .font(.system(size: 13.5, weight: .medium))
+                    .font(.ui(13.5, weight: .medium))
                     .foregroundStyle(T.ink)
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -273,7 +279,9 @@ struct AdherenceView: View {
                 Text(row.pct.map { "\($0)%" } ?? "—")
                     .font(.mono(12, weight: .medium))
                     .foregroundStyle(T.ink)
-                    .frame(width: 42, alignment: .trailing)
+                    // minWidth: keeps the column aligned yet lets the scaled
+                    // "100%" grow instead of clipping at large text sizes.
+                    .frame(minWidth: 42, alignment: .trailing)
             }
         }
         .padding(.vertical, 10)

@@ -143,13 +143,13 @@ struct AssistantView: View {
                 Spacer()
             }
             Text("No AI provider is configured")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.ui(14, weight: .semibold))
                 .foregroundStyle(T.ink)
             Text(status?.ai.reason ?? "AI service is not reachable — is it running on the server?")
-                .font(.system(size: 12.5))
+                .font(.ui(12.5))
                 .foregroundStyle(T.secondary)
             Text("Set up providers in AI settings (web app or Settings tab).")
-                .font(.system(size: 12))
+                .font(.ui(12))
                 .foregroundStyle(T.tertiary)
         }
     }
@@ -187,11 +187,11 @@ struct AssistantView: View {
 
             if assistantRoute == .off {
                 Text("AI is off for the assistant — enable it in AI settings.")
-                    .font(.system(size: 11))
+                    .font(.ui(11))
                     .foregroundStyle(T.quaternary)
             } else {
                 Text("Reads your record, then answers — may take a minute.")
-                    .font(.system(size: 11))
+                    .font(.ui(11))
                     .foregroundStyle(T.quaternary)
             }
         }
@@ -228,7 +228,7 @@ struct AssistantView: View {
 
             if nlImportRoute == .off {
                 Text("AI is off for quick capture — enable it in AI settings.")
-                    .font(.system(size: 11))
+                    .font(.ui(11))
                     .foregroundStyle(T.quaternary)
             }
 
@@ -238,7 +238,7 @@ struct AssistantView: View {
                 (
                     Text("\(quickNote)").font(.mono(12, weight: .medium))
                         + Text(" proposals created — review them under Documents. Nothing was committed.")
-                        .font(.system(size: 12))
+                        .font(.ui(12))
                 )
                 .foregroundStyle(T.secondary)
             }
@@ -340,7 +340,7 @@ private struct AssistantAnswerCard: View {
 
             Eyebrow(text: "You asked")
             Text(exchange.question)
-                .font(.system(size: 12.5))
+                .font(.ui(12.5))
                 .foregroundStyle(T.secondary)
 
             hairline
@@ -360,7 +360,7 @@ private struct AssistantAnswerCard: View {
                 .foregroundStyle(T.quaternary)
 
             Text(exchange.answer.disclaimer)
-                .font(.system(size: 11))
+                .font(.ui(11))
                 .foregroundStyle(T.quaternary)
         }
     }
@@ -378,7 +378,7 @@ private struct AssistantAnswerCard: View {
                 .foregroundStyle(T.ai)
             VStack(alignment: .leading, spacing: 2) {
                 Text(citation.display)
-                    .font(.system(size: 12.5))
+                    .font(.ui(12.5))
                     .foregroundStyle(T.ink)
                 let meta = [citation.value, citation.date.map { Fmt.when($0) }]
                     .compactMap { $0 }
@@ -427,10 +427,10 @@ private struct AssistantHistorySheet: View {
                         ForEach(sessions) { session in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(session.question)
-                                    .font(.system(size: 13.5, weight: .medium))
+                                    .font(.ui(13.5, weight: .medium))
                                     .foregroundStyle(T.ink)
                                 Text(session.answer_preview)
-                                    .font(.system(size: 12))
+                                    .font(.ui(12))
                                     .foregroundStyle(T.secondary)
                                     .lineLimit(3)
                                 Text(Fmt.when(session.sent))

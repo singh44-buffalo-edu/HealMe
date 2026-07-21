@@ -11,8 +11,10 @@ import HealMeDailyKit
 ///   writes anything. Only an explicit tap calls `model.logDose`.
 /// - Corrections (taken↔skipped↔missed) re-log the SAME logical event via
 ///   the slot identifier; the engine converges on one MedicationAdministration.
-/// - Life-critical flags get display prominence only (sort-first + red
-///   eyebrow on overdue) — no dose logic hangs off them.
+/// - Life-critical flags get display prominence only — a persistent red
+///   CRITICAL tag beside the med name in EVERY state (CLAUDE.md §8: flagged
+///   per-med, always — skipping one must never look routine), sort-first,
+///   and an escalated eyebrow once overdue. No dose logic hangs off them.
 /// - Backdating is supported (DatePicker capped at now, never future).
 struct TodayView: View {
     @Environment(AppModel.self) private var model
@@ -108,12 +110,12 @@ struct TodayView: View {
                             .foregroundStyle(T.watch)
                         if model.usingCachedCore {
                             Text("Showing the last copy saved on this device.")
-                                .font(.system(size: 12))
+                                .font(.ui(12))
                                 .foregroundStyle(T.secondary)
                         }
                         if model.pendingWrites > 0 {
                             Text("\(model.pendingWrites) change\(model.pendingWrites == 1 ? "" : "s") saved here — syncs when your server is reachable.")
-                                .font(.system(size: 12))
+                                .font(.ui(12))
                                 .foregroundStyle(T.secondary)
                         }
                     }
@@ -127,7 +129,7 @@ struct TodayView: View {
             DsCard(padding: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Some offline changes could not sync")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.ui(13, weight: .semibold))
                         .foregroundStyle(T.outOfRange)
                     ForEach(model.syncFailures, id: \.self) { failure in
                         Text(failure)
@@ -166,15 +168,22 @@ struct TodayView: View {
     private func doseCard(_ row: TodaySlotRow) -> some View {
         let busy = busySlotIdents.contains(row.slot.identValue)
         let card = DsCard(padding: 16) {
-            // Overdue life-critical flag — display prominence only.
+            // Escalated overdue life-critical flag — display prominence only.
             if row.isOverdueLifeCritical {
                 Eyebrow(text: "Life-critical", color: T.outOfRange)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(row.slot.med.name)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.ui(15, weight: .semibold))
                     .foregroundStyle(T.ink)
+                // Persistent CRITICAL tag — shown in EVERY state (same DS
+                // Eyebrow MedsView uses; web parity: OverviewPage today card).
+                // fixedSize keeps the tag whole while a long name wraps.
+                if row.slot.med.lifeCritical {
+                    Eyebrow(text: "Critical", color: T.outOfRange)
+                        .fixedSize()
+                }
                 Spacer(minLength: 8)
                 Text(Fmt.hhmm(row.slot.time))
                     .font(.mono(13, weight: .medium))
@@ -184,7 +193,7 @@ struct TodayView: View {
             // SIG instructions — prose, so NOT mono.
             if !row.slot.med.instructions.isEmpty {
                 Text(row.slot.med.instructions)
-                    .font(.system(size: 12))
+                    .font(.ui(12))
                     .foregroundStyle(T.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -223,7 +232,7 @@ struct TodayView: View {
             HStack(spacing: 7) {
                 StatusDot(color: T.green)
                 Text("Taken")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.ui(12.5, weight: .semibold))
                     .foregroundStyle(T.green)
                 if !when.isEmpty {
                     Text(Fmt.when(when))
@@ -272,7 +281,7 @@ struct TodayView: View {
         HStack(spacing: 7) {
             StatusDot(color: color)
             Text(word)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.ui(12.5, weight: .semibold))
                 .foregroundStyle(color)
             Spacer(minLength: 8)
             TodaySmallPill(title: "Take now", busy: busy) {
@@ -300,9 +309,11 @@ struct TodayView: View {
                 Button("Mark missed") { log(row.slot, .missed) }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 20))
+                    .font(.ui(20))
                     .foregroundStyle(T.secondary)
-                    .frame(width: 40, height: 40)
+                    // min sizes: the icon scales with Dynamic Type — the hit
+                    // target grows with it instead of clipping the glyph.
+                    .frame(minWidth: 40, minHeight: 40)
                     .contentShape(Rectangle())
             }
             .disabled(busy)
@@ -372,7 +383,7 @@ struct TodayView: View {
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(def.questionnaire.title ?? "Check-in")
-                                    .font(.system(size: 13.5, weight: .medium))
+                                    .font(.ui(13.5, weight: .medium))
                                     .foregroundStyle(T.ink)
                                 Text(def.cadence.label)
                                     .font(.mono(10))
@@ -394,9 +405,9 @@ struct TodayView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text("Open check-ins")
-                        .font(.system(size: 13.5, weight: .semibold))
+                        .font(.ui(13.5, weight: .semibold))
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.ui(11, weight: .semibold))
                 }
                 .foregroundStyle(T.green)
             }
@@ -417,7 +428,7 @@ struct TodayView: View {
                     }
                     HStack(alignment: .center, spacing: 12) {
                         Text(task.description ?? "Follow-up")
-                            .font(.system(size: 13))
+                            .font(.ui(13))
                             .foregroundStyle(T.ink)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -521,7 +532,7 @@ private struct TodaySmallPill: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.ui(12.5, weight: .semibold))
                 .foregroundStyle(variant == .primary ? .white : T.ink)
                 .padding(.horizontal, 14)
                 .frame(minHeight: 34)
@@ -553,7 +564,7 @@ private struct TodayBackdateSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(slot.med.name)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.ui(15, weight: .semibold))
                         .foregroundStyle(T.ink)
                     Spacer(minLength: 8)
                     Text("\(String(slot.date)) \(Fmt.hhmm(slot.time))")

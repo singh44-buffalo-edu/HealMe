@@ -209,7 +209,7 @@ struct RecordsView: View {
             HStack(spacing: 10) {
                 StatusDot(color: T.Metric.labs, size: 8)
                 Text(analyte.name)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.ui(16, weight: .semibold))
                     .foregroundStyle(T.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -287,8 +287,9 @@ struct RecordsView: View {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
+                        // maxScale: axis ticks inside a fixed-height chart.
                         Text(Fmt.number(v))
-                            .font(.mono(9))
+                            .font(.mono(9, maxScale: 1.5))
                             .foregroundStyle(T.quaternary)
                     }
                 }
@@ -298,8 +299,9 @@ struct RecordsView: View {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisValueLabel {
                     if let day = value.as(Date.self) {
+                        // maxScale: axis ticks inside a fixed-height chart.
                         Text(Self.dateTick(day, withDay: heroRange == .y1))
-                            .font(.mono(9))
+                            .font(.mono(9, maxScale: 1.5))
                             .foregroundStyle(T.quaternary)
                     }
                 }
@@ -309,14 +311,16 @@ struct RecordsView: View {
         .frame(height: 190)
     }
 
+    // maxScale on the legend row: two items share one line under the chart —
+    // series-key text, capped so the row survives accessibility sizes.
     private func heroLegend(_ analyte: Analyte, drawCount: Int) -> some View {
         HStack(spacing: 16) {
             (Text("— measured").foregroundStyle(T.ink)
                 + Text(" · \(drawCount) draw\(drawCount == 1 ? "" : "s")").foregroundStyle(T.tertiary))
-                .font(.mono(10))
+                .font(.mono(10, maxScale: 1.5))
             if let low = analyte.low, let high = analyte.high {
                 Text("▬ ref \(Fmt.number(low))–\(Fmt.number(high))")
-                    .font(.mono(10))
+                    .font(.mono(10, maxScale: 1.5))
                     .foregroundStyle(T.tertiary)
             }
             Spacer()
@@ -330,7 +334,7 @@ struct RecordsView: View {
         return DsCard {
             HStack {
                 Text(mode == .all ? "All results" : "Flagged")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.ui(14.5, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Spacer()
                 Text("\(shown.count) of \(analytes.count) analytes")
@@ -365,7 +369,7 @@ struct RecordsView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(analyte.name)
-                        .font(.system(size: 13.5, weight: .semibold))
+                        .font(.ui(13.5, weight: .semibold))
                         .foregroundStyle(T.ink)
                         .multilineTextAlignment(.leading)
                     if let range = Self.rangeLabel(analyte) {
@@ -544,8 +548,10 @@ private struct SegmentedPillsControl<Value: Hashable>: View {
                 Button {
                     selection = option.value
                 } label: {
+                    // maxScale: fixed pills share one row — capped so the
+                    // segmented track survives accessibility sizes.
                     Text(option.label)
-                        .font(.mono(compact ? 11 : 12, weight: selection == option.value ? .semibold : .regular))
+                        .font(.mono(compact ? 11 : 12, weight: selection == option.value ? .semibold : .regular, maxScale: 1.6))
                         .foregroundStyle(selection == option.value ? T.ink : T.tertiary)
                         .padding(.horizontal, compact ? 10 : 0)
                         .frame(maxWidth: compact ? nil : .infinity)

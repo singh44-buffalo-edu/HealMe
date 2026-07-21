@@ -77,7 +77,7 @@ struct HealthReviewView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     DisclaimerFooter()
                     Text("Organizes your record for a clinician conversation — it never diagnoses or gives dosing advice.")
-                        .font(.system(size: 11))
+                        .font(.ui(11))
                         .foregroundStyle(T.quaternary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -119,7 +119,7 @@ struct HealthReviewView: View {
             }
             .disabled(generatingAI)
             Text("Deterministic — built from your record only, no AI involved.")
-                .font(.system(size: 11.5))
+                .font(.ui(11.5))
                 .foregroundStyle(T.tertiary)
 
             Rectangle()
@@ -140,11 +140,11 @@ struct HealthReviewView: View {
 
             if aiConfigured {
                 Text("One model round trip — may take a minute.")
-                    .font(.system(size: 11.5))
+                    .font(.ui(11.5))
                     .foregroundStyle(T.tertiary)
             } else {
                 Text(aiUnavailableNote ?? "Checking AI configuration…")
-                    .font(.system(size: 11.5))
+                    .font(.ui(11.5))
                     .foregroundStyle(T.tertiary)
             }
         }
@@ -171,7 +171,7 @@ struct HealthReviewView: View {
 
             if let description = review.description, !description.isEmpty {
                 Text(description)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.ui(14, weight: .semibold))
                     .foregroundStyle(T.ink)
             }
 
@@ -200,14 +200,14 @@ struct HealthReviewView: View {
                 .frame(height: 1)
 
             Text("Not medical advice — a discussion aid; review with a qualified clinician.")
-                .font(.system(size: 11))
+                .font(.ui(11))
                 .foregroundStyle(T.quaternary)
 
             if let pdfURL {
                 ShareLink(item: pdfURL) {
                     HStack(spacing: 7) {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.ui(13, weight: .semibold))
                         Text("health-review.pdf")
                             .font(.mono(13, weight: .semibold))
                     }

@@ -251,14 +251,16 @@ final class AppModel {
 
     // MARK: Shared data
 
-    /// Load the med list + 90-day dose window + patient — the slot model
+    /// Load the med list + 91-day dose window + patient — the slot model
     /// Today/Meds/Adherence all share. Safe to call repeatedly (pull to
     /// refresh, after logging a dose).
     func refreshCore() async {
         do {
             patient = try await record.getPatient()
             meds = try await record.loadMeds()
-            admins = try await record.loadAdmins(days: 90)
+            // 91 = 13 weeks, the web's HEATMAP_DAYS (AdherencePage) — both
+            // apps must fetch the same window or their stats would disagree.
+            admins = try await record.loadAdmins(days: 91)
             coreLoadError = nil
             coreLoaded = true
             usingCachedCore = false

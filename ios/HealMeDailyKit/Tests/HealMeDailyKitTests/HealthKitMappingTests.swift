@@ -15,6 +15,52 @@ final class HealthKitMappingTests: XCTestCase {
         XCTAssertEqual(HealthKitMapping.identifierValue(for: hrv), "hrv-sdnn-2026-07-13")
     }
 
+    func testSleepIdentifierIsKeyedToWakeDateSoNapAndNightStayDistinct() {
+        // Monday-afternoon nap: starts and ends Mon → keyed to Mon.
+        let nap = HealthKitMapping.Sample(
+            kind: .sleepDuration,
+            value: 1.5,
+            start: DoseEngine.localDate(date: "2026-07-13", time: "14:00:00"),
+            end: DoseEngine.localDate(date: "2026-07-13", time: "15:30:00")
+        )
+        // The following night: Mon 23:00 → Tue 06:30. Start-keyed it would
+        // collide with the nap and the two would overwrite each other on
+        // every re-sync; end-keyed it belongs to Tue (its wake-up date).
+        let night = HealthKitMapping.Sample(
+            kind: .sleepDuration,
+            value: 7.5,
+            start: DoseEngine.localDate(date: "2026-07-13", time: "23:00:00"),
+            end: DoseEngine.localDate(date: "2026-07-14", time: "06:30:00")
+        )
+        XCTAssertEqual(HealthKitMapping.identifierValue(for: nap), "sleep-duration-2026-07-13")
+        XCTAssertEqual(HealthKitMapping.identifierValue(for: night), "sleep-duration-2026-07-14")
+        XCTAssertNotEqual(
+            HealthKitMapping.identifierValue(for: nap),
+            HealthKitMapping.identifierValue(for: night)
+        )
+    }
+
+    func testSleepIdentifierStableWhenNightStartMovesAcrossMidnight() {
+        // Night first synced as Tue 00:30 → 06:30…
+        let night = HealthKitMapping.Sample(
+            kind: .sleepDuration,
+            value: 6.0,
+            start: DoseEngine.localDate(date: "2026-07-14", time: "00:30:00"),
+            end: DoseEngine.localDate(date: "2026-07-14", time: "06:30:00")
+        )
+        // …then late-arriving watch data pulls its earliest sample back to
+        // Mon 23:40. The end-keyed identifier must not move (start-keyed it
+        // would re-key from Tue to Mon and duplicate the night).
+        var extended = night
+        extended.start = DoseEngine.localDate(date: "2026-07-13", time: "23:40:00")
+        extended.value = 6.8
+        XCTAssertEqual(HealthKitMapping.identifierValue(for: night), "sleep-duration-2026-07-14")
+        XCTAssertEqual(
+            HealthKitMapping.identifierValue(for: extended),
+            HealthKitMapping.identifierValue(for: night)
+        )
+    }
+
     func testPerSampleIdentifierIsLowercasedUUID() {
         let sample = HealthKitMapping.Sample(kind: .bodyMass, uuid: "ABC-DEF", value: 71.2, start: noon)
         XCTAssertEqual(HealthKitMapping.identifierValue(for: sample), "abc-def")

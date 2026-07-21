@@ -35,7 +35,7 @@ enum ReminderScheduler {
                     components.minute = parts[1]
 
                     let content = UNMutableNotificationContent()
-                    content.title = "HealMeDaily"
+                    content.title = "HealMeNow"
                     // Privacy default: no med name on the lock screen unless
                     // the owner opted in.
                     content.body = showMedName

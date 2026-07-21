@@ -156,6 +156,10 @@ public actor OutboxStore {
 
     public func all() -> [OutboxEntry] { entries }
 
+    public func contains(id: String) -> Bool {
+        entries.contains { $0.id == id }
+    }
+
     public func append(_ entry: OutboxEntry) {
         entries.append(entry)
         persist()
@@ -265,8 +269,9 @@ public enum WriteResult<Resource: Sendable>: Sendable {
 
 public struct DrainReport: Sendable {
     public var applied: Int
-    /// Entries the SERVER rejected (non-network error) — dropped from the
-    /// queue but surfaced loudly; silent retry-forever would hide them.
+    /// Entries the SERVER definitively rejected (validation 4xx on the
+    /// replay itself) — dropped from the queue but surfaced loudly; silent
+    /// retry-forever would hide them.
     public var failures: [(label: String, message: String)]
     public var remaining: Int
 }
@@ -279,10 +284,48 @@ public actor SyncEngine {
     private let record: RecordAPI
     private let outbox: OutboxStore
     private var draining = false
+    /// Logical events (dose slot / check-in period) with a write currently
+    /// in flight — live or replay. The actor is reentrant at every `await`,
+    /// so without this claim a drain replaying a queued entry and a live
+    /// correction for the SAME event can interleave, and whichever server
+    /// write lands last wins (same identifier, update-in-place) — a stale
+    /// replay would silently revert the newer action. One claim per event
+    /// serializes them instead.
+    private var activeEventKeys: Set<String> = []
+    private var eventKeyWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
 
     public init(record: RecordAPI, outbox: OutboxStore) {
         self.record = record
         self.outbox = outbox
+    }
+
+    /// The cross-path identity of the logical event a queued write targets.
+    /// Quick observations have no correction semantics (independent
+    /// idempotent creates), so they carry no claim.
+    private static func eventKey(for kind: OutboxEntry.Kind) -> String? {
+        switch kind {
+        case .dose(let payload): return "dose|\(payload.identValue)"
+        case .checkin(let payload): return "checkin|\(payload.periodIdent)"
+        case .observations: return nil
+        }
+    }
+
+    /// Claim exclusive write access to one logical event, suspending while
+    /// another write (a drain replay or a live action) holds it.
+    private func claim(_ key: String) async {
+        while activeEventKeys.contains(key) {
+            await withCheckedContinuation { continuation in
+                eventKeyWaiters[key, default: []].append(continuation)
+            }
+        }
+        activeEventKeys.insert(key)
+    }
+
+    private func releaseClaim(_ key: String) {
+        activeEventKeys.remove(key)
+        if let waiters = eventKeyWaiters.removeValue(forKey: key) {
+            for waiter in waiters { waiter.resume() }
+        }
     }
 
     public var pendingCount: Int {
@@ -297,6 +340,12 @@ public actor SyncEngine {
 
     public func logDose(slot: DoseSlot, action: DoseAction, takenAt: Date? = nil) async throws -> WriteResult<MedicationAdministration> {
         let payload = RecordAPI.doseLogPayload(slot: slot, action: action, takenAt: takenAt)
+        // If drain is mid-replay of a queued action for this same slot, wait
+        // for it to finish: raced, the replay's older write could land after
+        // ours and revert the correction on the server.
+        let key = "dose|\(payload.identValue)"
+        await claim(key)
+        defer { releaseClaim(key) }
         do {
             let result = try await record.applyDoseLog(payload)
             // A live write is the newest intent for this slot — any queued
@@ -333,6 +382,11 @@ public actor SyncEngine {
                 return false
             })
         }
+        // Same rule as logDose: never race a live submit against an
+        // in-flight replay of a queued response for this period.
+        let key = "checkin|\(payload.periodIdent)"
+        await claim(key)
+        defer { releaseClaim(key) }
         do {
             let result = try await record.applyCheckin(payload)
             await purgeSamePeriod() // stale queued responses for this period
@@ -363,11 +417,15 @@ public actor SyncEngine {
     ///
     /// Error policy — these are HEALTH WRITES, so dropping one is worse than
     /// retrying it:
-    /// - network / signed-out / 5xx / 429: TRANSIENT — stop the drain, keep
-    ///   the entry (and everything after it) queued for next time.
-    /// - anything else (validation 4xx): the server definitively rejected
-    ///   this payload — retrying forever would poison the queue, so drop it
+    /// - the ONLY drop is an `MedplumError.http` 4xx (except 429) raised by
+    ///   the replay itself: the server saw this payload and definitively
+    ///   rejected it — retrying forever would poison the queue, so drop it
     ///   and report it loudly.
+    /// - everything else is not a verdict on the entry: offline, signed-out,
+    ///   5xx / 429, a malformed reply (captive portal returning 200+HTML),
+    ///   the patient lookup coming up empty, the token refresh misbehaving —
+    ///   stop the drain and keep the entry (and everything after it) queued
+    ///   for next time.
     public func drain() async -> DrainReport {
         guard !draining else { return DrainReport(applied: 0, failures: [], remaining: await outbox.count) }
         draining = true
@@ -376,6 +434,19 @@ public actor SyncEngine {
         var applied = 0
         var failures: [(String, String)] = []
         loop: for entry in await outbox.all() {
+            // Claim the entry's logical event first: a live write for the
+            // same slot/period that is already in flight fully lands (and
+            // purges this entry) before the replay looks at it — and no live
+            // write can start while the replay holds the claim.
+            let key = Self.eventKey(for: entry.kind)
+            if let key { await claim(key) }
+            defer { if let key { releaseClaim(key) } }
+            // The snapshot driving this loop goes stale at every suspension
+            // point (the actor is reentrant): a live write may have
+            // superseded and purged this entry mid-drain. Replaying it
+            // anyway would overwrite the newer action on the server (same
+            // identifier, update-in-place) — re-check it is still queued.
+            guard await outbox.contains(id: entry.id) else { continue }
             do {
                 switch entry.kind {
                 case .dose(let payload):
@@ -387,13 +458,14 @@ public actor SyncEngine {
                 }
                 await outbox.remove(id: entry.id)
                 applied += 1
-            } catch MedplumError.network, MedplumError.unauthenticated {
-                break loop // offline or needs sign-in — retry after that clears
-            } catch MedplumError.http(let status, _) where status >= 500 || status == 429 {
-                break loop // server trouble — keep queued, try again later
-            } catch {
+            } catch MedplumError.http(let status, let message) where (400 ... 499).contains(status) && status != 429 {
+                // Definitive validation rejection of THIS payload. (Auth
+                // trouble never lands here: 401s surface as .unauthenticated
+                // and token-endpoint failures as .authRefreshFailed.)
                 await outbox.remove(id: entry.id)
-                failures.append((entry.label, error.localizedDescription))
+                failures.append((entry.label, "\(message) (HTTP \(status))"))
+            } catch {
+                break loop // transient or unclassified — keep the entry
             }
         }
         return DrainReport(applied: applied, failures: failures, remaining: await outbox.count)

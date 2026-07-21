@@ -351,13 +351,14 @@ private struct QuickAddCardHeader: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 15, weight: .medium))
+                .font(.ui(15, weight: .medium))
                 .foregroundStyle(T.secondary)
-                .frame(width: 34, height: 34)
+                // min sizes: tile grows with the Dynamic Type-scaled icon.
+                .frame(minWidth: 34, minHeight: 34)
                 .background(T.band, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.ui(15, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Text(note)
                     .font(.mono(10))

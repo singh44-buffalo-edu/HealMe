@@ -45,6 +45,18 @@ public enum DoseEngine {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
+    /// A FHIR date/dateTime string → its LOCAL calendar date (YYYY-MM-DD).
+    /// Port of `localCalendarDate` in fhir.ts: a date-only value
+    /// ("2026-07-16") is returned verbatim — parsing it as an instant would
+    /// treat it as UTC midnight and shift it a day in negative offsets. A
+    /// value carrying a time is converted through the local timezone.
+    public static func localCalendarDate(_ value: String, calendar: Calendar = DoseEngine.gregorian) -> String {
+        guard value.count > 10, let parsed = RecordAPI.parseInstant(value) else {
+            return String(value.prefix(10))
+        }
+        return localDateString(parsed, calendar: calendar)
+    }
+
     /// Local Monday of the week containing `date` — the weekly period key.
     public static func mondayOf(_ date: Date, calendar: Calendar = DoseEngine.gregorian) -> String {
         // Mirrors JS `(getDay() + 6) % 7`: days to subtract to reach Monday.

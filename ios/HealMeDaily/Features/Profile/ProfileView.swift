@@ -184,7 +184,7 @@ private struct ConditionRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(condition.code?.text ?? condition.code?.coding?.first?.display ?? "(unnamed)")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.ui(14.5, weight: .semibold))
                     .foregroundStyle(T.ink)
                 if let dateLine {
                     Text(dateLine)
@@ -224,7 +224,7 @@ private struct AllergyRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(allergy.code?.text ?? allergy.code?.coding?.first?.display ?? "(unnamed)")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.ui(14.5, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Spacer(minLength: 8)
                 // Source-stated criticality, verbatim ("low" / "high" /
@@ -236,7 +236,7 @@ private struct AllergyRow: View {
             }
             ForEach(Array(reactionLines.enumerated()), id: \.offset) { _, line in
                 Text(line)
-                    .font(.system(size: 12))
+                    .font(.ui(12))
                     .foregroundStyle(T.secondary)
             }
         }
@@ -264,7 +264,7 @@ private struct ImmunizationRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(immunization.vaccineCode?.text ?? immunization.vaccineCode?.coding?.first?.display ?? "(unnamed)")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.ui(14.5, weight: .semibold))
                     .foregroundStyle(T.ink)
                 if let occurred = immunization.occurrenceDateTime {
                     Text(occurred.prefix(10))

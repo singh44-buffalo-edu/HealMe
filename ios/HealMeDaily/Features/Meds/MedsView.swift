@@ -71,7 +71,7 @@ private struct MedCard: View {
                     StatusDot(color: T.outOfRange)
                 }
                 Text(med.name)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.ui(16, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Spacer(minLength: 8)
                 if med.lifeCritical {
@@ -82,7 +82,7 @@ private struct MedCard: View {
             // SIG instructions — prose, so NOT mono.
             if !med.instructions.isEmpty {
                 Text(med.instructions)
-                    .font(.system(size: 12.5))
+                    .font(.ui(12.5))
                     .foregroundStyle(T.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -135,7 +135,7 @@ private struct CartridgeBlock: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(cartridge.name)
-                    .font(.system(size: 13))
+                    .font(.ui(13))
                     .foregroundStyle(T.ink)
                 Spacer(minLength: 8)
                 if let remaining = cartridge.remaining, let capacity = cartridge.capacity {

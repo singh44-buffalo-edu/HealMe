@@ -43,19 +43,36 @@ final class DoseEngineTests: XCTestCase {
         return administration
     }
 
-    /// 2026-07-13 12:00 local — same anchor as the web tests.
+    /// 2026-07-13 12:00 local — same anchor as the web tests. Built on
+    /// DoseEngine.gregorian, the same calendar the engine computes with.
     private var today: Date {
         var components = DateComponents()
         components.year = 2026
         components.month = 7
         components.day = 13
         components.hour = 12
-        return Calendar.current.date(from: components)!
+        return DoseEngine.gregorian.date(from: components)!
     }
 
     private func day(_ offset: Int) -> String {
-        let d = Calendar.current.date(byAdding: .day, value: offset, to: today)!
+        let d = DoseEngine.gregorian.date(byAdding: .day, value: offset, to: today)!
         return DoseEngine.localDateString(d)
+    }
+
+    // MARK: localCalendarDate
+
+    func testDateOnlyValueReturnedVerbatim() {
+        // No UTC reparse that could shift it a day in negative offsets.
+        XCTAssertEqual(DoseEngine.localCalendarDate("2026-07-16"), "2026-07-16")
+    }
+
+    func testDateTimeConvertedToLocalCalendarDate() {
+        // An instant is resolved through the local zone; the date component
+        // of the local wall-clock time is what matters (asserted against the
+        // same helper loadMeds relies on, so this holds in any test-runner
+        // timezone — mirrors the web test).
+        let iso = "2026-07-16T14:30:00Z"
+        XCTAssertEqual(DoseEngine.localCalendarDate(iso), DoseEngine.localDateString(RecordAPI.parseInstant(iso)!))
     }
 
     // MARK: slot identity
@@ -121,7 +138,7 @@ final class DoseEngineTests: XCTestCase {
             c.month = m
             c.day = d
             c.hour = 12
-            return Calendar.current.date(from: c)!
+            return DoseEngine.gregorian.date(from: c)!
         }
         XCTAssertEqual(DoseEngine.mondayOf(date(2026, 7, 13)), "2026-07-13") // a Monday
         XCTAssertEqual(DoseEngine.mondayOf(date(2026, 7, 15)), "2026-07-13") // Wednesday
@@ -134,7 +151,7 @@ final class DoseEngineTests: XCTestCase {
         c.month = 7
         c.day = 15
         c.hour = 12
-        let d = Calendar.current.date(from: c)!
+        let d = DoseEngine.gregorian.date(from: c)!
         XCTAssertEqual(
             CheckinEngine.periodIdentValue(questionnaireKey: "daily-check-in", cadence: .daily, today: d),
             "daily-check-in-2026-07-15"

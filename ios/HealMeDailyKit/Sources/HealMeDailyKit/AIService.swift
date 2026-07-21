@@ -19,7 +19,18 @@ public struct AIService: Sendable {
     /// service answers 401 and the UI shows its message).
     public var tokenProvider: (@Sendable () async -> String?)?
 
-    public init(baseURL: URL, session: URLSession = .shared) {
+    /// AI endpoints (health-review generation, assistant) legitimately go
+    /// quiet for minutes while the LLM works — MedplumClient's 15s idle
+    /// timeout would kill them mid-generation. Still bounded (vs .shared's
+    /// 7-day resource default) so a dead ai-service URL surfaces as an error.
+    public static let defaultSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 180
+        config.timeoutIntervalForResource = 600
+        return URLSession(configuration: config)
+    }()
+
+    public init(baseURL: URL, session: URLSession = AIService.defaultSession) {
         var normalized = baseURL.absoluteString
         if !normalized.hasSuffix("/") { normalized += "/" }
         self.baseURL = URL(string: normalized) ?? baseURL

@@ -11,6 +11,16 @@ public enum MedplumError: LocalizedError, Sendable {
     case http(status: Int, message: String)
     case network(String)
     case invalidResponse(String)
+    /// The single owner Patient could not be resolved right now (seed has
+    /// not run, or a transient empty search result) — a failed precondition,
+    /// never the server's verdict on the write that needed it. The offline
+    /// drain keeps the entry queued instead of dropping it.
+    case patientNotFound
+    /// The oauth2/token refresh endpoint failed WITHOUT definitively
+    /// rejecting the refresh token (a definitive 400/401 surfaces as
+    /// `.unauthenticated` instead — e.g. a proxy 403 or an odd status). The
+    /// session survives; callers treat this like transient trouble.
+    case authRefreshFailed(status: Int, message: String)
 
     public var errorDescription: String? {
         switch self {
@@ -22,6 +32,10 @@ public enum MedplumError: LocalizedError, Sendable {
             return "Cannot reach the Medplum server — \(message)"
         case .invalidResponse(let message):
             return message
+        case .patientNotFound:
+            return "No patient record — run make seed on the server"
+        case .authRefreshFailed(let status, let message):
+            return "Could not refresh the session — \(message) (HTTP \(status))"
         }
     }
 }
@@ -153,7 +167,18 @@ public actor MedplumClient {
         return e
     }()
 
-    public init(baseURL: URL, tokenStore: TokenStore = KeychainTokenStore(), session: URLSession = .shared) {
+    /// URLSession.shared waits 60s per request before giving up — against an
+    /// unroutable server (wrong Wi-Fi, Local Network permission denied) the
+    /// sign-in spinner looks hung forever. 15s turns that into a visible
+    /// error while staying generous for a slow home server.
+    public static let defaultSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 120
+        return URLSession(configuration: config)
+    }()
+
+    public init(baseURL: URL, tokenStore: TokenStore = KeychainTokenStore(), session: URLSession = MedplumClient.defaultSession) {
         // Normalize to a trailing slash so URL(string:relativeTo:) appends
         // instead of replacing the last path component.
         var normalized = baseURL.absoluteString
@@ -289,12 +314,17 @@ public actor MedplumClient {
 
     /// Follow `Bundle.link.next` until exhausted (page cap is a runaway
     /// guard, not a truncation policy — adherence windows must be complete).
+    /// Next links are rebased onto `baseURL` first: Medplum stamps them with
+    /// the SERVER's own MEDPLUM_BASE_URL (e.g. http://localhost:8103/), which
+    /// need not be the URL this device reaches the server at (e.g. a
+    /// Tailscale IP) — followed verbatim they would break page 2+ AND carry
+    /// the bearer token to whatever host the response named.
     public func searchAll<T: FHIRResource>(_ type: T.Type, _ params: [(String, String)], maxPages: Int = 20) async throws -> [T] {
         var bundle = try await search(T.resourceType, params)
         var out = bundle.resources(type)
         var pages = 1
         while let next = bundle.nextLink, pages < maxPages {
-            let data = try await authorizedAbsoluteGET(urlString: next)
+            let data = try await authorizedAbsoluteGET(urlString: rebasedOntoBaseURL(next))
             bundle = try Self.decode(FHIRBundle.self, from: data)
             out += bundle.resources(type)
             pages += 1
@@ -415,6 +445,12 @@ public actor MedplumClient {
             case MedplumError.unauthenticated:
                 signOut()
                 throw MedplumError.unauthenticated
+            case MedplumError.http(let status, let message):
+                // The token endpoint misbehaved without rejecting the token
+                // (proxy 403, 5xx, …). Keep this distinguishable from an
+                // `.http` raised by a FHIR request itself: the offline drain
+                // must treat it as transient, never as the write's verdict.
+                throw MedplumError.authRefreshFailed(status: status, message: message)
             default:
                 throw error
             }
@@ -439,9 +475,43 @@ public actor MedplumClient {
         return try await authorizedURLRequest(url: url, method: method, body: body, contentType: contentType, extraHeaders: extraHeaders)
     }
 
-    private func authorizedAbsoluteGET(urlString: String) async throws -> Data {
+    /// Rebase a server-stamped absolute link (e.g. `Bundle.link.next`) onto
+    /// this client's `baseURL`: keep only the link's path + query, take
+    /// scheme/host/port from `baseURL`, and preserve any path prefix the
+    /// baseURL carries (reverse-proxy setups). Medplum builds those links
+    /// from its own MEDPLUM_BASE_URL, so they name the server's idea of its
+    /// address, not the one this device connects to.
+    private func rebasedOntoBaseURL(_ urlString: String) throws -> String {
+        guard let link = URLComponents(string: urlString),
+              var rebased = URLComponents(url: baseURL, resolvingAgainstBaseURL: true) else {
+            throw MedplumError.invalidResponse("Bad pagination link")
+        }
+        var path = link.path.isEmpty ? rebased.path : link.path
+        // baseURL is normalized with a trailing slash ("/", "/medplum/") —
+        // prepend its path prefix unless the link already carries it.
+        let basePrefix = rebased.path.hasSuffix("/") ? String(rebased.path.dropLast()) : rebased.path
+        if !basePrefix.isEmpty, path != basePrefix, !path.hasPrefix(basePrefix + "/") {
+            path = basePrefix + (path.hasPrefix("/") ? path : "/" + path)
+        }
+        rebased.path = path
+        rebased.percentEncodedQuery = link.percentEncodedQuery
+        guard let url = rebased.url else {
+            throw MedplumError.invalidResponse("Bad pagination link")
+        }
+        return url.absoluteString
+    }
+
+    /// GET an absolute URL with the bearer token attached. Restricted to the
+    /// configured server: a URL whose scheme/host/port differ from `baseURL`
+    /// is refused outright — the session token must never travel to a host
+    /// named by response content. (internal, not private, so tests can pin
+    /// the refusal directly.)
+    func authorizedAbsoluteGET(urlString: String) async throws -> Data {
         guard let url = URL(string: urlString) else {
             throw MedplumError.invalidResponse("Bad pagination link")
+        }
+        guard url.scheme == baseURL.scheme, url.host == baseURL.host, url.port == baseURL.port else {
+            throw MedplumError.invalidResponse("Refusing to call \(url.host ?? "unknown host") — not the configured server")
         }
         return try await authorizedURLRequest(url: url, method: "GET", body: nil, contentType: nil, extraHeaders: [:])
     }

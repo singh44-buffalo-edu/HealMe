@@ -157,8 +157,10 @@ struct TrendsView: View {
                 Button {
                     window = w
                 } label: {
+                    // maxScale: three fixed pills share one row — capped so
+                    // the segmented track survives accessibility sizes.
                     Text(w.label)
-                        .font(.mono(12, weight: window == w ? .semibold : .regular))
+                        .font(.mono(12, weight: window == w ? .semibold : .regular, maxScale: 1.6))
                         .foregroundStyle(window == w ? T.ink : T.tertiary)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 36)
@@ -183,7 +185,7 @@ struct TrendsView: View {
         return DsCard {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(signal.title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.ui(15, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Spacer(minLength: 8)
                 if let last = points.last {
@@ -252,8 +254,10 @@ struct TrendsView: View {
         AxisMarks(values: .automatic(desiredCount: 4)) { value in
             AxisValueLabel {
                 if let day = value.as(Date.self) {
+                    // maxScale: axis ticks inside a fixed-height chart —
+                    // capped so labels don't collide at accessibility sizes.
                     Text(Self.dateTick(day, monthOnly: window == .y1))
-                        .font(.mono(9))
+                        .font(.mono(9, maxScale: 1.5))
                         .foregroundStyle(T.quaternary)
                 }
             }

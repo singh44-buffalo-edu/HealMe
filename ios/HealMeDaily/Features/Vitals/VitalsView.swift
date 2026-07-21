@@ -244,7 +244,7 @@ struct VitalsView: View {
             HStack(spacing: 10) {
                 StatusDot(color: metric.accent, size: 8)
                 Text(metric.title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.ui(16, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Spacer()
             }
@@ -340,28 +340,32 @@ struct VitalsView: View {
         AxisMarks(values: .automatic(desiredCount: 5)) { value in
             AxisValueLabel {
                 if let day = value.as(Date.self) {
+                    // maxScale: axis ticks inside a fixed-height chart —
+                    // capped so labels don't collide at accessibility sizes.
                     Text(Self.monthTick(day))
-                        .font(.mono(9))
+                        .font(.mono(9, maxScale: 1.5))
                         .foregroundStyle(T.quaternary)
                 }
             }
         }
     }
 
+    // maxScale on the legend row: several items share one line under the
+    // chart — series-key text, capped so the row survives accessibility sizes.
     private var legendRow: some View {
         HStack(spacing: 16) {
             if metric == .bp {
                 (Text("—").foregroundStyle(T.Metric.bp) + Text(" systolic").foregroundStyle(T.tertiary))
-                    .font(.mono(10))
+                    .font(.mono(10, maxScale: 1.5))
                 (Text("—").foregroundStyle(T.Metric.bpDia) + Text(" diastolic").foregroundStyle(T.tertiary))
-                    .font(.mono(10))
+                    .font(.mono(10, maxScale: 1.5))
             } else {
                 (Text("—").foregroundStyle(metric.accent) + Text(" \(metric.title.lowercased())").foregroundStyle(T.tertiary))
-                    .font(.mono(10))
+                    .font(.mono(10, maxScale: 1.5))
             }
             Spacer()
             Text("\(count) reading\(count == 1 ? "" : "s") · 1Y")
-                .font(.mono(10))
+                .font(.mono(10, maxScale: 1.5))
                 .foregroundStyle(T.tertiary)
         }
     }
@@ -507,7 +511,7 @@ struct VitalsView: View {
         DsCard {
             HStack {
                 Text("Recent readings")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .font(.ui(14.5, weight: .semibold))
                     .foregroundStyle(T.ink)
                 Spacer()
                 Text("\(count) in the last year")

@@ -22,11 +22,11 @@ struct LoginView: View {
                 VStack(spacing: 18) {
                     Spacer(minLength: 60)
                     BrandMark(size: 52)
-                    Text("HealMeDaily")
-                        .font(.system(size: 26, weight: .semibold))
+                    Text("HealMeNow")
+                        .font(.ui(26, weight: .semibold))
                         .foregroundStyle(T.ink)
                     Text("Private personal health record — sign in with your local Medplum account")
-                        .font(.system(size: 13))
+                        .font(.ui(13))
                         .foregroundStyle(T.secondary)
                         .multilineTextAlignment(.center)
                     VaultChip()
@@ -74,6 +74,12 @@ struct LoginView: View {
                                 }
                             }
 
+                            // Security disclosure BEFORE the password is typed:
+                            // plain http over an ordinary network is sniffable.
+                            // Shown for the collapsed server line too — the
+                            // stored URL is the one about to carry credentials.
+                            TransportSecurityNotice(urlString: model.serverURLString)
+
                             if let error {
                                 ErrorBanner(message: error)
                             }
@@ -88,7 +94,7 @@ struct LoginView: View {
                     .padding(.horizontal, 20)
 
                     Text("Not medical advice — a personal record & discussion aid")
-                        .font(.system(size: 11))
+                        .font(.ui(11))
                         .foregroundStyle(T.quaternary)
                     Spacer(minLength: 40)
                 }

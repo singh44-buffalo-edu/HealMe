@@ -283,8 +283,13 @@ final class HealthKitService {
     }
 
     /// One sleep-duration Sample per finished night: asleep-stage samples
-    /// bucketed by the night's END date, summed to hours. The bucket rule
-    /// (sample ends before today) keeps identity stable across re-syncs.
+    /// bucketed by the night's END (wake-up) date, summed to hours. The dedup
+    /// identifier is keyed to that same end date (HealthKitMapping special-
+    /// cases sleep; the Sample's `end` is the bucket's max endDate, so its
+    /// local date IS the bucket key) — a night never collides with a nap that
+    /// started the same day, and its identity survives late watch data
+    /// pulling the first sample across midnight. The bucket rule (sample
+    /// ends before today) keeps values final across re-syncs.
     private func nightlySleepAggregates() async throws -> [HealthKitMapping.Sample] {
         let interval = finishedDaysInterval
         let type = HKCategoryType(.sleepAnalysis)

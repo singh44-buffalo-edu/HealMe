@@ -51,10 +51,13 @@ public struct RecordAPI: Sendable {
             let medication = request.medicationReference?.id(ofType: "Medication").flatMap { medications[$0] }
             let dosage = request.dosageInstruction?.first
             // authoredOn anchors the clinical start; fall back to record
-            // creation converted to the LOCAL calendar date.
+            // creation. Always resolved to the LOCAL calendar date (mirrors
+            // web loadMeds) — a raw UTC slice of a dateTime authored in the
+            // evening (UTC-negative zones) lands on "tomorrow" and
+            // suppresses today's doses.
             let startDate: String
             if let authored = request.authoredOn {
-                startDate = String(authored.prefix(10))
+                startDate = DoseEngine.localCalendarDate(authored)
             } else if let updated = request.meta?.lastUpdated, let parsed = Self.parseInstant(updated) {
                 startDate = DoseEngine.localDateString(parsed)
             } else {
@@ -159,7 +162,7 @@ public struct RecordAPI: Sendable {
     @discardableResult
     public func applyDoseLog(_ payload: DoseLogPayload) async throws -> MedicationAdministration {
         guard let patient = try await getPatient(), let patientId = patient.id else {
-            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+            throw MedplumError.patientNotFound
         }
         let identToken = "\(FHIR.administrationIdentSystem)|\(payload.identValue)"
         // One identifier search decides create-vs-correct for this slot.
@@ -299,7 +302,7 @@ public struct RecordAPI: Sendable {
     @discardableResult
     public func applyCheckin(_ payload: CheckinPayload) async throws -> QuestionnaireResponse {
         guard let patient = try await getPatient(), let patientId = patient.id else {
-            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+            throw MedplumError.patientNotFound
         }
         var response = QuestionnaireResponse(
             identifier: Identifier(system: FHIR.questionnaireResponseIdentSystem, value: payload.periodIdent),
@@ -347,7 +350,7 @@ public struct RecordAPI: Sendable {
     /// gate is for AI/OCR extractions only.
     public func saveQuickObservations(_ build: (String) -> [FHIRObservation]) async throws {
         guard let patient = try await getPatient(), let patientId = patient.id else {
-            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+            throw MedplumError.patientNotFound
         }
         try await applyObservations(ObservationsPayload(
             observations: Self.stampQuickIdentifiers(build("Patient/\(patientId)"))
@@ -374,7 +377,7 @@ public struct RecordAPI: Sendable {
     /// replay converge instead of duplicating.
     public func applyObservations(_ payload: ObservationsPayload) async throws {
         guard let patient = try await getPatient(), let patientId = patient.id else {
-            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+            throw MedplumError.patientNotFound
         }
         for var observation in payload.observations {
             // Subject is stamped centrally (mirrors the web useSaveObservation):
@@ -404,7 +407,7 @@ public struct RecordAPI: Sendable {
     @discardableResult
     public func saveHealthKitObservations(_ observations: [FHIRObservation]) async throws -> (saved: Int, corrected: Int) {
         guard let patient = try await getPatient(), let patientId = patient.id else {
-            throw MedplumError.invalidResponse("No patient record — run make seed on the server")
+            throw MedplumError.patientNotFound
         }
         var saved = 0
         var corrected = 0

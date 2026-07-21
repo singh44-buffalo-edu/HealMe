@@ -131,7 +131,7 @@ struct DocumentsView: View {
             Eyebrow(text: "Capture")
             Text("PDFs and photos go through OCR + AI extraction into the review queue below. "
                 + "Structured exports — FHIR JSON, CSV, Apple Health XML, C-CDA, HL7v2 — import directly with dedup.")
-                .font(.system(size: 12.5))
+                .font(.ui(12.5))
                 .foregroundStyle(T.secondary)
 
             // Cloud boundary disclosed BEFORE any data is sent (rule: cloud
@@ -166,12 +166,12 @@ struct DocumentsView: View {
                     ProgressView()
                         .tint(T.green)
                     Text("Uploading — OCR + extraction can take tens of seconds.")
-                        .font(.system(size: 12))
+                        .font(.ui(12))
                         .foregroundStyle(T.secondary)
                 }
             } else {
                 Text("OCR + extraction can take tens of seconds.")
-                    .font(.system(size: 11))
+                    .font(.ui(11))
                     .foregroundStyle(T.quaternary)
             }
         }
@@ -181,7 +181,7 @@ struct DocumentsView: View {
     /// supplies its own Button chrome, so we only draw the label).
     private func pickerLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13.5, weight: .semibold))
+            .font(.ui(13.5, weight: .semibold))
             .foregroundStyle(T.ink)
             .frame(maxWidth: .infinity)
             .frame(minHeight: 46)
@@ -199,7 +199,7 @@ struct DocumentsView: View {
                 (
                     Text("\(count) ").font(.mono(13, weight: .semibold))
                         + Text("proposals created — nothing is committed until you approve below.")
-                        .font(.system(size: 12.5))
+                        .font(.ui(12.5))
                 )
                 .foregroundStyle(T.ink)
             case .imported(let result):
@@ -223,7 +223,7 @@ struct DocumentsView: View {
                 Spacer()
             }
             Text("Approve = it becomes part of your record (committed with provenance). Reject = nothing is created.")
-                .font(.system(size: 11))
+                .font(.ui(11))
                 .foregroundStyle(T.tertiary)
 
             if let queueError {
@@ -261,7 +261,7 @@ struct DocumentsView: View {
             }
 
             Text(task.description)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.ui(14, weight: .semibold))
                 .foregroundStyle(T.ink)
 
             if let confidence = task.confidence {

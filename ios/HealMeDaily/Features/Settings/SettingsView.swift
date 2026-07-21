@@ -62,6 +62,9 @@ struct SettingsView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    // Amber disclosure when this URL is genuinely cleartext
+                    // (plain http beyond loopback/Tailscale) — live as typed.
+                    TransportSecurityNotice(urlString: model.serverURLString)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     FieldLabel(text: "AI service URL")
@@ -92,7 +95,7 @@ struct SettingsView: View {
             Section {
                 Toggle(isOn: $model.requireBiometrics) {
                     Text("Require Face ID / passcode")
-                        .font(.system(size: 14))
+                        .font(.ui(14))
                         .foregroundStyle(T.ink)
                 }
                 .tint(T.green)
@@ -114,7 +117,7 @@ struct SettingsView: View {
             Section {
                 Toggle(isOn: $model.remindersEnabled) {
                     Text("Dose reminders")
-                        .font(.system(size: 14))
+                        .font(.ui(14))
                         .foregroundStyle(T.ink)
                 }
                 .tint(T.green)
@@ -123,7 +126,7 @@ struct SettingsView: View {
                 }
                 Toggle(isOn: $model.remindersShowMedName) {
                     Text("Show medication name on lock screen")
-                        .font(.system(size: 14))
+                        .font(.ui(14))
                         .foregroundStyle(model.remindersEnabled ? T.ink : T.disabled)
                 }
                 .tint(T.green)
@@ -169,7 +172,7 @@ struct SettingsView: View {
                     ProgressView()
                         .tint(T.green)
                     Text("Checking AI service…")
-                        .font(.system(size: 13))
+                        .font(.ui(13))
                         .foregroundStyle(T.secondary)
                 }
             }
@@ -458,19 +461,19 @@ struct SettingsView: View {
                 }
             )) {
                 Text("Push notifications")
-                    .font(.system(size: 14))
+                    .font(.ui(14))
                     .foregroundStyle(T.ink)
             }
             .tint(T.green)
 
             if model.push.status == .denied {
-                Text("Notifications are turned off for HealMeDaily in iOS Settings — enable them there first.")
-                    .font(.system(size: 12))
+                Text("Notifications are turned off for HealMeNow in iOS Settings — enable them there first.")
+                    .font(.ui(12))
                     .foregroundStyle(T.watch)
             }
             if let error = model.push.lastError {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(.ui(12))
                     .foregroundStyle(T.outOfRange)
             }
         } header: {
@@ -493,7 +496,7 @@ struct SettingsView: View {
         Section {
             if model.healthKit.status == .unavailable {
                 Text("Apple Health is not available on this device.")
-                    .font(.system(size: 13))
+                    .font(.ui(13))
                     .foregroundStyle(T.secondary)
             } else {
                 Toggle(isOn: Binding(
@@ -509,7 +512,7 @@ struct SettingsView: View {
                     }
                 )) {
                     Text("Sync Apple Health")
-                        .font(.system(size: 14))
+                        .font(.ui(14))
                         .foregroundStyle(T.ink)
                 }
                 .tint(T.green)
@@ -517,7 +520,7 @@ struct SettingsView: View {
                 if model.healthKit.status == .on {
                     HStack {
                         Text(model.healthKit.syncing ? "Syncing…" : "Last sync")
-                            .font(.system(size: 14))
+                            .font(.ui(14))
                             .foregroundStyle(T.secondary)
                         Spacer()
                         if let at = model.healthKit.lastSyncAt {
@@ -532,7 +535,7 @@ struct SettingsView: View {
                 }
                 if let error = model.healthKit.lastError {
                     Text(error)
-                        .font(.system(size: 12))
+                        .font(.ui(12))
                         .foregroundStyle(T.outOfRange)
                 }
             }
@@ -552,16 +555,16 @@ struct SettingsView: View {
         Section {
             HStack {
                 Text("Signed in as")
-                    .font(.system(size: 14))
+                    .font(.ui(14))
                     .foregroundStyle(T.secondary)
                 Spacer()
                 Text(model.profileName)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.ui(14, weight: .medium))
                     .foregroundStyle(T.ink)
             }
             HStack {
                 Text("Server")
-                    .font(.system(size: 14))
+                    .font(.ui(14))
                     .foregroundStyle(T.secondary)
                 Spacer()
                 Text(model.serverURLString)
@@ -576,7 +579,7 @@ struct SettingsView: View {
             if model.pendingWrites > 0 {
                 HStack {
                     Text("Waiting to sync")
-                        .font(.system(size: 14))
+                        .font(.ui(14))
                         .foregroundStyle(T.secondary)
                     Spacer()
                     Text("\(model.pendingWrites) change\(model.pendingWrites == 1 ? "" : "s")")
@@ -598,7 +601,7 @@ struct SettingsView: View {
                             .tint(T.outOfRange)
                     }
                     Text("Sign out")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.ui(14, weight: .semibold))
                 }
                 .foregroundStyle(T.outOfRange)
                 .frame(maxWidth: .infinity)
@@ -616,7 +619,7 @@ struct SettingsView: View {
         Section {
             HStack {
                 Text("Version")
-                    .font(.system(size: 14))
+                    .font(.ui(14))
                     .foregroundStyle(T.secondary)
                 Spacer()
                 Text(appVersion)
@@ -624,7 +627,7 @@ struct SettingsView: View {
                     .foregroundStyle(T.ink)
             }
             Text("Your record lives on your own self-hosted Medplum server. This app never talks to anyone else's cloud unless you route an AI feature there.")
-                .font(.system(size: 12.5))
+                .font(.ui(12.5))
                 .foregroundStyle(T.secondary)
             DisclaimerFooter()
         } header: {

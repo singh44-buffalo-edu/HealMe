@@ -8,7 +8,9 @@ import Foundation
 /// Mapping rules (owner-approved 2026-07-17, FHIR-MAPPING §7 `healthkit`):
 /// - Identifier system `…/identifier/healthkit`. Per-sample kinds use the
 ///   HKSample UUID (lowercased) as the value; daily-aggregate kinds use
-///   `{kind}-{YYYY-MM-DD}` — both make re-syncs converge via conditional
+///   `{kind}-{YYYY-MM-DD}` where the date is the aggregation bucket — the
+///   day's start for day buckets (steps, resting HR, HRV), the night's END
+///   (wake-up) date for sleep. Both make re-syncs converge via conditional
 ///   create instead of duplicating.
 /// - Verified standard codes only (CLAUDE.md §3): every LOINC below is a
 ///   well-known code; sleep reuses the project-local `sleep-duration` code so
@@ -70,7 +72,15 @@ public enum HealthKitMapping {
     /// Stable identifier value for a sample (dedup key across re-syncs).
     public static func identifierValue(for sample: Sample) -> String {
         if sample.kind.isDailyAggregate {
-            return "\(sample.kind.rawValue)-\(DoseEngine.localDateString(sample.start))"
+            // The date must match the aggregation bucket or re-syncs collide
+            // instead of converging. Day buckets (steps, resting HR, HRV)
+            // anchor on the day's START; sleep buckets a night by its END
+            // (wake-up) date — start-keyed, a Monday nap and the Mon-23:00→
+            // Tue-06:30 night would both claim `sleep-duration-{Mon}` and
+            // overwrite each other, and late watch data pulling the night's
+            // first sample across midnight would re-key (duplicate) it.
+            let bucketDate = sample.kind == .sleepDuration ? sample.end : sample.start
+            return "\(sample.kind.rawValue)-\(DoseEngine.localDateString(bucketDate))"
         }
         return sample.uuid.lowercased()
     }
