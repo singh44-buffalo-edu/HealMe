@@ -54,15 +54,25 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        # ATS policy: default ATS + local-network exemption ONLY.
-        # NSAllowsLocalNetworking covers the self-hosted LAN case (ATS also
-        # exempts raw-IP URLs like http://192.168.1.20:8103 by design), so
-        # plain HTTP works at home while any REMOTE hostname must be HTTPS —
-        # deliberately, and documented in APPSTORE.md. Do not add
-        # NSAllowsArbitraryLoads: it would be ignored while this key is
-        # present (iOS 10+ rule) and only draws App Review scrutiny.
+        # ATS policy: default ATS + two narrow carve-outs, documented in
+        # APPSTORE.md. (1) NSAllowsLocalNetworking covers the self-hosted
+        # LAN case (RFC1918 hosts like http://192.168.1.20:8103) — note it
+        # does NOT cover Tailscale's 100.64.0.0/10 CGNAT range (observed
+        # 2026-07-21: ATS blocked http://100.x.y.z). (2) The ts.net
+        # exception permits plain http:// to the user's own tailnet
+        # MagicDNS names (healmenow-mac.tailXXXX.ts.net) — that traffic is
+        # always inside the WireGuard tunnel, so the wire is encrypted even
+        # though the scheme is http; Tailscale-issued TLS certs need a
+        # tailnet feature toggle this setup doesn't require. Do NOT add
+        # NSAllowsArbitraryLoads: broader than needed, ignored while
+        # granular keys are present (iOS 10+ rule), and draws App Review
+        # scrutiny.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            ts.net:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
         NSCameraUsageDescription: >-
           HealMeNow uses the camera to photograph medical documents (lab
           reports, prescriptions) so they can be added to your personal
