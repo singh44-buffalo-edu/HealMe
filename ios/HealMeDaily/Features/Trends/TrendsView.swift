@@ -172,6 +172,7 @@ struct TrendsView: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(window == w ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(4)

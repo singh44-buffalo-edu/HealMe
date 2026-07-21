@@ -27,11 +27,14 @@ struct RootView: View {
             // Privacy shade: an opaque cover whenever the app is not active
             // (the app-switcher snapshot, Control Center pull-down, an
             // incoming call) so the health record never shows in the
-            // multitasking preview. Distinct from the lock — it needs no
-            // re-auth and clears the instant the app is active again, so
-            // transient interruptions don't nag Face ID; only a real
-            // background→foreground round trip re-locks (below).
-            if model.requireBiometrics && scenePhase != .active {
+            // multitasking preview. Unconditional — iOS persists that
+            // snapshot to disk regardless of whether the owner enabled
+            // Face ID, so the shade must not depend on requireBiometrics.
+            // Distinct from the lock — it needs no re-auth and clears the
+            // instant the app is active again, so transient interruptions
+            // don't nag Face ID; only a real background→foreground round
+            // trip re-locks (below, still gated on requireBiometrics).
+            if scenePhase != .active {
                 PrivacyShade()
             }
         }

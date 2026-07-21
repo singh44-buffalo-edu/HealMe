@@ -45,6 +45,9 @@ struct Eyebrow: View {
 struct PageHeader: View {
     let title: String
     var subtitle: String?
+    /// Set when the subtitle is DATA (a date, a timestamp) rather than prose
+    /// — the design contract renders numbers/dates/timestamps mono, always.
+    var monoSubtitle = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -53,7 +56,7 @@ struct PageHeader: View {
                 .foregroundStyle(T.ink)
             if let subtitle {
                 Text(subtitle)
-                    .font(.ui(12.5))
+                    .font(monoSubtitle ? .mono(12) : .ui(12.5))
                     .foregroundStyle(T.secondary)
             }
         }

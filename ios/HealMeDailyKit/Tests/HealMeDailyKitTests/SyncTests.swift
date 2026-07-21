@@ -39,11 +39,11 @@ final class SyncTests: XCTestCase {
 
     // MARK: Outbox persistence
 
-    func testOutboxPersistsAcrossReload() async {
+    func testOutboxPersistsAcrossReload() async throws {
         let store = OutboxStore(directory: directory)
         let payload = RecordAPI.doseLogPayload(slot: sampleSlot(), action: .taken)
-        await store.append(OutboxEntry(kind: .dose(payload)))
-        await store.append(OutboxEntry(kind: .checkin(CheckinPayload(
+        try await store.append(OutboxEntry(kind: .dose(payload)))
+        try await store.append(OutboxEntry(kind: .checkin(CheckinPayload(
             periodIdent: "daily-check-in-2026-07-13",
             questionnaireUrl: "https://healmedaily.local/fhir/Questionnaire/daily-check-in",
             items: [],
@@ -67,10 +67,10 @@ final class SyncTests: XCTestCase {
         }
     }
 
-    func testOutboxRemoveById() async {
+    func testOutboxRemoveById() async throws {
         let store = OutboxStore(directory: directory)
         let entry = OutboxEntry(kind: .observations(ObservationsPayload(observations: [])))
-        await store.append(entry)
+        try await store.append(entry)
         let count = await store.count
         XCTAssertEqual(count, 1)
         await store.remove(id: entry.id)
@@ -78,11 +78,11 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(after, 0)
     }
 
-    func testOutboxRemoveMatchingSupersedesSameSlot() async {
+    func testOutboxRemoveMatchingSupersedesSameSlot() async throws {
         let store = OutboxStore(directory: directory)
         let slot = sampleSlot()
-        await store.append(OutboxEntry(kind: .dose(RecordAPI.doseLogPayload(slot: slot, action: .taken))))
-        await store.append(OutboxEntry(kind: .checkin(CheckinPayload(
+        try await store.append(OutboxEntry(kind: .dose(RecordAPI.doseLogPayload(slot: slot, action: .taken))))
+        try await store.append(OutboxEntry(kind: .checkin(CheckinPayload(
             periodIdent: "daily-check-in-2026-07-13", questionnaireUrl: nil, items: [], authored: "x"
         ))))
         // Supersede the dose for this slot; the check-in must survive.
@@ -106,6 +106,26 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(count, 0, "starts with a fresh queue")
         let sidecars = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         XCTAssertTrue(sidecars.contains { $0.hasPrefix("outbox.corrupt-") }, "corrupt file preserved for recovery")
+        // The set-aside is surfaced, not silent — the app shows a notice.
+        let flagged = await store.corruptFileSetAside()
+        XCTAssertNotNil(flagged)
+        XCTAssertTrue(flagged?.hasPrefix("outbox.corrupt-") ?? false)
+    }
+
+    func testAppendSurfacesPersistFailureInsteadOfClaimingQueued() async {
+        // Occupy the store's directory path with a regular FILE so every
+        // queue write must fail: append has to throw, not report success
+        // for an entry that exists only in memory.
+        try? Data("not a directory".utf8).write(to: directory)
+        let store = OutboxStore(directory: directory)
+        do {
+            try await store.append(OutboxEntry(kind: .observations(ObservationsPayload(observations: []))))
+            XCTFail("append must surface a failed persist")
+        } catch {
+            // expected
+        }
+        let count = await store.count
+        XCTAssertEqual(count, 0, "a failed append leaves nothing half-queued in memory")
     }
 
     // MARK: Payload / echo invariants
@@ -204,10 +224,13 @@ final class SyncTests: XCTestCase {
     )
     private static let observationBody = Data(#"{"resourceType":"Observation","id":"o1","status":"final"}"#.utf8)
 
-    private func queuedObservationsEntry(_ outbox: OutboxStore) async {
-        await outbox.append(OutboxEntry(kind: .observations(ObservationsPayload(
-            observations: RecordAPI.stampQuickIdentifiers([FHIRObservation(status: "final")])
-        ))))
+    private func queuedObservationsEntry(_ outbox: OutboxStore, profileRef: String? = nil) async throws {
+        try await outbox.append(OutboxEntry(
+            kind: .observations(ObservationsPayload(
+                observations: RecordAPI.stampQuickIdentifiers([FHIRObservation(status: "final")])
+            )),
+            profileRef: profileRef
+        ))
     }
 
     /// Bug A, stale-snapshot half: an entry superseded and purged by a live
@@ -217,8 +240,8 @@ final class SyncTests: XCTestCase {
     func testDrainSkipsEntryPurgedByLiveWriteMidDrain() async throws {
         let (engine, outbox, _) = makeEngine()
         let slot = sampleSlot()
-        await queuedObservationsEntry(outbox) // replayed first, gated below
-        await outbox.append(OutboxEntry(kind: .dose(RecordAPI.doseLogPayload(slot: slot, action: .skipped))))
+        try await queuedObservationsEntry(outbox) // replayed first, gated below
+        try await outbox.append(OutboxEntry(kind: .dose(RecordAPI.doseLogPayload(slot: slot, action: .skipped))))
 
         let reachedObservationPost = expectation(description: "drain is mid-replay of the first entry")
         let gate = DispatchSemaphore(value: 0)
@@ -262,7 +285,7 @@ final class SyncTests: XCTestCase {
     func testLiveDoseWriteLandsAfterInFlightReplayOfSameSlot() async throws {
         let (engine, outbox, _) = makeEngine()
         let slot = sampleSlot()
-        await outbox.append(OutboxEntry(kind: .dose(RecordAPI.doseLogPayload(slot: slot, action: .skipped))))
+        try await outbox.append(OutboxEntry(kind: .dose(RecordAPI.doseLogPayload(slot: slot, action: .skipped))))
 
         let reachedAdminSearch = expectation(description: "replay is in flight, before its write")
         let gate = DispatchSemaphore(value: 0)
@@ -306,9 +329,9 @@ final class SyncTests: XCTestCase {
     /// Bug B: a malformed reply (captive portal returning 200 + HTML) is not
     /// a server verdict on the payload — the entry must stay queued instead
     /// of the whole outbox being dropped in one pass.
-    func testDrainKeepsEntryOnMalformedResponse() async {
+    func testDrainKeepsEntryOnMalformedResponse() async throws {
         let (engine, outbox, _) = makeEngine()
-        await queuedObservationsEntry(outbox)
+        try await queuedObservationsEntry(outbox)
         SyncStubURLProtocol.handler = { _ in (200, Data("<html>hotel wifi</html>".utf8), [:]) }
 
         let report = await engine.drain()
@@ -319,9 +342,9 @@ final class SyncTests: XCTestCase {
 
     /// Bug B: the patient lookup coming up empty (seed not run, transient
     /// empty search) happens BEFORE the write is attempted — transient, keep.
-    func testDrainKeepsEntryWhenPatientLookupComesUpEmpty() async {
+    func testDrainKeepsEntryWhenPatientLookupComesUpEmpty() async throws {
         let (engine, outbox, _) = makeEngine()
-        await queuedObservationsEntry(outbox)
+        try await queuedObservationsEntry(outbox)
         SyncStubURLProtocol.handler = { _ in (200, Self.emptyBundle, [:]) }
 
         let report = await engine.drain()
@@ -332,9 +355,9 @@ final class SyncTests: XCTestCase {
 
     /// A validation 4xx raised by the write itself IS a definitive server
     /// verdict: drop the entry and surface it loudly.
-    func testDrainDropsEntryOnValidation400FromWrite() async {
+    func testDrainDropsEntryOnValidation400FromWrite() async throws {
         let (engine, outbox, _) = makeEngine()
-        await queuedObservationsEntry(outbox)
+        try await queuedObservationsEntry(outbox)
         SyncStubURLProtocol.handler = { request in
             let path = request.url?.path ?? ""
             if path.hasSuffix("/Patient") { return (200, Self.patientBundle, [:]) }
@@ -351,9 +374,9 @@ final class SyncTests: XCTestCase {
 
     /// 401 (surfacing as .unauthenticated) stops the drain and keeps the
     /// entry — needing to sign in again must never cost a health write.
-    func testDrainKeepsEntryOn401() async {
+    func testDrainKeepsEntryOn401() async throws {
         let (engine, outbox, _) = makeEngine()
-        await queuedObservationsEntry(outbox)
+        try await queuedObservationsEntry(outbox)
         SyncStubURLProtocol.handler = { _ in (401, Data("{}".utf8), [:]) }
 
         let report = await engine.drain()
@@ -365,9 +388,9 @@ final class SyncTests: XCTestCase {
     /// Bug B: a token-refresh failure that is NOT a definitive rejection of
     /// the refresh token (here a proxy-ish 403 from oauth2/token) must stop
     /// the drain WITHOUT consuming the entry — and without wiping the session.
-    func testDrainKeepsEntryWhenTokenRefreshMisbehaves() async {
+    func testDrainKeepsEntryWhenTokenRefreshMisbehaves() async throws {
         let (engine, outbox, client) = makeEngine()
-        await queuedObservationsEntry(outbox)
+        try await queuedObservationsEntry(outbox)
         SyncStubURLProtocol.handler = { request in
             if (request.url?.path ?? "").hasSuffix("oauth2/token") {
                 return (403, Data("{}".utf8), [:])
@@ -379,8 +402,123 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(report.applied, 0)
         XCTAssertTrue(report.failures.isEmpty)
         XCTAssertEqual(report.remaining, 1)
+        XCTAssertFalse(report.stoppedForAuth, "transient token trouble is not a session verdict")
         let stillAuthed = await client.isAuthenticated
         XCTAssertTrue(stillAuthed, "an odd token-endpoint status must not destroy the session")
+    }
+
+    /// A DEFINITIVE refresh-token rejection mid-drain wipes the session
+    /// (client-side) — the report must say so, or the app keeps promising
+    /// "syncs when your server is reachable" under a dead session forever.
+    func testDrainReportsAuthStopWhenRefreshTokenDefinitivelyRejected() async throws {
+        let (engine, outbox, client) = makeEngine()
+        try await queuedObservationsEntry(outbox)
+        SyncStubURLProtocol.handler = { request in
+            if (request.url?.path ?? "").hasSuffix("oauth2/token") {
+                return (400, Data("{}".utf8), [:]) // definitive rejection
+            }
+            return (401, Data("{}".utf8), [:]) // forces the refresh attempt
+        }
+
+        let report = await engine.drain()
+        XCTAssertEqual(report.applied, 0)
+        XCTAssertTrue(report.failures.isEmpty, "auth-stop is not a per-entry failure")
+        XCTAssertTrue(report.stoppedForAuth, "the caller must learn the session died mid-drain")
+        XCTAssertEqual(report.remaining, 1, "the entry stays queued for after the next sign-in")
+        let stillAuthed = await client.isAuthenticated
+        XCTAssertFalse(stillAuthed, "the client wiped the definitively rejected session")
+    }
+
+    /// Entries queued under a DIFFERENT sign-in are held (skipped, kept,
+    /// counted) — never replayed into the current session's record and
+    /// never auto-discarded. Unstamped (legacy) and matching entries drain.
+    func testDrainHoldsEntriesQueuedUnderAnotherProfile() async throws {
+        let (engine, outbox, _) = makeEngine()
+        try await queuedObservationsEntry(outbox, profileRef: "Patient/p1") // current session
+        try await queuedObservationsEntry(outbox, profileRef: "Patient/previous-owner")
+        try await queuedObservationsEntry(outbox) // legacy, unstamped
+        SyncStubURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.hasSuffix("/Patient") { return (200, Self.patientBundle, [:]) }
+            if path.hasSuffix("/Observation"), request.httpMethod == "POST" {
+                return (201, Self.observationBody, [:])
+            }
+            return (200, Self.emptyBundle, [:])
+        }
+
+        let report = await engine.drain()
+        XCTAssertEqual(report.applied, 2, "matching + unstamped entries replay")
+        XCTAssertEqual(report.heldForOtherProfile, 1)
+        XCTAssertTrue(report.failures.isEmpty, "held is not failed")
+        XCTAssertEqual(report.remaining, 1)
+        let remaining = await outbox.all()
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(remaining.first?.profileRef, "Patient/previous-owner")
+    }
+
+    /// Identifiers are stamped once per USER ACTION: retrying the same save
+    /// after a partial live failure (obs 1 committed, obs 2 rejected) must
+    /// reuse the first attempt's identifiers so the committed observation
+    /// converges via If-None-Exist instead of duplicating.
+    func testQuickObservationIdentifiersStableAcrossRetry() async throws {
+        let (engine, _, _) = makeEngine()
+        let observations = [FHIRObservation(status: "final"), FHIRObservation(status: "preliminary")]
+
+        var observationPosts = 0
+        var postedIdentifiers: [String] = []
+        SyncStubURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.hasSuffix("/Patient") { return (200, Self.patientBundle, [:]) }
+            if path.hasSuffix("/Observation"), request.httpMethod == "POST" {
+                let body = SyncStubURLProtocol.bodyData(of: request)
+                let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+                let ident = ((json?["identifier"] as? [[String: Any]])?.first?["value"] as? String) ?? "?"
+                postedIdentifiers.append(ident)
+                observationPosts += 1
+                if observationPosts == 2 { return (500, Data("{}".utf8), [:]) } // partial failure
+                return (201, Self.observationBody, [:])
+            }
+            return (200, Self.emptyBundle, [:])
+        }
+
+        do {
+            _ = try await engine.saveQuickObservations(observations)
+            XCTFail("first attempt must surface the second observation's 500")
+        } catch {
+            // expected — the user sees the failure and retries
+        }
+        let retry = try await engine.saveQuickObservations(observations)
+        XCTAssertFalse(retry.wasQueued)
+
+        XCTAssertEqual(postedIdentifiers.count, 4)
+        XCTAssertNotEqual(postedIdentifiers[0], postedIdentifiers[1])
+        XCTAssertEqual(postedIdentifiers[2], postedIdentifiers[0],
+                       "retry must reuse the committed observation's identifier (converges, no duplicate)")
+        XCTAssertEqual(postedIdentifiers[3], postedIdentifiers[1],
+                       "retry must reuse the frozen identifier for the observation that failed")
+    }
+
+    /// When the offline queue itself cannot persist, the engine must THROW —
+    /// returning `.queued` for an entry that exists only in memory would
+    /// lose a health write on termination.
+    func testEngineSurfacesQueuePersistFailureInsteadOfClaimingQueued() async {
+        // Occupy the outbox directory path with a FILE so persists fail.
+        try? Data("not a directory".utf8).write(to: directory)
+        let (engine, outbox, _) = makeEngine()
+        SyncStubURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.hasSuffix("/Patient") { return (200, Self.patientBundle, [:]) }
+            throw URLError(.notConnectedToInternet) // offline → queue path
+        }
+
+        do {
+            _ = try await engine.saveQuickObservations([FHIRObservation(status: "final")])
+            XCTFail("a failed queue-persist must never be reported as queued")
+        } catch {
+            // expected — surfaced to the user as a real failure
+        }
+        let count = await outbox.count
+        XCTAssertEqual(count, 0, "nothing half-queued in memory either")
     }
 }
 

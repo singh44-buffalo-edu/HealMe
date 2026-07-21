@@ -618,7 +618,9 @@ struct VitalsView: View {
     /// written by the backend, never guessed: an ingestion identifier means
     /// the value passed the review-queue gate after AI/OCR extraction; the
     /// `imported` meta tag means a deterministic Phase-4 importer;
-    /// `derivedFrom` means the check-in Bot; anything else was logged by hand.
+    /// `derivedFrom` means the check-in Bot; a HealthKit identifier means the
+    /// sync wrote it (measured device data — quiet ink, not live-green);
+    /// anything else was logged by hand.
     private static func sourceOf(_ obs: FHIRObservation) -> String {
         if obs.identifier?.contains(where: { $0.system == FHIR.ingestionIdentSystem }) == true {
             return "AI-read · confirmed"
@@ -628,6 +630,9 @@ struct VitalsView: View {
         }
         if !(obs.derivedFrom ?? []).isEmpty {
             return "check-in"
+        }
+        if obs.identifier?.contains(where: { $0.system == HealthKitMapping.identSystem }) == true {
+            return "Apple Health"
         }
         return "logged"
     }

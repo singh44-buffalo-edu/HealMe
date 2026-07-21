@@ -93,6 +93,16 @@ final class AppModel {
     /// True when the visible core data came from the on-device snapshot
     /// because the server was unreachable.
     private(set) var usingCachedCore = false
+    /// When `usingCachedCore`, the time that snapshot was saved — drives the
+    /// "updated 2h ago" note in the cached-copy banner. nil once server
+    /// truth replaces the snapshot.
+    private(set) var cachedCoreSavedAt: Date?
+    /// Queued entries held back by the last drain because they were queued
+    /// under a different sign-in (never auto-discarded; see DrainReport).
+    private(set) var heldForOtherProfile = 0
+    /// Name of a corrupt outbox file that load set aside (one-time notice:
+    /// those queued changes could not be restored automatically).
+    private(set) var outboxCorruptFileNotice: String?
 
     @ObservationIgnored private let outbox: OutboxStore
     @ObservationIgnored private let snapshots: SnapshotStore
@@ -154,6 +164,9 @@ final class AppModel {
 
     /// Called once at launch: adopt a stored Keychain session if present.
     func bootstrap() async {
+        // Surface (once) a corrupt outbox file the load had to set aside —
+        // it may hold undelivered health writes for manual recovery.
+        outboxCorruptFileNotice = await outbox.corruptFileSetAside()
         if await client.isAuthenticated {
             authState = .signedIn
             await afterSignIn()
@@ -182,11 +195,20 @@ final class AppModel {
         admins = []
         coreLoaded = false
         usingCachedCore = false
+        cachedCoreSavedAt = nil
+        heldForOtherProfile = 0
+        // The next sign-in may be a different profile — new queue entries
+        // must not carry this session's patient binding.
+        await sync.setCurrentProfile(nil)
         // Snapshot cleared with the session (a signed-out device keeps no
         // readable record cache). The outbox is kept: queued dose logs are
         // the owner's clinical record and drain after the next sign-in —
         // Settings shows the pending count so nothing is silently held.
-        snapshots.clear()
+        await snapshots.clear()
+        // The Health Review share PDF lives beside the snapshot (see the
+        // lifecycle note on HealthReviewView.pdfFileURL) — same rule: a
+        // signed-out device keeps no readable clinical files.
+        try? FileManager.default.removeItem(at: HealthReviewView.pdfFileURL)
         ReminderScheduler.cancelAll()
     }
 
@@ -216,8 +238,10 @@ final class AppModel {
                 )
             }
             await outbox.removeAll()
-            snapshots.clear()
+            await snapshots.clear()
             pendingDoseIdents = []
+            heldForOtherProfile = 0
+            cachedCoreSavedAt = nil
             await refreshPendingCount()
         }
         if await rebuilt.isAuthenticated {
@@ -232,7 +256,8 @@ final class AppModel {
         profileName = (try? await client.profileDisplayName()) ?? "Owner"
         healthKit.bootstrap(record: record)
         push.configure(model: self)
-        await drainOutbox()
+        // refreshCore drains the outbox first (drain-before-reads), so one
+        // pass both delivers queued writes and loads the fresh record.
         await refreshCore()
     }
 
@@ -255,8 +280,20 @@ final class AppModel {
     /// Today/Meds/Adherence all share. Safe to call repeatedly (pull to
     /// refresh, after logging a dose).
     func refreshCore() async {
+        // Deliver queued writes BEFORE the reads (drain-before-reads): a
+        // successful refresh proves the server reachable, so queued entries
+        // must go first — refresh-then-drain would render pre-drain server
+        // truth (flipping queued-echo slots back for a beat) and leave the
+        // writes sitting until some other trigger. This also gives queued
+        // writes a retry on every pull-to-refresh while foregrounded, not
+        // only on offline→online / scene transitions.
+        await performDrain()
+        guard authState == .signedIn else { return } // session died mid-drain
         do {
             patient = try await record.getPatient()
+            // Bind the sync engine to this session's patient so entries
+            // queued from now on carry it (see OutboxEntry.profileRef).
+            await sync.setCurrentProfile((patient?.id).map { "Patient/\($0)" })
             meds = try await record.loadMeds()
             // 91 = 13 weeks, the web's HEATMAP_DAYS (AdherencePage) — both
             // apps must fetch the same window or their stats would disagree.
@@ -264,10 +301,11 @@ final class AppModel {
             coreLoadError = nil
             coreLoaded = true
             usingCachedCore = false
+            cachedCoreSavedAt = nil
             // Server truth replaces any queued-echo state (queued entries
             // still pending are re-echoed below so their slots stay flipped).
             await reapplyQueuedEchoes()
-            snapshots.save(CoreSnapshot(patient: patient, meds: meds, admins: admins))
+            await snapshots.save(CoreSnapshot(patient: patient, meds: meds, admins: admins))
             if remindersEnabled {
                 ReminderScheduler.reschedule(meds: meds, showMedName: remindersShowMedName)
             }
@@ -277,7 +315,7 @@ final class AppModel {
                 return
             }
             coreLoadError = error.localizedDescription
-            if case .network = error, !coreLoaded, let cached = snapshots.load() {
+            if case .network = error, !coreLoaded, let cached = await snapshots.load() {
                 // Cold launch with no connectivity: show the last-known
                 // record, clearly labeled, instead of an empty app.
                 patient = cached.patient
@@ -285,7 +323,9 @@ final class AppModel {
                 admins = cached.admins
                 coreLoaded = true
                 usingCachedCore = true
+                cachedCoreSavedAt = cached.savedAt
                 coreLoadError = nil
+                await sync.setCurrentProfile((cached.patient?.id).map { "Patient/\($0)" })
                 await reapplyQueuedEchoes()
             }
         } catch {
@@ -294,6 +334,24 @@ final class AppModel {
         reviewQueueCount = (try? await record.reviewQueueCount()) ?? reviewQueueCount
         await refreshPendingCount()
     }
+
+    /// Banner copy for the cached-core state, with the snapshot's age; a
+    /// copy older than 48h gets escalated wording.
+    var cachedCoreBannerText: String {
+        let base = "Showing the last copy saved on this device"
+        guard let savedAt = cachedCoreSavedAt else { return "\(base)." }
+        let age = Self.snapshotAgeFormatter.localizedString(for: savedAt, relativeTo: Date())
+        let stale = Date().timeIntervalSince(savedAt) > 48 * 3600
+        return stale
+            ? "Stale copy — \(base.lowercased()) · updated \(age)."
+            : "\(base) · updated \(age)."
+    }
+
+    private static let snapshotAgeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
 
     /// Log a dose and update the local cache in place so every screen's
     /// slot state flips immediately. Online, the idempotent server write is
@@ -333,20 +391,45 @@ final class AppModel {
     /// `syncFailures` (they are dropped from the queue, never retried
     /// silently forever).
     func drainOutbox() async {
+        let report = await performDrain()
+        // Refresh not only when entries were applied: connectivity returning
+        // with an EMPTY outbox must still replace a cached snapshot (or a
+        // failed load) with server truth — otherwise a week-old copy renders
+        // as today's dose panel for the whole session.
+        let coreIsStale = usingCachedCore || coreLoadError != nil
+        if authState == .signedIn, (report?.applied ?? 0) > 0 || coreIsStale {
+            await refreshCore()
+        }
+    }
+
+    /// One drain pass over the outbox; failures, auth-stop and held counts
+    /// land in app state here. Deliberately does NOT reload the core caches
+    /// — callers decide (drainOutbox refreshes when needed; refreshCore IS
+    /// the refresh and calls this first, so it must not recurse).
+    @discardableResult
+    private func performDrain() async -> DrainReport? {
+        guard authState == .signedIn else { return nil }
         guard await outbox.count > 0 else {
+            heldForOtherProfile = 0
             await refreshPendingCount()
-            return
+            return nil
         }
         let report = await sync.drain()
         if !report.failures.isEmpty {
             syncFailures = report.failures.map { "\($0.label): \($0.message)" }
         }
-        if report.applied > 0 {
-            pendingDoseIdents = Set(await queuedDoseIdents())
-            await refreshCore()
-        } else {
-            await refreshPendingCount()
+        heldForOtherProfile = report.heldForOtherProfile
+        if report.stoppedForAuth {
+            // The session was definitively rejected mid-drain (the client
+            // already wiped its tokens). Reflect it — otherwise the app
+            // stays visually signed in and the "syncs when your server is
+            // reachable" banner promises a sync that can never happen.
+            // Entries stay queued and drain after the next sign-in.
+            authState = .signedOut
         }
+        pendingDoseIdents = Set(await queuedDoseIdents())
+        await refreshPendingCount()
+        return report
     }
 
     func dismissSyncFailures() {

@@ -587,6 +587,21 @@ struct SettingsView: View {
                         .foregroundStyle(T.watch)
                 }
             }
+            // Held, not dropped: entries queued under a different sign-in
+            // sync only under the sign-in that recorded them.
+            if model.heldForOtherProfile > 0 {
+                let held = model.heldForOtherProfile
+                Text("\(held) change\(held == 1 ? " is" : "s are") held from a previous sign-in — sign back in with that account to sync \(held == 1 ? "it" : "them").")
+                    .font(.ui(12))
+                    .foregroundStyle(T.watch)
+            }
+            // One-time notice: a corrupt offline-changes file was preserved
+            // beside the queue instead of being overwritten.
+            if let setAside = model.outboxCorruptFileNotice {
+                Text("Some offline changes could not be read and were set aside (\(setAside)) — they will not sync automatically.")
+                    .font(.ui(12))
+                    .foregroundStyle(T.watch)
+            }
             Button {
                 Task {
                     signingOut = true

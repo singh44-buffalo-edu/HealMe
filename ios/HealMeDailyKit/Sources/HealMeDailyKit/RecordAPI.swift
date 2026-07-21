@@ -498,21 +498,30 @@ public struct RecordAPI: Sendable {
 
     // MARK: Formatting
 
+    // Cached once — isoInstant/parseInstant run in per-row hot paths (slot
+    // matching, row mapping) and used to allocate up to two formatters per
+    // call. ISO8601DateFormatter is documented thread-safe (since iOS 10),
+    // hence nonisolated(unsafe) rather than a lock.
+    private nonisolated(unsafe) static let isoFractionalFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let isoPlainFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     /// UTC ISO instant with milliseconds — the same wire format as the web
     /// app's `new Date().toISOString()`.
     public static func isoInstant(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        isoFractionalFormatter.string(from: date)
     }
 
     /// Parse a FHIR instant (with or without fractional seconds).
     public static func parseInstant(_ value: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: value) { return date }
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        return plain.date(from: value)
+        isoFractionalFormatter.date(from: value) ?? isoPlainFormatter.date(from: value)
     }
 }

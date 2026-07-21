@@ -13,11 +13,16 @@ import HealMeDailyKit
 /// - Daily-aggregate kinds (steps, resting HR, HRV, sleep) are recomputed
 ///   for the trailing window of FINISHED days each sync — values are final,
 ///   and the {kind}-{date} identifier makes re-syncs converge.
-/// - Per-sample kinds (weight, BP, SpO₂, temperature) use anchored queries;
-///   the anchor cursor persists across launches so only new samples upload.
+/// - Per-sample kinds (weight, BP, SpO₂, temperature) use anchored queries
+///   in bounded chunks; each chunk's anchor commits only after the server
+///   accepts that chunk and persists across launches, so only new samples
+///   upload and an interrupted backfill resumes where it stopped. First
+///   enable backfills the trailing year only (see syncAnchoredChunks).
 /// - Sync runs on enable and on each foregrounding; HKObserverQuery +
-///   background delivery nudge a sync when new samples arrive while the app
-///   is running. All authorization states degrade gracefully.
+///   background delivery nudge a sync when new samples arrive. Observer
+///   callbacks complete promptly and the nudged sync runs inside an
+///   expiring-activity window (nudgeBackgroundSync), so a background wake
+///   never suspends mid-upload. All authorization states degrade gracefully.
 @MainActor
 @Observable
 final class HealthKitService {
@@ -38,9 +43,9 @@ final class HealthKitService {
 
     private let store = HKHealthStore()
     private var observersRegistered = false
-    /// Anchors advanced by the current sync, committed only after the server
-    /// accepted the corresponding samples (never before — see anchoredSamples).
-    private var pendingAnchors: [HealthKitMapping.Kind: HKQueryAnchor] = [:]
+    /// The observer-nudged sync currently running inside an expiring-activity
+    /// window; cancelled when that window closes (see nudgeBackgroundSync).
+    private var backgroundSyncTask: Task<Void, Never>?
     /// Current data layer — refreshed on every bootstrap so observer nudges
     /// and syncs never keep writing through a stale client after the owner
     /// changes the server URL.
@@ -48,6 +53,12 @@ final class HealthKitService {
 
     /// Trailing window of finished days recomputed per sync.
     private let aggregateWindowDays = 30
+    /// Initial-backfill bound for anchored kinds (see syncAnchoredChunks).
+    private let backfillWindowDays = 365
+    /// Samples per anchored chunk: each chunk is uploaded and its anchor
+    /// committed before the next chunk is fetched, so backfill progress is
+    /// never lost to one failed request.
+    private let anchorChunkLimit = 500
 
     // MARK: Types
 
@@ -135,22 +146,50 @@ final class HealthKitService {
             HKObjectType.correlationType(forIdentifier: .bloodPressure)!,
         ]
         for type in nudgeTypes {
-            // Deliberately reads self.record at FIRE time, not registration
-            // time — a server change swaps the data layer under the observers.
             let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completion, _ in
-                Task { @MainActor [weak self] in
-                    guard let self, self.enabled, let record = self.record else {
-                        completion()
-                        return
-                    }
-                    await self.sync(record: record)
-                    completion()
-                }
+                // Complete PROMPTLY (Apple's pattern): holding completion()
+                // across the sync's HTTP round-trips means a background wake
+                // suspends mid-await, completion never fires, HealthKit
+                // counts the delivery as failed and eventually stops waking
+                // us. The sync runs in its own expiring-activity window.
+                completion()
+                self?.nudgeBackgroundSync()
             }
             store.execute(query)
             // Best-effort: background delivery needs the entitlement; when it
             // is missing this fails quietly and foreground syncs still run.
             store.enableBackgroundDelivery(for: type, frequency: .hourly) { _, _ in }
+        }
+    }
+
+    /// Observer-nudged sync wrapped in an expiring-activity assertion: on a
+    /// background wake the process would otherwise suspend mid-await and the
+    /// upload would die half-done. When the window expires the in-flight sync
+    /// is cancelled between chunks instead — every chunk already committed is
+    /// safe, and the next sync resumes from the saved anchors.
+    ///
+    /// Deliberately reads self.record at FIRE time, not registration time —
+    /// a server change swaps the data layer under the observers.
+    private nonisolated func nudgeBackgroundSync() {
+        ProcessInfo.processInfo.performExpiringActivity(withReason: "HealthKitService.sync") { [weak self] expired in
+            guard let self else { return }
+            if expired {
+                // Second invocation: the window is closing — stop cleanly.
+                Task { @MainActor in self.backgroundSyncTask?.cancel() }
+                return
+            }
+            // The assertion holds only while this block runs; park its
+            // (background) thread until the main-actor sync finishes.
+            let done = DispatchSemaphore(value: 0)
+            Task { @MainActor in
+                defer { done.signal() }
+                guard self.enabled, let record = self.record else { return }
+                let task = Task { await self.sync(record: record) }
+                self.backgroundSyncTask = task
+                await task.value
+                self.backgroundSyncTask = nil
+            }
+            done.wait()
         }
     }
 
@@ -162,36 +201,52 @@ final class HealthKitService {
         syncing = true
         defer { syncing = false }
         lastError = nil
-        pendingAnchors = [:]
         do {
-            var samples: [HealthKitMapping.Sample] = []
-            samples += try await dailyStepAggregates()
-            samples += try await dailyQuantityAverages(.restingHeartRate, kind: .restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()))
-            samples += try await dailyQuantityAverages(.heartRateVariabilitySDNN, kind: .hrvSDNN, unit: .secondUnit(with: .milli))
-            samples += try await nightlySleepAggregates()
-            for (kind, identifier, unit) in Self.quantityTypes {
-                samples += try await anchoredQuantitySamples(identifier, kind: kind, unit: unit)
-            }
-            samples += try await anchoredBloodPressure()
+            var saved = 0
+            var corrected = 0
 
-            if !samples.isEmpty {
-                let observations = samples.map { HealthKitMapping.observation(for: $0) }
-                let outcome = try await record.saveHealthKitObservations(observations)
-                lastSummary = "\(outcome.saved) synced" + (outcome.corrected > 0 ? ", \(outcome.corrected) corrected" : "")
+            // Daily aggregates: recomputed for the trailing window every
+            // sync, so this batch is bounded (≤ aggregateWindowDays rows per
+            // kind) and safe to upload in one call.
+            var aggregates: [HealthKitMapping.Sample] = []
+            aggregates += try await dailyStepAggregates()
+            aggregates += try await dailyQuantityAverages(.restingHeartRate, kind: .restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()))
+            aggregates += try await dailyQuantityAverages(.heartRateVariabilitySDNN, kind: .hrvSDNN, unit: .secondUnit(with: .milli))
+            aggregates += try await nightlySleepAggregates()
+            if !aggregates.isEmpty {
+                let outcome = try await record.saveHealthKitObservations(aggregates.map { HealthKitMapping.observation(for: $0) })
+                saved += outcome.saved
+                corrected += outcome.corrected
+            }
+
+            // Per-sample kinds: chunked anchored sync, committing each
+            // chunk's anchor as the server accepts it (see syncAnchoredChunks).
+            for (kind, identifier, unit) in Self.quantityTypes {
+                let outcome = try await syncAnchoredChunks(type: HKQuantityType(identifier), kind: kind, record: record) { samples in
+                    quantitySamples(samples, kind: kind, unit: unit)
+                }
+                saved += outcome.saved
+                corrected += outcome.corrected
+            }
+            if let bloodPressureType = HKObjectType.correlationType(forIdentifier: .bloodPressure) {
+                let outcome = try await syncAnchoredChunks(type: bloodPressureType, kind: .bloodPressure, record: record) { samples in
+                    bloodPressureSamples(samples)
+                }
+                saved += outcome.saved
+                corrected += outcome.corrected
+            }
+
+            if saved + corrected > 0 {
+                lastSummary = "\(saved) synced" + (corrected > 0 ? ", \(corrected) corrected" : "")
             } else {
                 lastSummary = "Up to date — nothing new"
             }
-            // Server accepted everything (or nothing was new) — NOW the
-            // anchor cursors may advance. On any failure above they stay
-            // put and the same samples are re-fetched next sync; the
-            // identifier convention makes the overlap converge.
-            for (kind, anchor) in pendingAnchors {
-                saveAnchor(anchor, for: kind)
-            }
-            pendingAnchors = [:]
             lastSyncAt = Date()
         } catch {
-            pendingAnchors = [:]
+            // A cancelled run (expiring background window) is not an error:
+            // every committed chunk is safe and the next sync resumes from
+            // the saved anchors.
+            guard !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return }
             lastError = error.localizedDescription
         }
     }
@@ -343,31 +398,76 @@ final class HealthKitService {
         UserDefaults.standard.set(data, forKey: anchorKey(kind))
     }
 
-    private func anchoredSamples(type: HKSampleType, kind: HealthKitMapping.Kind) async throws -> [HKSample] {
-        let previous = loadAnchor(kind)
-        let (samples, newAnchor) = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<([HKSample], HKQueryAnchor?), Error>) in
-            let query = HKAnchoredObjectQuery(type: type, predicate: nil, anchor: previous, limit: HKObjectQueryNoLimit) { _, added, _, anchor, error in
+    /// Chunked anchored sync for one kind: fetch up to anchorChunkLimit
+    /// samples, upload them, THEN commit that chunk's anchor. The anchor-
+    /// only-advances-after-server-accept invariant holds per chunk — an
+    /// anchor saved before the server write would permanently skip those
+    /// samples if the upload failed, while a failure mid-backfill now loses
+    /// at most one chunk and the next sync re-fetches exactly that chunk
+    /// (the identifier convention makes the overlap converge).
+    ///
+    /// First enable (no stored anchor) is bounded to the trailing year:
+    /// privacy-light default, and it keeps a first sync from replaying the
+    /// entire multi-year Health archive over HTTP — older history can be
+    /// imported via the web importers instead.
+    private func syncAnchoredChunks(
+        type: HKSampleType,
+        kind: HealthKitMapping.Kind,
+        record: RecordAPI,
+        map: ([HKSample]) -> [HealthKitMapping.Sample]
+    ) async throws -> (saved: Int, corrected: Int) {
+        var anchor = loadAnchor(kind)
+        // Decided once, BEFORE the loop mints anchors: an anchor is a store-
+        // journal position, so the predicate must stay constant across the
+        // chunks it threads through. Once a backfill anchor exists, later
+        // syncs run unbounded (the anchor already limits them to new data).
+        let predicate: NSPredicate? = anchor == nil
+            ? HKQuery.predicateForSamples(withStart: DoseEngine.gregorian.date(byAdding: .day, value: -backfillWindowDays, to: Date()), end: nil, options: [])
+            : nil
+        var saved = 0
+        var corrected = 0
+        while true {
+            try Task.checkCancellation() // expiring background window → stop between chunks
+            let (samples, newAnchor) = try await anchoredChunk(type: type, predicate: predicate, anchor: anchor)
+            let mapped = map(samples)
+            if !mapped.isEmpty {
+                let outcome = try await record.saveHealthKitObservations(mapped.map { HealthKitMapping.observation(for: $0) })
+                saved += outcome.saved
+                corrected += outcome.corrected
+            }
+            // Server accepted this chunk (or it mapped to nothing) — NOW its
+            // anchor may advance. On any failure above it stays put.
+            saveAnchor(newAnchor, for: kind)
+            // A short chunk means the backlog is drained; a nil anchor would
+            // only re-fetch the same chunk forever, so stop on that too.
+            guard samples.count == anchorChunkLimit, let newAnchor else { break }
+            anchor = newAnchor
+        }
+        return (saved, corrected)
+    }
+
+    private func anchoredChunk(
+        type: HKSampleType,
+        predicate: NSPredicate?,
+        anchor: HKQueryAnchor?
+    ) async throws -> ([HKSample], HKQueryAnchor?) {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<([HKSample], HKQueryAnchor?), Error>) in
+            let query = HKAnchoredObjectQuery(type: type, predicate: predicate, anchor: anchor, limit: anchorChunkLimit) { _, added, _, newAnchor, error in
                 if let error { continuation.resume(throwing: error)
                     return
                 }
-                continuation.resume(returning: (added ?? [], anchor))
+                continuation.resume(returning: (added ?? [], newAnchor))
             }
             store.execute(query)
         }
-        // NOT persisted yet: an anchor saved before the server write would
-        // permanently skip these samples if the upload fails. sync() commits
-        // all pending anchors only after a successful save.
-        if let newAnchor { pendingAnchors[kind] = newAnchor }
-        return samples
     }
 
-    private func anchoredQuantitySamples(
-        _ identifier: HKQuantityTypeIdentifier,
+    private func quantitySamples(
+        _ samples: [HKSample],
         kind: HealthKitMapping.Kind,
         unit: HKUnit
-    ) async throws -> [HealthKitMapping.Sample] {
-        let samples = try await anchoredSamples(type: HKQuantityType(identifier), kind: kind)
-        return samples.compactMap { sample in
+    ) -> [HealthKitMapping.Sample] {
+        samples.compactMap { sample in
             guard let quantity = (sample as? HKQuantitySample)?.quantity else { return nil }
             var value = quantity.doubleValue(for: unit)
             if kind == .oxygenSaturation { value *= 100 } // HK percent is 0…1
@@ -381,11 +481,9 @@ final class HealthKitService {
         }
     }
 
-    private func anchoredBloodPressure() async throws -> [HealthKitMapping.Sample] {
-        guard let type = HKObjectType.correlationType(forIdentifier: .bloodPressure) else { return [] }
+    private func bloodPressureSamples(_ samples: [HKSample]) -> [HealthKitMapping.Sample] {
         let systolicType = HKQuantityType(.bloodPressureSystolic)
         let diastolicType = HKQuantityType(.bloodPressureDiastolic)
-        let samples = try await anchoredSamples(type: type, kind: .bloodPressure)
         return samples.compactMap { sample in
             guard let correlation = sample as? HKCorrelation,
                   let systolic = (correlation.objects(for: systolicType).first as? HKQuantitySample)?

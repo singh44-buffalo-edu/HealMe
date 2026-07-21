@@ -88,6 +88,15 @@ struct HealthReviewView: View {
         .navigationTitle("Health Review")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadInitial() }
+        .onDisappear {
+            // The PDF is a share artifact, not a store: it exists only while
+            // this screen is up. Leaving the screen fires onDisappear (a
+            // presented share sheet does NOT — the file stays readable while
+            // the sheet is showing), so delete here and drop the URL so a
+            // revisit refetches instead of sharing a deleted file.
+            pdfURL = nil
+            Self.removePdfFile()
+        }
     }
 
     // MARK: Generate card
@@ -263,6 +272,12 @@ struct HealthReviewView: View {
 
     @MainActor
     private func loadInitial() async {
+        // Opportunistic cleanup: a crash or app kill while this screen was up
+        // skips onDisappear, so a stale PDF from a previous visit — possibly
+        // from before a sign-out, which does not remove it — may still be on
+        // disk. Remove it before showing anything.
+        Self.removePdfFile()
+
         // Stored latest: 404 means "none yet" — treat any failure as nil.
         latest = try? await model.ai.latestReview()
 
@@ -317,6 +332,30 @@ struct HealthReviewView: View {
         }
     }
 
+    // MARK: PDF share file
+
+    /// Where the share PDF lives: App Support/HealMeDaily — the same directory
+    /// AppModel.dataDirectory resolves for the outbox + core snapshot, so the
+    /// clinical PDF shares their at-rest posture (iOS Data Protection
+    /// complete) instead of sitting unprotected in tmp. NOTE the lifecycle
+    /// contract: this file manages its own lifetime — deleted before every
+    /// rewrite, on onDisappear, opportunistically in loadInitial, and by
+    /// AppModel.signOut (which is why this static is not private: a
+    /// signed-out device keeps no readable clinical files). Residual risk:
+    /// if the app is killed while this screen is up, the (encrypted-at-rest)
+    /// PDF persists until the screen is next opened or the user signs out.
+    static var pdfFileURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent("HealMeDaily", isDirectory: true)
+            .appendingPathComponent("health-review.pdf")
+    }
+
+    private static func removePdfFile() {
+        try? FileManager.default.removeItem(at: pdfFileURL)
+    }
+
     @MainActor
     private func fetchPdf(documentId: String) {
         errorMessage = nil
@@ -324,9 +363,13 @@ struct HealthReviewView: View {
         Task {
             do {
                 let data = try await model.ai.reviewPdf(documentId: documentId)
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("health-review.pdf")
-                try data.write(to: url, options: .atomic)
+                let url = Self.pdfFileURL
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                Self.removePdfFile() // stale copy from an earlier review
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
                 pdfURL = url
             } catch {
                 errorMessage = error.localizedDescription

@@ -50,6 +50,11 @@ struct RecordsView: View {
         /// LATEST value outside the stated range only — a historical
         /// excursion does not flag the analyte today; no range ⇒ never flagged.
         var outOfRange: Bool
+        /// Any draw in the series carries the document-ingestion identifier —
+        /// the value was AI/OCR-extracted and confirmed through the review
+        /// queue (same provenance check as VitalsView's sourceOf). Chip'd per
+        /// the three-data-classes rule: AI output is never rendered unlabeled.
+        var aiRead: Bool
         /// Same NUL-composite as the grouping key, unique per series.
         var id: String { "\(name)\u{0}\(unit)" }
     }
@@ -230,6 +235,12 @@ struct RecordsView: View {
                     .joined(separator: " · "))
                     .font(.mono(10.5))
                     .foregroundStyle(T.tertiary)
+                // Three-data-classes rule: confirmed AI/OCR extractions carry
+                // the indigo ✦ chip — AI output is never rendered unlabeled.
+                if analyte.aiRead {
+                    Spacer(minLength: 8)
+                    Chip(text: "✦ AI-read · confirmed", ai: true)
+                }
             }
 
             if pts.isEmpty {
@@ -360,8 +371,8 @@ struct RecordsView: View {
     }
 
     /// One tappable analyte row — tap promotes it to the hero chart. The red
-    /// dot and red value appear ONLY when the latest value sits outside the
-    /// STATED range; everything else stays quiet ink.
+    /// dot, red value and mono "out of range" tag appear ONLY when the latest
+    /// value sits outside the STATED range; everything else stays quiet ink.
     private func analyteRow(_ analyte: Analyte) -> some View {
         Button {
             heroID = analyte.id
@@ -377,10 +388,24 @@ struct RecordsView: View {
                             .font(.mono(10))
                             .foregroundStyle(T.quaternary)
                     }
+                    // Three-data-classes rule: confirmed AI/OCR extractions
+                    // carry the indigo ✦ chip (same as VitalsView's rows) —
+                    // AI output is never rendered unlabeled.
+                    if analyte.aiRead {
+                        Chip(text: "✦ AI-read · confirmed", ai: true)
+                    }
                 }
                 Spacer(minLength: 8)
                 if analyte.outOfRange {
-                    StatusDot(color: T.outOfRange, size: 7)
+                    // Never color-only (VoiceOver + web parity): the red dot
+                    // gets a mono text tag, which the row's combined
+                    // accessibility label reads out too.
+                    HStack(spacing: 4) {
+                        StatusDot(color: T.outOfRange, size: 7)
+                        Text("out of range")
+                            .font(.mono(9.5, weight: .medium))
+                            .foregroundStyle(T.outOfRange)
+                    }
                 }
                 VStack(alignment: .trailing, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -475,7 +500,15 @@ struct RecordsView: View {
                 points: points,
                 latest: latest,
                 outOfRange: (low.map { latest.value < $0 } ?? false)
-                    || (high.map { latest.value > $0 } ?? false)
+                    || (high.map { latest.value > $0 } ?? false),
+                // Factual provenance, never guessed (mirror of VitalsView's
+                // sourceOf): an ingestion identifier on any draw means the
+                // series holds values that passed the review-queue gate after
+                // AI/OCR extraction — the whole trend renders them, so the
+                // series is labeled.
+                aiRead: entry.group.contains { obs in
+                    obs.identifier?.contains(where: { $0.system == FHIR.ingestionIdentSystem }) == true
+                }
             ))
         }
         // Name sort with unit tie-break so same-named different-unit series
@@ -564,6 +597,9 @@ private struct SegmentedPillsControl<Value: Hashable>: View {
                         }
                 }
                 .buttonStyle(.plain)
+                // VoiceOver: selection is otherwise conveyed by fill/weight
+                // only — announce the selected pill explicitly.
+                .accessibilityAddTraits(selection == option.value ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(4)
